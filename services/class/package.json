@@ -1,0 +1,12 @@
+{
+  "name": "@timetable/class-service",
+  "version": "1.0.0",
+  "main": "src/handler.ts",
+  "scripts": {
+    "dev": "serverless offline start",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@timetable/shared": "*"
+  }
+}

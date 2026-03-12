@@ -1,0 +1,16 @@
+{
+  "name": "school-timetable-management",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w packages/shared",
+    "prisma:generate": "npm run prisma:generate -w packages/shared",
+    "prisma:migrate": "npm run prisma:migrate -w packages/shared",
+    "prisma:studio": "npm run prisma:studio -w packages/shared",
+    "db:seed": "npm run db:seed -w packages/shared"
+  }
+}
