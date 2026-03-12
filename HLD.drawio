@@ -1,0 +1,288 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.3.6 Chrome/140.0.7339.249 Electron/38.8.0 Safari/537.36" version="29.3.6">
+  <diagram id="hld-diagram" name="HLD - School Timetable Management">
+    <mxGraphModel dx="1722" dy="1429" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="3300" pageHeight="2400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="grp-client" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=14;spacingTop=5;container=1;collapsible=0;dashed=1;dashPattern=8 4;" value="Client Layer" vertex="1">
+          <mxGeometry height="80" width="200" x="580" y="-100" as="geometry" />
+        </mxCell>
+        <mxCell id="react" parent="grp-client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#4A90D9;fontColor=#ffffff;strokeColor=#2C5F8A;fontSize=12;" value="&lt;b&gt;React SPA&lt;/b&gt;" vertex="1">
+          <mxGeometry height="35" width="140" x="30" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-hosting" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontStyle=1;fontSize=13;spacingTop=5;container=1;collapsible=0;dashed=1;dashPattern=8 4;" value="Static Hosting" vertex="1">
+          <mxGeometry height="90" width="280" x="200" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="cloudfront" parent="grp-hosting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8E44AD;fontColor=#ffffff;strokeColor=#6C3483;fontSize=11;" value="&lt;b&gt;CloudFront&lt;/b&gt;&lt;br&gt;CDN" vertex="1">
+          <mxGeometry height="45" width="110" x="20" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="s3-web" parent="grp-hosting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8E44AD;fontColor=#ffffff;strokeColor=#6C3483;fontSize=11;" value="&lt;b&gt;S3 Bucket&lt;/b&gt;&lt;br&gt;Static Assets" vertex="1">
+          <mxGeometry height="45" width="110" x="150" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8e0f0;strokeColor=#7B68EE;verticalAlign=top;fontStyle=1;fontSize=13;spacingTop=5;container=1;collapsible=0;dashed=1;dashPattern=8 4;" value="Auth Layer" vertex="1">
+          <mxGeometry height="90" width="200" x="880" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="cognito" parent="grp-auth" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B68EE;fontColor=#ffffff;strokeColor=#5A4FCF;fontSize=10;" value="&lt;b&gt;AWS Cognito&lt;/b&gt;&lt;br&gt;User Pools&lt;br&gt;&lt;i&gt;Register · Login&lt;br&gt;Password Reset · JWT&lt;/i&gt;" vertex="1">
+          <mxGeometry height="55" width="150" x="25" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-gateway" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontStyle=1;fontSize=13;spacingTop=5;container=1;collapsible=0;dashed=1;dashPattern=8 4;" value="API Layer" vertex="1">
+          <mxGeometry height="90" width="600" x="380" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="apigw-http" parent="grp-gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5A623;fontColor=#ffffff;strokeColor=#C47D1A;fontSize=11;" value="&lt;b&gt;API Gateway (HTTP API)&lt;/b&gt;&lt;br&gt;Cognito JWT Authorizer" vertex="1">
+          <mxGeometry height="48" width="250" x="30" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="apigw-ws" parent="grp-gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5A623;fontColor=#ffffff;strokeColor=#C47D1A;fontSize=11;" value="&lt;b&gt;API Gateway (WebSocket)&lt;/b&gt;&lt;br&gt;$connect · $disconnect · onMessage" vertex="1">
+          <mxGeometry height="48" width="260" x="310" y="32" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-vpc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#2ECC71;strokeWidth=3;verticalAlign=top;fontStyle=1;fontSize=14;spacingTop=5;container=1;collapsible=0;dashed=1;dashPattern=12 6;" value="VPC — Private Subnets" vertex="1">
+          <mxGeometry height="580" width="1300" x="40" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-lambda" parent="grp-vpc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=12;spacingTop=5;container=1;collapsible=0;" value="Lambda Microservices (VPC-attached)" vertex="1">
+          <mxGeometry height="280" width="850" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-acad" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;Academic Year&lt;br&gt;Service&lt;/b&gt;" vertex="1">
+          <mxGeometry height="50" width="130" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-config" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;School Config&lt;br&gt;Service&lt;/b&gt;&lt;br&gt;&lt;i&gt;Classes · Period Structures&lt;br&gt;Slot Configuration&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="150" x="170" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-subject" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;Subject&lt;br&gt;Service&lt;/b&gt;" vertex="1">
+          <mxGeometry height="50" width="110" x="340" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-teacher" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;Teacher Service&lt;/b&gt;&lt;br&gt;&lt;i&gt;CRUD · Availability&lt;/i&gt;" vertex="1">
+          <mxGeometry height="50" width="140" x="470" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-division" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;Division &amp;amp;&lt;br&gt;Assignment Service&lt;/b&gt;&lt;br&gt;&lt;i&gt;Divisions · Assignments&lt;br&gt;Weightage · Assistants&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="160" x="20" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-ttable" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;Timetable Service&lt;/b&gt;&lt;br&gt;&lt;i&gt;CRUD · Conflict Detection&lt;br&gt;Drag-Drop Validation&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="170" x="200" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-notify" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;Notification&lt;br&gt;Service&lt;/b&gt;&lt;br&gt;&lt;i&gt;Invalidation&lt;br&gt;Conflict Flagging&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="140" x="390" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-dashboard" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;Dashboard&lt;br&gt;Aggregator&lt;/b&gt;" vertex="1">
+          <mxGeometry height="50" width="120" x="550" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-export" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;Export Service&lt;/b&gt;&lt;br&gt;&lt;i&gt;PDF · Excel&lt;/i&gt;" vertex="1">
+          <mxGeometry height="50" width="140" x="20" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="svc-ws" parent="grp-lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#50C878;fontColor=#ffffff;strokeColor=#3A9D5C;fontSize=10;" value="&lt;b&gt;WebSocket&lt;br&gt;Handler Lambda&lt;/b&gt;&lt;br&gt;&lt;i&gt;Connect · Disconnect&lt;br&gt;Push Notifications&lt;/i&gt;" vertex="1">
+          <mxGeometry height="70" width="160" x="630" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-fargate" parent="grp-vpc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;fontStyle=1;fontSize=12;spacingTop=5;container=1;collapsible=0;" value="Fargate Compute (VPC-attached)" vertex="1">
+          <mxGeometry height="160" width="370" x="900" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ecs-cluster" parent="grp-fargate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B6B;fontColor=#ffffff;strokeColor=#CC5555;fontSize=11;" value="&lt;b&gt;ECS Cluster&lt;/b&gt;" vertex="1">
+          <mxGeometry height="40" width="130" x="30" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="fargate-gen" parent="grp-fargate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF6B6B;fontColor=#ffffff;strokeColor=#CC5555;fontSize=10;" value="&lt;b&gt;Fargate Task:&lt;br&gt;Timetable Generation&lt;br&gt;Engine&lt;/b&gt;&lt;br&gt;&lt;i&gt;Constraint Solver&lt;/i&gt;" vertex="1">
+          <mxGeometry height="75" width="160" x="190" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-ecs-fargate" edge="1" parent="grp-fargate" source="ecs-cluster" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#CC5555;strokeWidth=2;" target="fargate-gen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-db" parent="grp-vpc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0e8f2;strokeColor=#3490A6;verticalAlign=top;fontStyle=1;fontSize=12;spacingTop=5;container=1;collapsible=0;" value="Data Layer (Private Subnet)" vertex="1">
+          <mxGeometry height="120" width="350" x="350" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="rds" parent="grp-db" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#45B7D1;fontColor=#ffffff;strokeColor=#3490A6;fontSize=11;" value="&lt;b&gt;Amazon RDS — PostgreSQL&lt;/b&gt;&lt;br&gt;Single Instance&lt;br&gt;&lt;i&gt;Row-level tenant isolation via school_id&lt;/i&gt;" vertex="1">
+          <mxGeometry height="80" width="230" x="60" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="nat" parent="grp-vpc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#666666;fontSize=10;" value="&lt;b&gt;NAT Gateway&lt;/b&gt;&lt;br&gt;&lt;i&gt;Outbound internet&lt;br&gt;for Lambda/Fargate&lt;/i&gt;" vertex="1">
+          <mxGeometry height="60" width="150" x="900" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-storage" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce5cd;strokeColor=#d79b00;verticalAlign=top;fontStyle=1;fontSize=13;spacingTop=5;container=1;collapsible=0;dashed=1;dashPattern=8 4;" value="Storage" vertex="1">
+          <mxGeometry height="100" width="400" x="40" y="990" as="geometry" />
+        </mxCell>
+        <mxCell id="s3-exports" parent="grp-storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E67E22;fontColor=#ffffff;strokeColor=#BA6517;fontSize=10;" value="&lt;b&gt;S3 Bucket&lt;/b&gt;&lt;br&gt;Generated Exports&lt;br&gt;(PDF / Excel)" vertex="1">
+          <mxGeometry height="55" width="160" x="20" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="dynamo-ws" parent="grp-storage" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#E67E22;fontColor=#ffffff;strokeColor=#BA6517;fontSize=10;" value="&lt;b&gt;DynamoDB&lt;/b&gt;&lt;br&gt;WebSocket&lt;br&gt;Connections Table" vertex="1">
+          <mxGeometry height="65" width="150" x="220" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="grp-cicd" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;verticalAlign=top;fontStyle=1;fontSize=13;spacingTop=5;container=1;collapsible=0;dashed=1;dashPattern=8 4;" value="CI/CD Pipeline" vertex="1">
+          <mxGeometry height="100" width="810" x="530" y="990" as="geometry" />
+        </mxCell>
+        <mxCell id="github" parent="grp-cicd" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#95A5A6;fontColor=#ffffff;strokeColor=#7F8C8D;fontSize=11;" value="&lt;b&gt;GitHub&lt;/b&gt;&lt;br&gt;Repository" vertex="1">
+          <mxGeometry height="50" width="120" x="20" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="codepipeline" parent="grp-cicd" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#95A5A6;fontColor=#ffffff;strokeColor=#7F8C8D;fontSize=11;" value="&lt;b&gt;AWS&lt;br&gt;CodePipeline&lt;/b&gt;" vertex="1">
+          <mxGeometry height="50" width="120" x="170" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="codebuild" parent="grp-cicd" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#95A5A6;fontColor=#ffffff;strokeColor=#7F8C8D;fontSize=11;" value="&lt;b&gt;AWS CodeBuild&lt;/b&gt;&lt;br&gt;&lt;i&gt;Build · Test · Package&lt;/i&gt;" vertex="1">
+          <mxGeometry height="50" width="150" x="320" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="terraform" parent="grp-cicd" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#95A5A6;fontColor=#ffffff;strokeColor=#7F8C8D;fontSize=11;" value="&lt;b&gt;Terraform&lt;/b&gt;&lt;br&gt;&lt;i&gt;Infra Provisioning&lt;/i&gt;" vertex="1">
+          <mxGeometry height="50" width="130" x="500" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="sls" parent="grp-cicd" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#95A5A6;fontColor=#ffffff;strokeColor=#7F8C8D;fontSize=11;" value="&lt;b&gt;Serverless&lt;br&gt;Framework&lt;/b&gt;&lt;br&gt;&lt;i&gt;Lambda Deploy&lt;/i&gt;" vertex="1">
+          <mxGeometry height="50" width="130" x="660" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-gh-cp" edge="1" parent="grp-cicd" source="github" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#7F8C8D;strokeWidth=1;fontSize=9;" target="codepipeline" value="Push triggers">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-cp-cb" edge="1" parent="grp-cicd" source="codepipeline" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#7F8C8D;strokeWidth=1;" target="codebuild">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-cb-tf" edge="1" parent="grp-cicd" source="codebuild" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#7F8C8D;strokeWidth=1;fontSize=9;" target="terraform" value="terraform apply">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-cb-sls" edge="1" parent="grp-cicd" source="codebuild" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#7F8C8D;strokeWidth=1;fontSize=9;" target="sls" value="sls deploy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="react" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#8E44AD;strokeWidth=2;fontSize=9;" target="cloudfront" value="Static assets">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="cloudfront" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#8E44AD;strokeWidth=2;" target="s3-web">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="react" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#F5A623;strokeWidth=2;fontSize=9;" target="apigw-http" value="REST calls (JWT)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="react" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#F5A623;strokeWidth=2;fontSize=9;" target="apigw-ws" value="WSS connection">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="react" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#7B68EE;strokeWidth=2;fontSize=9;dashed=1;" target="cognito" value="Cognito SDK">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#7B68EE;strokeWidth=1;fontSize=9;dashed=1;" target="cognito" value="Validates JWT">
+          <mxGeometry relative="1" x="0.8413" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="990" y="246" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-acad" value="/academic-years/*">
+          <mxGeometry relative="1" x="0.1259" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="450" y="210" />
+              <mxPoint x="100" y="210" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-config" value="/config/*">
+          <mxGeometry relative="1" x="-0.3962" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="305" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-subject" value="/subjects/*">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-teacher" value="/teachers/*">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-division" value="/divisions/* · /assignments/*">
+          <mxGeometry relative="1" x="-0.2607" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="160" y="246" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-ttable" value="/timetables/*">
+          <mxGeometry relative="1" x="0.186" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="535" y="370" />
+              <mxPoint x="345" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-notify" value="/notifications/*">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-dashboard" value="/dashboard">
+          <mxGeometry relative="1" x="-0.28" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="535" y="370" />
+              <mxPoint x="670" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="apigw-http" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=1;fontSize=8;" target="svc-export" value="/export/*">
+          <mxGeometry relative="1" x="-0.25" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="140" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="apigw-ws" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3A9D5C;strokeWidth=2;" target="svc-ws">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="svc-ttable" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#CC5555;strokeWidth=2;fontSize=9;" target="ecs-cluster" value="ECS RunTask&#xa;(async)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e30" edge="1" parent="1" source="svc-subject" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;strokeWidth=1;dashed=1;dashPattern=4 4;fontSize=8;" target="svc-notify" value="sync: flag timetables">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e31" edge="1" parent="1" source="svc-teacher" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;strokeWidth=1;dashed=1;dashPattern=4 4;fontSize=8;" target="svc-notify" value="sync: flag timetables">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e32" edge="1" parent="1" source="svc-division" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;strokeWidth=1;dashed=1;dashPattern=4 4;fontSize=8;" target="svc-notify" value="sync: flag timetables">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e33" edge="1" parent="1" source="svc-config" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;strokeWidth=1;dashed=1;dashPattern=4 4;fontSize=8;" target="svc-notify" value="sync: flag timetables">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e40" edge="1" parent="1" source="fargate-gen" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#E67E22;strokeWidth=2;fontSize=9;" target="dynamo-ws" value="Read connectionId">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e41" edge="1" parent="1" source="fargate-gen" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#F5A623;strokeWidth=2;fontSize=9;dashed=1;" target="apigw-ws" value="PostToConnection&#xa;(push result)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e42" edge="1" parent="1" source="svc-ws" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#E67E22;strokeWidth=1;fontSize=8;" target="dynamo-ws" value="Store/remove&#xa;connectionId">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e43" edge="1" parent="1" source="svc-export" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#E67E22;strokeWidth=2;fontSize=9;" target="s3-exports" value="Write PDF/XLSX">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e44" edge="1" parent="1" source="s3-exports" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#E67E22;strokeWidth=1;dashed=1;dashPattern=4 4;fontSize=9;" target="react" value="Pre-signed URL">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e50" edge="1" parent="1" source="svc-acad" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e51" edge="1" parent="1" source="svc-config" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e52" edge="1" parent="1" source="svc-subject" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e53" edge="1" parent="1" source="svc-teacher" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e54" edge="1" parent="1" source="svc-division" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e55" edge="1" parent="1" source="svc-ttable" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e56" edge="1" parent="1" source="svc-notify" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e57" edge="1" parent="1" source="svc-dashboard" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e58" edge="1" parent="1" source="svc-export" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=1;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e59" edge="1" parent="1" source="fargate-gen" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#3490A6;strokeWidth=2;" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e70" edge="1" parent="1" source="terraform" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;strokeWidth=1;dashed=1;fontSize=8;" target="grp-vpc" value="Provisions: VPC · RDS&#xa;ECS · S3 · API GW&#xa;Cognito · DynamoDB">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e71" edge="1" parent="1" source="sls" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;strokeWidth=1;dashed=1;fontSize=8;" target="grp-lambda" value="Deploys Lambda&#xa;functions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
