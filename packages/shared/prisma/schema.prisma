@@ -1,6 +1,3 @@
-// This is a minimal Prisma schema to generate the client.
-// The full schema with all 19 tables will be defined in Phase 3.
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,12 +7,48 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Minimal models needed for Phase 2 build — extended fully in Phase 3.
+// ──────────────────────────────────────────────
+// Enums
+// ──────────────────────────────────────────────
 
 enum AcademicYearStatus {
   ACTIVE
   ARCHIVED
 }
+
+enum SlotType {
+  PERIOD
+  INTERVAL
+  LUNCH_BREAK
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum TimetableStatus {
+  GENERATED
+  OUTDATED
+}
+
+enum ConflictType {
+  TEACHER_CHANGED
+  TEACHER_DELETED
+  SUBJECT_CHANGED
+  SUBJECT_DELETED
+  ASSIGNMENT_CHANGED
+  SLOT_CHANGED
+  STRUCTURE_CHANGED
+  AVAILABILITY_CHANGED
+  ELECTIVE_GROUP_CHANGED
+}
+
+// ──────────────────────────────────────────────
+// Table 1: schools
+// ──────────────────────────────────────────────
 
 model School {
   id            String   @id @default(uuid())
@@ -25,10 +58,31 @@ model School {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  academicYears AcademicYear[]
+  academicYears          AcademicYear[]
+  classes                Class[]
+  divisions              Division[]
+  subjects               Subject[]
+  teachers               Teacher[]
+  teacherSubjects        TeacherSubject[]
+  teacherAvailability    TeacherAvailability[]
+  periodStructures       PeriodStructure[]
+  periodStructureClasses PeriodStructureClass[]
+  workingDays            WorkingDay[]
+  slots                  Slot[]
+  electiveGroups         ElectiveGroup[]
+  electiveGroupSubjects  ElectiveGroupSubject[]
+  divisionAssignments    DivisionAssignment[]
+  timetables             Timetable[]
+  timetableSlots         TimetableSlot[]
+  generationJobs         GenerationJob[]
+  timetableNotifications TimetableNotification[]
 
   @@map("schools")
 }
+
+// ──────────────────────────────────────────────
+// Table 2: academic_years
+// ──────────────────────────────────────────────
 
 model AcademicYear {
   id        String             @id @default(uuid())
@@ -40,8 +94,417 @@ model AcademicYear {
   createdAt DateTime           @default(now()) @map("created_at")
   updatedAt DateTime           @updatedAt @map("updated_at")
 
-  school School @relation(fields: [schoolId], references: [id])
+  school              School               @relation(fields: [schoolId], references: [id])
+  classes             Class[]
+  divisions           Division[]
+  subjects            Subject[]
+  teachers            Teacher[]
+  teacherAvailability TeacherAvailability[]
+  periodStructures    PeriodStructure[]
+  electiveGroups      ElectiveGroup[]
+  divisionAssignments DivisionAssignment[]
+  timetables          Timetable[]
+  generationJobs      GenerationJob[]
 
   @@index([schoolId, status])
   @@map("academic_years")
+}
+
+// ──────────────────────────────────────────────
+// Table 3: classes
+// ──────────────────────────────────────────────
+
+model Class {
+  id              String    @id @default(uuid())
+  schoolId        String    @map("school_id")
+  academicYearId  String    @map("academic_year_id")
+  name            String    @db.VarChar(100)
+  sortOrder       Int       @default(0) @map("sort_order")
+  requiresStream  Boolean   @default(false) @map("requires_stream")
+  deletedAt       DateTime? @map("deleted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  school              School                 @relation(fields: [schoolId], references: [id])
+  academicYear        AcademicYear           @relation(fields: [academicYearId], references: [id])
+  divisions           Division[]
+  periodStructureClasses PeriodStructureClass[]
+
+  @@unique([schoolId, academicYearId, name])
+  @@index([schoolId, academicYearId, sortOrder])
+  @@map("classes")
+}
+
+// ──────────────────────────────────────────────
+// Table 4: divisions
+// ──────────────────────────────────────────────
+
+model Division {
+  id             String    @id @default(uuid())
+  schoolId       String    @map("school_id")
+  classId        String    @map("class_id")
+  academicYearId String    @map("academic_year_id")
+  label          String    @db.VarChar(10)
+  streamName     String?   @map("stream_name") @db.VarChar(100)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  school              School               @relation(fields: [schoolId], references: [id])
+  class               Class                @relation(fields: [classId], references: [id])
+  academicYear        AcademicYear         @relation(fields: [academicYearId], references: [id])
+  divisionAssignments DivisionAssignment[]
+  timetables          Timetable[]
+  generationJobs      GenerationJob[]
+  timetableNotifications TimetableNotification[]
+
+  @@unique([schoolId, classId, label, streamName])
+  @@index([schoolId, classId, academicYearId])
+  @@map("divisions")
+}
+
+// ──────────────────────────────────────────────
+// Table 5: subjects
+// ──────────────────────────────────────────────
+
+model Subject {
+  id             String    @id @default(uuid())
+  schoolId       String    @map("school_id")
+  academicYearId String    @map("academic_year_id")
+  name           String    @db.VarChar(255)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  school              School                 @relation(fields: [schoolId], references: [id])
+  academicYear        AcademicYear           @relation(fields: [academicYearId], references: [id])
+  teacherSubjects     TeacherSubject[]
+  electiveGroupSubjects ElectiveGroupSubject[]
+  divisionAssignments DivisionAssignment[]
+
+  @@unique([schoolId, academicYearId, name])
+  @@map("subjects")
+}
+
+// ──────────────────────────────────────────────
+// Table 6: teachers
+// ──────────────────────────────────────────────
+
+model Teacher {
+  id             String    @id @default(uuid())
+  schoolId       String    @map("school_id")
+  academicYearId String    @map("academic_year_id")
+  name           String    @db.VarChar(255)
+  contact        String?   @db.Text
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  school                School               @relation(fields: [schoolId], references: [id])
+  academicYear          AcademicYear         @relation(fields: [academicYearId], references: [id])
+  teacherSubjects       TeacherSubject[]
+  teacherAvailability   TeacherAvailability[]
+  divisionAssignments   DivisionAssignment[] @relation("PrimaryTeacher")
+  assistantAssignments  DivisionAssignment[] @relation("AssistantTeacher")
+
+  @@index([schoolId, academicYearId])
+  @@map("teachers")
+}
+
+// ──────────────────────────────────────────────
+// Table 7: teacher_subjects
+// ──────────────────────────────────────────────
+
+model TeacherSubject {
+  id        String @id @default(uuid())
+  schoolId  String @map("school_id")
+  teacherId String @map("teacher_id")
+  subjectId String @map("subject_id")
+
+  school  School  @relation(fields: [schoolId], references: [id])
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+  subject Subject @relation(fields: [subjectId], references: [id])
+
+  @@unique([teacherId, subjectId])
+  @@map("teacher_subjects")
+}
+
+// ──────────────────────────────────────────────
+// Table 8: teacher_availability
+// ──────────────────────────────────────────────
+
+model TeacherAvailability {
+  id             String @id @default(uuid())
+  schoolId       String @map("school_id")
+  teacherId      String @map("teacher_id")
+  academicYearId String @map("academic_year_id")
+  workingDayId   String @map("working_day_id")
+  slotId         String @map("slot_id")
+
+  school       School       @relation(fields: [schoolId], references: [id])
+  teacher      Teacher      @relation(fields: [teacherId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  workingDay   WorkingDay   @relation(fields: [workingDayId], references: [id])
+  slot         Slot         @relation(fields: [slotId], references: [id])
+
+  @@unique([teacherId, academicYearId, workingDayId, slotId])
+  @@map("teacher_availability")
+}
+
+// ──────────────────────────────────────────────
+// Table 9: period_structures
+// ──────────────────────────────────────────────
+
+model PeriodStructure {
+  id             String    @id @default(uuid())
+  schoolId       String    @map("school_id")
+  academicYearId String    @map("academic_year_id")
+  name           String    @db.VarChar(255)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  school       School                 @relation(fields: [schoolId], references: [id])
+  academicYear AcademicYear           @relation(fields: [academicYearId], references: [id])
+  classes      PeriodStructureClass[]
+  workingDays  WorkingDay[]
+
+  @@unique([schoolId, academicYearId, name])
+  @@map("period_structures")
+}
+
+// ──────────────────────────────────────────────
+// Table 10: period_structure_classes
+// ──────────────────────────────────────────────
+
+model PeriodStructureClass {
+  id                String @id @default(uuid())
+  schoolId          String @map("school_id")
+  periodStructureId String @map("period_structure_id")
+  classId           String @map("class_id")
+
+  school          School          @relation(fields: [schoolId], references: [id])
+  periodStructure PeriodStructure @relation(fields: [periodStructureId], references: [id])
+  class           Class           @relation(fields: [classId], references: [id])
+
+  @@unique([classId])
+  @@map("period_structure_classes")
+}
+
+// ──────────────────────────────────────────────
+// Table 11: working_days
+// ──────────────────────────────────────────────
+
+model WorkingDay {
+  id                String @id @default(uuid())
+  schoolId          String @map("school_id")
+  periodStructureId String @map("period_structure_id")
+  dayOfWeek         Int    @map("day_of_week")
+  label             String @db.VarChar(20)
+  sortOrder         Int    @map("sort_order")
+
+  school              School              @relation(fields: [schoolId], references: [id])
+  periodStructure     PeriodStructure     @relation(fields: [periodStructureId], references: [id])
+  slots               Slot[]
+  teacherAvailability TeacherAvailability[]
+  timetableSlots      TimetableSlot[]
+
+  @@unique([periodStructureId, dayOfWeek])
+  @@map("working_days")
+}
+
+// ──────────────────────────────────────────────
+// Table 12: slots
+// ──────────────────────────────────────────────
+
+model Slot {
+  id           String   @id @default(uuid())
+  schoolId     String   @map("school_id")
+  workingDayId String   @map("working_day_id")
+  slotType     SlotType @map("slot_type")
+  slotNumber   Int?     @map("slot_number")
+  startTime    DateTime @map("start_time") @db.Time()
+  endTime      DateTime @map("end_time") @db.Time()
+  sortOrder    Int      @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  school              School              @relation(fields: [schoolId], references: [id])
+  workingDay          WorkingDay          @relation(fields: [workingDayId], references: [id])
+  teacherAvailability TeacherAvailability[]
+  timetableSlots      TimetableSlot[]
+
+  @@unique([workingDayId, sortOrder])
+  @@map("slots")
+}
+
+// ──────────────────────────────────────────────
+// Table 13: elective_groups
+// ──────────────────────────────────────────────
+
+model ElectiveGroup {
+  id             String    @id @default(uuid())
+  schoolId       String    @map("school_id")
+  academicYearId String    @map("academic_year_id")
+  name           String    @db.VarChar(255)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  school              School                 @relation(fields: [schoolId], references: [id])
+  academicYear        AcademicYear           @relation(fields: [academicYearId], references: [id])
+  subjects            ElectiveGroupSubject[]
+  divisionAssignments DivisionAssignment[]
+
+  @@unique([schoolId, academicYearId, name])
+  @@map("elective_groups")
+}
+
+// ──────────────────────────────────────────────
+// Table 14: elective_group_subjects
+// ──────────────────────────────────────────────
+
+model ElectiveGroupSubject {
+  id              String @id @default(uuid())
+  schoolId        String @map("school_id")
+  electiveGroupId String @map("elective_group_id")
+  subjectId       String @map("subject_id")
+
+  school        School        @relation(fields: [schoolId], references: [id])
+  electiveGroup ElectiveGroup @relation(fields: [electiveGroupId], references: [id])
+  subject       Subject       @relation(fields: [subjectId], references: [id])
+
+  @@unique([electiveGroupId, subjectId])
+  @@map("elective_group_subjects")
+}
+
+// ──────────────────────────────────────────────
+// Table 15: division_assignments
+// ──────────────────────────────────────────────
+
+model DivisionAssignment {
+  id                 String    @id @default(uuid())
+  schoolId           String    @map("school_id")
+  divisionId         String    @map("division_id")
+  subjectId          String    @map("subject_id")
+  teacherId          String    @map("teacher_id")
+  assistantTeacherId String?   @map("assistant_teacher_id")
+  weightage          Int
+  electiveGroupId    String?   @map("elective_group_id")
+  academicYearId     String    @map("academic_year_id")
+  deletedAt          DateTime? @map("deleted_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  school           School         @relation(fields: [schoolId], references: [id])
+  division         Division       @relation(fields: [divisionId], references: [id])
+  subject          Subject        @relation(fields: [subjectId], references: [id])
+  teacher          Teacher        @relation("PrimaryTeacher", fields: [teacherId], references: [id])
+  assistantTeacher Teacher?       @relation("AssistantTeacher", fields: [assistantTeacherId], references: [id])
+  electiveGroup    ElectiveGroup? @relation(fields: [electiveGroupId], references: [id])
+  academicYear     AcademicYear   @relation(fields: [academicYearId], references: [id])
+  timetableSlots   TimetableSlot[]
+
+  @@index([schoolId, divisionId, academicYearId])
+  @@index([teacherId])
+  @@index([assistantTeacherId])
+  @@index([electiveGroupId])
+  @@map("division_assignments")
+}
+
+// ──────────────────────────────────────────────
+// Table 16: timetables
+// ──────────────────────────────────────────────
+
+model Timetable {
+  id                          String          @id @default(uuid())
+  schoolId                    String          @map("school_id")
+  divisionId                  String          @map("division_id")
+  academicYearId              String          @map("academic_year_id")
+  status                      TimetableStatus
+  adjacencyConstraintEnabled  Boolean         @default(false) @map("adjacency_constraint_enabled")
+  generatedAt                 DateTime        @map("generated_at")
+  createdAt                   DateTime        @default(now()) @map("created_at")
+  updatedAt                   DateTime        @updatedAt @map("updated_at")
+
+  school                 School                @relation(fields: [schoolId], references: [id])
+  division               Division              @relation(fields: [divisionId], references: [id])
+  academicYear           AcademicYear          @relation(fields: [academicYearId], references: [id])
+  timetableSlots         TimetableSlot[]
+  timetableNotifications TimetableNotification[]
+
+  @@unique([schoolId, divisionId, academicYearId])
+  @@map("timetables")
+}
+
+// ──────────────────────────────────────────────
+// Table 17: timetable_slots
+// ──────────────────────────────────────────────
+
+model TimetableSlot {
+  id                   String  @id @default(uuid())
+  schoolId             String  @map("school_id")
+  timetableId          String  @map("timetable_id")
+  workingDayId         String  @map("working_day_id")
+  slotId               String  @map("slot_id")
+  divisionAssignmentId String? @map("division_assignment_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  school             School              @relation(fields: [schoolId], references: [id])
+  timetable          Timetable           @relation(fields: [timetableId], references: [id])
+  workingDay         WorkingDay          @relation(fields: [workingDayId], references: [id])
+  slot               Slot                @relation(fields: [slotId], references: [id])
+  divisionAssignment DivisionAssignment? @relation(fields: [divisionAssignmentId], references: [id])
+
+  @@unique([timetableId, workingDayId, slotId])
+  @@index([divisionAssignmentId])
+  @@map("timetable_slots")
+}
+
+// ──────────────────────────────────────────────
+// Table 18: generation_jobs
+// ──────────────────────────────────────────────
+
+model GenerationJob {
+  id             String    @id @default(uuid())
+  schoolId       String    @map("school_id")
+  divisionId     String    @map("division_id")
+  academicYearId String    @map("academic_year_id")
+  status         JobStatus
+  errorMessage   String?   @map("error_message")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  school       School       @relation(fields: [schoolId], references: [id])
+  division     Division     @relation(fields: [divisionId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@index([schoolId, divisionId, academicYearId])
+  @@map("generation_jobs")
+}
+
+// ──────────────────────────────────────────────
+// Table 19: timetable_notifications
+// ──────────────────────────────────────────────
+
+model TimetableNotification {
+  id                String       @id @default(uuid())
+  schoolId          String       @map("school_id")
+  timetableId       String       @map("timetable_id")
+  divisionId        String       @map("division_id")
+  conflictType      ConflictType @map("conflict_type")
+  changeDescription String       @map("change_description")
+  dismissed         Boolean      @default(false)
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  school    School    @relation(fields: [schoolId], references: [id])
+  timetable Timetable @relation(fields: [timetableId], references: [id])
+  division  Division  @relation(fields: [divisionId], references: [id])
+
+  @@index([schoolId, dismissed])
+  @@map("timetable_notifications")
 }
