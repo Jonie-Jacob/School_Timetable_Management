@@ -1,0 +1,47 @@
+// This is a minimal Prisma schema to generate the client.
+// The full schema with all 19 tables will be defined in Phase 3.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Minimal models needed for Phase 2 build — extended fully in Phase 3.
+
+enum AcademicYearStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model School {
+  id            String   @id @default(uuid())
+  name          String   @db.VarChar(255)
+  adminEmail    String   @unique @map("admin_email") @db.VarChar(255)
+  cognitoUserId String   @unique @map("cognito_user_id") @db.VarChar(255)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  academicYears AcademicYear[]
+
+  @@map("schools")
+}
+
+model AcademicYear {
+  id        String             @id @default(uuid())
+  schoolId  String             @map("school_id")
+  label     String             @db.VarChar(50)
+  startDate DateTime           @map("start_date") @db.Date
+  endDate   DateTime           @map("end_date") @db.Date
+  status    AcademicYearStatus @default(ARCHIVED)
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@index([schoolId, status])
+  @@map("academic_years")
+}
