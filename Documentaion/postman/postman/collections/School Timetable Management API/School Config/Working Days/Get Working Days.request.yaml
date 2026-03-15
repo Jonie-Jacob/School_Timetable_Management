@@ -1,0 +1,6 @@
+$kind: http-request
+url: "{{baseUrl}}/config/working-days"
+method: GET
+headers:
+  X-Academic-Year-Id: "{{academicYearId}}"
+order: 2000

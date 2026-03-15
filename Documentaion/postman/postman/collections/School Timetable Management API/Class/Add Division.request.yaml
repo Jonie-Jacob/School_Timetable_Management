@@ -1,0 +1,22 @@
+$kind: http-request
+url: "{{baseUrl}}/classes/{{classId}}/divisions"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "A"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      if (pm.response.code === 201) {
+        const data = pm.response.json().data;
+        pm.environment.set('divisionId', data.id);
+        pm.test('Division created', () => pm.response.to.have.status(201));
+      }
+    language: text/javascript
+order: 6000

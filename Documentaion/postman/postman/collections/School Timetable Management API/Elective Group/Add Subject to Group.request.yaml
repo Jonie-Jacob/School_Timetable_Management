@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/elective-groups/{{electiveGroupId}}/subjects"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "subjectId": "{{subjectId}}"
+    }
+order: 6000

@@ -1,0 +1,111 @@
+{
+	"id": "local-dev-env",
+	"name": "Local Dev",
+	"_postman_variable_scope": "environment",
+	"_postman_exported_at": "2025-01-01T00:00:00.000Z",
+	"_postman_exported_using": "Postman/11.0.0",
+	"values": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:4001",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "authBaseUrl",
+			"value": "http://localhost:4001",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "academicYearBaseUrl",
+			"value": "http://localhost:4002",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "schoolId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "userId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "academicYearId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "classId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "divisionId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "subjectId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "teacherId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "periodStructureId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "assignmentId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "electiveGroupId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "timetableId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "jobId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "timetableSlotId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		}
+	]
+}

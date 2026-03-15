@@ -1,0 +1,6 @@
+$kind: http-request
+url: "{{baseUrl}}/assignments/{{assignmentId}}"
+method: DELETE
+headers:
+  X-Academic-Year-Id: "{{academicYearId}}"
+order: 4000

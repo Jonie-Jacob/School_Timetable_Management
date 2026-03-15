@@ -1,0 +1,23 @@
+$kind: collection
+description: |-
+  Complete API collection for the School Timetable Management System.
+
+  This collection is updated incrementally as each backend service is built.
+
+  **Setup**:
+
+  1. Import this collection into Postman.
+
+  2. Import the `Local_Dev` environment.
+
+  3. Select the "Local Dev" environment.
+
+  4. Run "Register" then "Login" to populate the {{token}} variable.
+
+  5. All subsequent requests will auto-authenticate.
+auth:
+  - id: 7bd82c9b-2942-4a23-90ce-b6b052f958ce
+    type: bearer
+    name: bearer auth
+    credentials:
+      token: "{{token}}"

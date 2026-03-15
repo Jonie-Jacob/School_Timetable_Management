@@ -1,0 +1,3 @@
+$kind: collection
+description: Teacher CRUD + subject mappings + availability.
+order: 5000

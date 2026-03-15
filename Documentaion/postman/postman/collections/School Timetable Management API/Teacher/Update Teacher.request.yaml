@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/teachers/{{teacherId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "Mr. Sharma (Updated)",
+      "email": "sharma@testschool.com"
+    }
+order: 4000

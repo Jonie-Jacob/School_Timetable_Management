@@ -1,0 +1,14 @@
+# Use this workspace to collaborate
+workspace:
+  id: 6834daf0-e2bd-4701-b480-932c0184f592
+
+localResources:
+  environments:
+    - ..\environments\Local_Dev.json
+  collections:
+    - ..\collections\School_Timetable_Management_API.json
+
+# Each entry here maps a local resource to one or more corresponding objects in Postman Cloud
+cloudResources:
+  collections:
+    ..\postman\collections\School Timetable Management API: 231a955a-24f0-4b54-a4c2-7b8b2dad9a53

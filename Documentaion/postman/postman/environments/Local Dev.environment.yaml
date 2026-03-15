@@ -1,0 +1,53 @@
+name: Local Dev
+values:
+  - key: baseUrl
+    value: 'http://localhost:4001'
+    enabled: true
+  - key: authBaseUrl
+    value: 'http://localhost:4001'
+    enabled: true
+  - key: academicYearBaseUrl
+    value: 'http://localhost:4002'
+    enabled: true
+  - key: token
+    value: ''
+    enabled: true
+  - key: schoolId
+    value: ''
+    enabled: true
+  - key: userId
+    value: ''
+    enabled: true
+  - key: academicYearId
+    value: ''
+    enabled: true
+  - key: classId
+    value: ''
+    enabled: true
+  - key: divisionId
+    value: ''
+    enabled: true
+  - key: subjectId
+    value: ''
+    enabled: true
+  - key: teacherId
+    value: ''
+    enabled: true
+  - key: periodStructureId
+    value: ''
+    enabled: true
+  - key: assignmentId
+    value: ''
+    enabled: true
+  - key: electiveGroupId
+    value: ''
+    enabled: true
+  - key: timetableId
+    value: ''
+    enabled: true
+  - key: jobId
+    value: ''
+    enabled: true
+  - key: timetableSlotId
+    value: ''
+    enabled: true

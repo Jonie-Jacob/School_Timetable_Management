@@ -1,0 +1,8 @@
+$kind: http-request
+url: "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}/activate"
+method: PATCH
+scripts:
+  - type: afterResponse
+    code: pm.test('Academic year activated', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 6000

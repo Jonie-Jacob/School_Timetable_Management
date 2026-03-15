@@ -8,5 +8,11 @@
   },
   "dependencies": {
     "@timetable/shared": "*"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.0",
+    "serverless": "^4.0.0",
+    "serverless-offline": "^14.0.0",
+    "typescript": "^5.7.0"
   }
 }

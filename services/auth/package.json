@@ -7,6 +7,14 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@timetable/shared": "*"
+    "@timetable/shared": "*",
+    "jsonwebtoken": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.0",
+    "@types/jsonwebtoken": "^9.0.0",
+    "serverless": "^4.0.0",
+    "serverless-offline": "^14.0.0",
+    "typescript": "^5.7.0"
   }
 }

@@ -1,0 +1,26 @@
+$kind: http-request
+url: "{{authBaseUrl}}/auth/register"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "schoolName": "Test School",
+      "adminEmail": "admin@testschool.com",
+      "password": "TestPass123!"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: >-
+      if (pm.response.code === 201) {
+        const data = pm.response.json().data;
+        pm.environment.set('token', data.token);
+        pm.environment.set('schoolId', data.school.id);
+        pm.test('Registration successful', () => pm.response.to.have.status(201));
+      }
+    language: text/javascript
+order: 1000

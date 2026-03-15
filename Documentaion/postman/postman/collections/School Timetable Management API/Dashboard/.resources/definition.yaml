@@ -1,0 +1,3 @@
+$kind: collection
+description: Aggregated statistics for the admin home screen.
+order: 10000

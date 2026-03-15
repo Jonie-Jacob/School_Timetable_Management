@@ -1,0 +1,17 @@
+{
+  "workspace": {
+    "id": "c7239fbe-527e-405b-a825-f6e7466e5c19"
+  },
+  "entities": {
+    "environments": [
+      "..\\environments\\Local_Dev.json"
+    ],
+    "flows": [],
+    "globals": [],
+    "mocks": [],
+    "specs": [],
+    "collections": [
+      "..\\collections\\School_Timetable_Management_API.json"
+    ]
+  }
+}

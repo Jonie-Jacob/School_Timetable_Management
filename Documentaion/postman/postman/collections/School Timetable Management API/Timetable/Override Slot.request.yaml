@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/timetables/slots/{{timetableSlotId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "assignmentId": "{{assignmentId}}"
+    }
+order: 4000

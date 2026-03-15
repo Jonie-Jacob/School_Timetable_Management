@@ -11,6 +11,12 @@
     "prisma:generate": "npm run prisma:generate -w packages/shared",
     "prisma:migrate": "npm run prisma:migrate -w packages/shared",
     "prisma:studio": "npm run prisma:studio -w packages/shared",
-    "db:seed": "npm run db:seed -w packages/shared"
+    "db:seed": "npm run db:seed -w packages/shared",
+    "dev:auth": "npm run dev -w services/auth",
+    "dev:academic-year": "npm run dev -w services/academic-year",
+    "dev": "concurrently --names auth,acad-yr --prefix-colors blue,green \"npm run dev:auth\" \"npm run dev:academic-year\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

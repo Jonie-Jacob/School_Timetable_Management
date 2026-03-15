@@ -1,0 +1,35 @@
+$kind: http-request
+url: "{{baseUrl}}/config/period-structures"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: >-
+    {
+      "name": "Standard (8 Periods)",
+      "periods": [
+        { "order": 1, "type": "PERIOD", "startTime": "08:00", "endTime": "08:40", "label": "Period 1" },
+        { "order": 2, "type": "PERIOD", "startTime": "08:40", "endTime": "09:20", "label": "Period 2" },
+        { "order": 3, "type": "INTERVAL", "startTime": "09:20", "endTime": "09:35", "label": "Interval" },
+        { "order": 4, "type": "PERIOD", "startTime": "09:35", "endTime": "10:15", "label": "Period 3" },
+        { "order": 5, "type": "PERIOD", "startTime": "10:15", "endTime": "10:55", "label": "Period 4" },
+        { "order": 6, "type": "LUNCH_BREAK", "startTime": "10:55", "endTime": "11:30", "label": "Lunch Break" },
+        { "order": 7, "type": "PERIOD", "startTime": "11:30", "endTime": "12:10", "label": "Period 5" },
+        { "order": 8, "type": "PERIOD", "startTime": "12:10", "endTime": "12:50", "label": "Period 6" },
+        { "order": 9, "type": "INTERVAL", "startTime": "12:50", "endTime": "13:00", "label": "Interval" },
+        { "order": 10, "type": "PERIOD", "startTime": "13:00", "endTime": "13:40", "label": "Period 7" },
+        { "order": 11, "type": "PERIOD", "startTime": "13:40", "endTime": "14:20", "label": "Period 8" }
+      ]
+    }
+scripts:
+  - type: afterResponse
+    code: >-
+      if (pm.response.code === 201) {
+        const data = pm.response.json().data;
+        pm.environment.set('periodStructureId', data.id);
+        pm.test('Period structure created', () => pm.response.to.have.status(201));
+      }
+    language: text/javascript
+order: 1000

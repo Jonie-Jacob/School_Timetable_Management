@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/divisions/{{divisionId}}/assignments/elective"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "electiveGroupId": "{{electiveGroupId}}",
+      "periodsPerWeek": 3
+    }
+order: 5000

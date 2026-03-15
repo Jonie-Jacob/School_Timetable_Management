@@ -1,0 +1,38 @@
+service: timetable-auth
+
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    STAGE: ${self:provider.stage}
+    JWT_SECRET: local-dev-secret-key-change-in-prod
+
+custom:
+  serverless-offline:
+    httpPort: 4001
+    lambdaPort: 4051
+    noPrependStageInUrl: true
+
+functions:
+  auth:
+    handler: src/handler.handler
+    timeout: 30
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/register
+      - httpApi:
+          method: POST
+          path: /auth/login
+      - httpApi:
+          method: GET
+          path: /auth/me
+      - httpApi:
+          method: GET
+          path: /auth/health

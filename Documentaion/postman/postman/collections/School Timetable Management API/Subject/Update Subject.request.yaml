@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/subjects/{{subjectId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "Mathematics (Advanced)",
+      "code": "MATH-ADV"
+    }
+order: 4000

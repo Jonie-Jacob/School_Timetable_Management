@@ -1,0 +1,18 @@
+$kind: http-request
+url: "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "label": "2026-27 (Updated)",
+      "startDate": "2026-05-01",
+      "endDate": "2027-03-31"
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('Academic year updated', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 5000

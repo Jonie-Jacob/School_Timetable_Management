@@ -1,0 +1,6 @@
+$kind: http-request
+url: "{{baseUrl}}/timetables/teacher/{{teacherId}}"
+method: GET
+headers:
+  X-Academic-Year-Id: "{{academicYearId}}"
+order: 7000

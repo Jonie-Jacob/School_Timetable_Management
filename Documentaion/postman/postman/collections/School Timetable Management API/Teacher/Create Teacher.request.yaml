@@ -1,0 +1,24 @@
+$kind: http-request
+url: "{{baseUrl}}/teachers"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "Mr. Sharma",
+      "email": "sharma@testschool.com",
+      "phone": "+919876543210"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      if (pm.response.code === 201) {
+        const data = pm.response.json().data;
+        pm.environment.set('teacherId', data.id);
+        pm.test('Teacher created', () => pm.response.to.have.status(201));
+      }
+    language: text/javascript
+order: 1000

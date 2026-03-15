@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/classes/{{classId}}/divisions/{{divisionId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "A",
+      "stream": null
+    }
+order: 7000

@@ -1,0 +1,10 @@
+$kind: http-request
+url: "{{authBaseUrl}}/auth/health"
+method: GET
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: pm.test('Health OK', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 5000

@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{academicYearBaseUrl}}/academic-years"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "label": "2026-27",
+      "startDate": "2026-05-01",
+      "endDate": "2027-03-31"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      if (pm.response.code === 201) {
+        const data = pm.response.json().data;
+        pm.environment.set('academicYearId', data.id);
+        pm.test('Academic year created', () => pm.response.to.have.status(201));
+      }
+    language: text/javascript
+order: 2000

@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/assignments/{{assignmentId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "teacherId": "{{teacherId}}",
+      "periodsPerWeek": 6
+    }
+order: 3000

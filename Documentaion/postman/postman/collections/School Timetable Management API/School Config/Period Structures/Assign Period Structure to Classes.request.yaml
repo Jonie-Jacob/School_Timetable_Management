@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/config/period-structures/{{periodStructureId}}/assign"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "classIds": ["{{classId}}"]
+    }
+order: 6000

@@ -1,0 +1,10 @@
+$kind: http-request
+url: "{{baseUrl}}/teachers?page=1&limit=20&search="
+method: GET
+headers:
+  X-Academic-Year-Id: "{{academicYearId}}"
+queryParams:
+  page: "1"
+  limit: "20"
+  search: ""
+order: 2000

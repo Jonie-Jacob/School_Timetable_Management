@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/config/period-structures/{{periodStructureId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "Standard (8 Periods) — Updated"
+    }
+order: 4000

@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/export/teacher/excel"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "teacherId": "{{teacherId}}",
+      "academicYearId": "{{academicYearId}}"
+    }
+order: 4000

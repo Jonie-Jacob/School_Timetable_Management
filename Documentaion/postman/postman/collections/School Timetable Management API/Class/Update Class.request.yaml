@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/classes/{{classId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "Class I (Updated)"
+    }
+order: 4000

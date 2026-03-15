@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/export/division/excel"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "divisionId": "{{divisionId}}",
+      "academicYearId": "{{academicYearId}}"
+    }
+order: 2000

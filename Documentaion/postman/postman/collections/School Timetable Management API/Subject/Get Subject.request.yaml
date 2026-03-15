@@ -1,0 +1,6 @@
+$kind: http-request
+url: "{{baseUrl}}/subjects/{{subjectId}}"
+method: GET
+headers:
+  X-Academic-Year-Id: "{{academicYearId}}"
+order: 3000

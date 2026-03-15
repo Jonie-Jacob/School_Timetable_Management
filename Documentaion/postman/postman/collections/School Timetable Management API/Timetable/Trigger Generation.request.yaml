@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{baseUrl}}/timetables/generate"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "divisionIds": ["{{divisionId}}"]
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      if (pm.response.code === 202) {
+        const data = pm.response.json().data;
+        pm.environment.set('jobId', data.jobId);
+        pm.environment.set('timetableId', data.timetableId);
+        pm.test('Generation triggered', () => pm.response.to.have.status(202));
+      }
+    language: text/javascript
+order: 1000

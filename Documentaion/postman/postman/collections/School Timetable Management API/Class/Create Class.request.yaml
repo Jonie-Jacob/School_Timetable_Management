@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{baseUrl}}/classes"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "Class I",
+      "numericLevel": 1
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      if (pm.response.code === 201) {
+        const data = pm.response.json().data;
+        pm.environment.set('classId', data.id);
+        pm.test('Class created', () => pm.response.to.have.status(201));
+      }
+    language: text/javascript
+order: 1000

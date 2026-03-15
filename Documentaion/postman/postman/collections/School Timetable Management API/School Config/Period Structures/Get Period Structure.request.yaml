@@ -1,0 +1,6 @@
+$kind: http-request
+url: "{{baseUrl}}/config/period-structures/{{periodStructureId}}"
+method: GET
+headers:
+  X-Academic-Year-Id: "{{academicYearId}}"
+order: 3000

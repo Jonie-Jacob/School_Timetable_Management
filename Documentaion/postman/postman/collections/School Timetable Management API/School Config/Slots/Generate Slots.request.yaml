@@ -1,0 +1,10 @@
+$kind: http-request
+url: "{{baseUrl}}/config/slots/generate"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: "{}"
+order: 1000

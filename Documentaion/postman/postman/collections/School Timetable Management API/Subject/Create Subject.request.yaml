@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{baseUrl}}/subjects"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "Mathematics",
+      "code": "MATH"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      if (pm.response.code === 201) {
+        const data = pm.response.json().data;
+        pm.environment.set('subjectId', data.id);
+        pm.test('Subject created', () => pm.response.to.have.status(201));
+      }
+    language: text/javascript
+order: 1000

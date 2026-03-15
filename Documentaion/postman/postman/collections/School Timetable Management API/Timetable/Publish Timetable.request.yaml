@@ -1,0 +1,6 @@
+$kind: http-request
+url: "{{baseUrl}}/timetables/{{timetableId}}/publish"
+method: POST
+headers:
+  X-Academic-Year-Id: "{{academicYearId}}"
+order: 5000

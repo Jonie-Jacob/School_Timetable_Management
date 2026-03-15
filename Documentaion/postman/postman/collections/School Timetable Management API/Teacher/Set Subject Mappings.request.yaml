@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/teachers/{{teacherId}}/subjects"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "subjectIds": ["{{subjectId}}"]
+    }
+order: 6000

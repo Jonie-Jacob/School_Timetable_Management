@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/config/working-days"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: >-
+    {
+      "days": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"]
+    }
+order: 1000

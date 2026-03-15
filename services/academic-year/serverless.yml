@@ -1,0 +1,46 @@
+service: timetable-academic-year
+
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    STAGE: ${self:provider.stage}
+
+custom:
+  serverless-offline:
+    httpPort: 4002
+    lambdaPort: 4052
+    noPrependStageInUrl: true
+
+functions:
+  academicYear:
+    handler: src/handler.handler
+    timeout: 30
+    events:
+      - httpApi:
+          method: POST
+          path: /academic-years
+      - httpApi:
+          method: GET
+          path: /academic-years
+      - httpApi:
+          method: GET
+          path: /academic-years/{id}
+      - httpApi:
+          method: PUT
+          path: /academic-years/{id}
+      - httpApi:
+          method: DELETE
+          path: /academic-years/{id}
+      - httpApi:
+          method: PATCH
+          path: /academic-years/{id}/activate
+      - httpApi:
+          method: GET
+          path: /academic-years/health

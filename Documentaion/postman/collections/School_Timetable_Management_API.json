@@ -1,0 +1,1531 @@
+{
+	"info": {
+		"_postman_id": "c7239fbe-527e-405b-a825-f6e7466e5c19",
+		"name": "School Timetable Management API",
+		"description": "Complete API collection for the School Timetable Management System.\n\nThis collection is updated incrementally as each backend service is built.\n\n**Setup**:\n\n1. Import this collection into Postman.\n\n2. Import the `Local_Dev` environment.\n\n3. Select the \"Local Dev\" environment.\n\n4. Run \"Register\" then \"Login\" to populate the {{token}} variable.\n\n5. All subsequent requests will auto-authenticate.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [],
+	"item": [
+		{
+			"name": "Auth",
+			"description": "Authentication service — register, login, profile.",
+			"item": [
+				{
+					"name": "Register",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"schoolName\": \"Test School\",\n  \"adminEmail\": \"admin@testschool.com\",\n  \"password\": \"TestPass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{authBaseUrl}}/auth/register",
+							"host": ["{{authBaseUrl}}"],
+							"path": ["auth", "register"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('token', data.token);",
+									"  pm.environment.set('schoolId', data.school.id);",
+									"  pm.test('Registration successful', () => pm.response.to.have.status(201));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Login",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@testschool.com\",\n  \"password\": \"TestPass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{authBaseUrl}}/auth/login",
+							"host": ["{{authBaseUrl}}"],
+							"path": ["auth", "login"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('token', data.token);",
+									"  pm.test('Login successful', () => pm.response.to.have.status(200));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Login (Seeded School)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@sacredheart.edu\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{authBaseUrl}}/auth/login",
+							"host": ["{{authBaseUrl}}"],
+							"path": ["auth", "login"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('token', data.token);",
+									"  pm.environment.set('schoolId', data.school.id);",
+									"  pm.test('Seeded school login successful', () => pm.response.to.have.status(200));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Get Me",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{authBaseUrl}}/auth/me",
+							"host": ["{{authBaseUrl}}"],
+							"path": ["auth", "me"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Profile retrieved', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Health",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": {
+							"raw": "{{authBaseUrl}}/auth/health",
+							"host": ["{{authBaseUrl}}"],
+							"path": ["auth", "health"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Health OK', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Academic Year",
+			"description": "Academic year CRUD — create, list, get, update, delete, activate.",
+			"item": [
+				{
+					"name": "Health",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": {
+							"raw": "{{academicYearBaseUrl}}/academic-years/health",
+							"host": ["{{academicYearBaseUrl}}"],
+							"path": ["academic-years", "health"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Health OK', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Create Academic Year",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"label\": \"2026-27\",\n  \"startDate\": \"2026-05-01\",\n  \"endDate\": \"2027-03-31\"\n}"
+						},
+						"url": {
+							"raw": "{{academicYearBaseUrl}}/academic-years",
+							"host": ["{{academicYearBaseUrl}}"],
+							"path": ["academic-years"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('academicYearId', data.id);",
+									"  pm.test('Academic year created', () => pm.response.to.have.status(201));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "List Academic Years",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{academicYearBaseUrl}}/academic-years?page=1&limit=10",
+							"host": ["{{academicYearBaseUrl}}"],
+							"path": ["academic-years"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "10" }
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('List returned', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Get Academic Year",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}",
+							"host": ["{{academicYearBaseUrl}}"],
+							"path": ["academic-years", "{{academicYearId}}"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Academic year retrieved', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Update Academic Year",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"label\": \"2026-27 (Updated)\",\n  \"startDate\": \"2026-05-01\",\n  \"endDate\": \"2027-03-31\"\n}"
+						},
+						"url": {
+							"raw": "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}",
+							"host": ["{{academicYearBaseUrl}}"],
+							"path": ["academic-years", "{{academicYearId}}"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Academic year updated', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Activate Academic Year",
+					"request": {
+						"method": "PATCH",
+						"url": {
+							"raw": "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}/activate",
+							"host": ["{{academicYearBaseUrl}}"],
+							"path": ["academic-years", "{{academicYearId}}", "activate"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Academic year activated', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Delete Academic Year",
+					"request": {
+						"method": "DELETE",
+						"url": {
+							"raw": "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}",
+							"host": ["{{academicYearBaseUrl}}"],
+							"path": ["academic-years", "{{academicYearId}}"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Academic year deleted', () => pm.response.to.have.status(204));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "School Config",
+			"description": "Period structures, working days, and slot generation.",
+			"item": [
+				{
+					"name": "Period Structures",
+					"item": [
+						{
+							"name": "Create Period Structure",
+							"request": {
+								"method": "POST",
+								"header": [
+									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Standard (8 Periods)\",\n  \"periods\": [\n    { \"order\": 1, \"type\": \"PERIOD\", \"startTime\": \"08:00\", \"endTime\": \"08:40\", \"label\": \"Period 1\" },\n    { \"order\": 2, \"type\": \"PERIOD\", \"startTime\": \"08:40\", \"endTime\": \"09:20\", \"label\": \"Period 2\" },\n    { \"order\": 3, \"type\": \"INTERVAL\", \"startTime\": \"09:20\", \"endTime\": \"09:35\", \"label\": \"Interval\" },\n    { \"order\": 4, \"type\": \"PERIOD\", \"startTime\": \"09:35\", \"endTime\": \"10:15\", \"label\": \"Period 3\" },\n    { \"order\": 5, \"type\": \"PERIOD\", \"startTime\": \"10:15\", \"endTime\": \"10:55\", \"label\": \"Period 4\" },\n    { \"order\": 6, \"type\": \"LUNCH_BREAK\", \"startTime\": \"10:55\", \"endTime\": \"11:30\", \"label\": \"Lunch Break\" },\n    { \"order\": 7, \"type\": \"PERIOD\", \"startTime\": \"11:30\", \"endTime\": \"12:10\", \"label\": \"Period 5\" },\n    { \"order\": 8, \"type\": \"PERIOD\", \"startTime\": \"12:10\", \"endTime\": \"12:50\", \"label\": \"Period 6\" },\n    { \"order\": 9, \"type\": \"INTERVAL\", \"startTime\": \"12:50\", \"endTime\": \"13:00\", \"label\": \"Interval\" },\n    { \"order\": 10, \"type\": \"PERIOD\", \"startTime\": \"13:00\", \"endTime\": \"13:40\", \"label\": \"Period 7\" },\n    { \"order\": 11, \"type\": \"PERIOD\", \"startTime\": \"13:40\", \"endTime\": \"14:20\", \"label\": \"Period 8\" }\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/config/period-structures",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "period-structures"]
+								}
+							},
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 201) {",
+											"  const data = pm.response.json().data;",
+											"  pm.environment.set('periodStructureId', data.id);",
+											"  pm.test('Period structure created', () => pm.response.to.have.status(201));",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"response": []
+						},
+						{
+							"name": "List Period Structures",
+							"request": {
+								"method": "GET",
+								"header": [
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"url": {
+									"raw": "{{baseUrl}}/config/period-structures",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "period-structures"]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Period Structure",
+							"request": {
+								"method": "GET",
+								"header": [
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"url": {
+									"raw": "{{baseUrl}}/config/period-structures/{{periodStructureId}}",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "period-structures", "{{periodStructureId}}"]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Period Structure",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Standard (8 Periods) — Updated\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/config/period-structures/{{periodStructureId}}",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "period-structures", "{{periodStructureId}}"]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Period Structure",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"url": {
+									"raw": "{{baseUrl}}/config/period-structures/{{periodStructureId}}",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "period-structures", "{{periodStructureId}}"]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Assign Period Structure to Classes",
+							"request": {
+								"method": "POST",
+								"header": [
+									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classIds\": [\"{{classId}}\"]\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/config/period-structures/{{periodStructureId}}/assign",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "period-structures", "{{periodStructureId}}", "assign"]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Working Days",
+					"item": [
+						{
+							"name": "Set Working Days",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"days\": [\"MONDAY\", \"TUESDAY\", \"WEDNESDAY\", \"THURSDAY\", \"FRIDAY\", \"SATURDAY\"]\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/config/working-days",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "working-days"]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Working Days",
+							"request": {
+								"method": "GET",
+								"header": [
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"url": {
+									"raw": "{{baseUrl}}/config/working-days",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "working-days"]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Slots",
+					"item": [
+						{
+							"name": "Generate Slots",
+							"request": {
+								"method": "POST",
+								"header": [
+									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/config/slots/generate",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "slots", "generate"]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Slots",
+							"request": {
+								"method": "GET",
+								"header": [
+									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+								],
+								"url": {
+									"raw": "{{baseUrl}}/config/slots",
+									"host": ["{{baseUrl}}"],
+									"path": ["config", "slots"]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Subject",
+			"description": "Subject CRUD operations.",
+			"item": [
+				{
+					"name": "Create Subject",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Mathematics\",\n  \"code\": \"MATH\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/subjects",
+							"host": ["{{baseUrl}}"],
+							"path": ["subjects"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('subjectId', data.id);",
+									"  pm.test('Subject created', () => pm.response.to.have.status(201));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "List Subjects",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/subjects?page=1&limit=20&search=",
+							"host": ["{{baseUrl}}"],
+							"path": ["subjects"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "20" },
+								{ "key": "search", "value": "" }
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Subject",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/subjects/{{subjectId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["subjects", "{{subjectId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Subject",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Mathematics (Advanced)\",\n  \"code\": \"MATH-ADV\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/subjects/{{subjectId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["subjects", "{{subjectId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Subject",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/subjects/{{subjectId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["subjects", "{{subjectId}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Teacher",
+			"description": "Teacher CRUD + subject mappings + availability.",
+			"item": [
+				{
+					"name": "Create Teacher",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Mr. Sharma\",\n  \"email\": \"sharma@testschool.com\",\n  \"phone\": \"+919876543210\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/teachers",
+							"host": ["{{baseUrl}}"],
+							"path": ["teachers"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('teacherId', data.id);",
+									"  pm.test('Teacher created', () => pm.response.to.have.status(201));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "List Teachers",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/teachers?page=1&limit=20&search=",
+							"host": ["{{baseUrl}}"],
+							"path": ["teachers"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "20" },
+								{ "key": "search", "value": "" }
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Teacher",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/teachers/{{teacherId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["teachers", "{{teacherId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Teacher",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Mr. Sharma (Updated)\",\n  \"email\": \"sharma@testschool.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/teachers/{{teacherId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["teachers", "{{teacherId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Teacher",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/teachers/{{teacherId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["teachers", "{{teacherId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Set Subject Mappings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subjectIds\": [\"{{subjectId}}\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/teachers/{{teacherId}}/subjects",
+							"host": ["{{baseUrl}}"],
+							"path": ["teachers", "{{teacherId}}", "subjects"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Set Availability",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"unavailableSlots\": []\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/teachers/{{teacherId}}/availability",
+							"host": ["{{baseUrl}}"],
+							"path": ["teachers", "{{teacherId}}", "availability"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Class",
+			"description": "Class and division CRUD.",
+			"item": [
+				{
+					"name": "Create Class",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Class I\",\n  \"numericLevel\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/classes",
+							"host": ["{{baseUrl}}"],
+							"path": ["classes"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('classId', data.id);",
+									"  pm.test('Class created', () => pm.response.to.have.status(201));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "List Classes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/classes",
+							"host": ["{{baseUrl}}"],
+							"path": ["classes"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Class",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/classes/{{classId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["classes", "{{classId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Class",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Class I (Updated)\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/classes/{{classId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["classes", "{{classId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Class",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/classes/{{classId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["classes", "{{classId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add Division",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"A\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/classes/{{classId}}/divisions",
+							"host": ["{{baseUrl}}"],
+							"path": ["classes", "{{classId}}", "divisions"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('divisionId', data.id);",
+									"  pm.test('Division created', () => pm.response.to.have.status(201));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Update Division",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"A\",\n  \"stream\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/classes/{{classId}}/divisions/{{divisionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["classes", "{{classId}}", "divisions", "{{divisionId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Division",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/classes/{{classId}}/divisions/{{divisionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["classes", "{{classId}}", "divisions", "{{divisionId}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Assignment",
+			"description": "Division assignments — link subjects + teachers to divisions.",
+			"item": [
+				{
+					"name": "List Division Assignments",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/divisions/{{divisionId}}/assignments",
+							"host": ["{{baseUrl}}"],
+							"path": ["divisions", "{{divisionId}}", "assignments"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Assignment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subjectId\": \"{{subjectId}}\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"periodsPerWeek\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/divisions/{{divisionId}}/assignments",
+							"host": ["{{baseUrl}}"],
+							"path": ["divisions", "{{divisionId}}", "assignments"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('assignmentId', data.id);",
+									"  pm.test('Assignment created', () => pm.response.to.have.status(201));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Update Assignment",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"periodsPerWeek\": 6\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/assignments/{{assignmentId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["assignments", "{{assignmentId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Assignment",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/assignments/{{assignmentId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["assignments", "{{assignmentId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Elective Assignment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"electiveGroupId\": \"{{electiveGroupId}}\",\n  \"periodsPerWeek\": 3\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/divisions/{{divisionId}}/assignments/elective",
+							"host": ["{{baseUrl}}"],
+							"path": ["divisions", "{{divisionId}}", "assignments", "elective"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Elective Group",
+			"description": "Elective group management — mutually exclusive subject groups.",
+			"item": [
+				{
+					"name": "Create Elective Group",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Science Electives - Class XI\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/elective-groups",
+							"host": ["{{baseUrl}}"],
+							"path": ["elective-groups"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('electiveGroupId', data.id);",
+									"  pm.test('Elective group created', () => pm.response.to.have.status(201));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "List Elective Groups",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/elective-groups",
+							"host": ["{{baseUrl}}"],
+							"path": ["elective-groups"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Elective Group",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["elective-groups", "{{electiveGroupId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Elective Group",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Science Electives - Class XI (Updated)\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["elective-groups", "{{electiveGroupId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Elective Group",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["elective-groups", "{{electiveGroupId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add Subject to Group",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subjectId\": \"{{subjectId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}/subjects",
+							"host": ["{{baseUrl}}"],
+							"path": ["elective-groups", "{{electiveGroupId}}", "subjects"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Subject from Group",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}/subjects/{{subjectId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["elective-groups", "{{electiveGroupId}}", "subjects", "{{subjectId}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Timetable",
+			"description": "Timetable generation, viewing, editing, publishing.",
+			"item": [
+				{
+					"name": "Trigger Generation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"divisionIds\": [\"{{divisionId}}\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/timetables/generate",
+							"host": ["{{baseUrl}}"],
+							"path": ["timetables", "generate"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 202) {",
+									"  const data = pm.response.json().data;",
+									"  pm.environment.set('jobId', data.jobId);",
+									"  pm.environment.set('timetableId', data.timetableId);",
+									"  pm.test('Generation triggered', () => pm.response.to.have.status(202));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Get Generation Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/timetables/generate/status/{{jobId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["timetables", "generate", "status", "{{jobId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Division Timetable",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/timetables/divisions/{{divisionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["timetables", "divisions", "{{divisionId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Override Slot",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"assignmentId\": \"{{assignmentId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/timetables/slots/{{timetableSlotId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["timetables", "slots", "{{timetableSlotId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Publish Timetable",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/timetables/{{timetableId}}/publish",
+							"host": ["{{baseUrl}}"],
+							"path": ["timetables", "{{timetableId}}", "publish"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Conflicts",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/timetables/{{timetableId}}/conflicts",
+							"host": ["{{baseUrl}}"],
+							"path": ["timetables", "{{timetableId}}", "conflicts"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Teacher Timetable",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/timetables/teacher/{{teacherId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["timetables", "teacher", "{{teacherId}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Dashboard",
+			"description": "Aggregated statistics for the admin home screen.",
+			"item": [
+				{
+					"name": "Get Stats",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/dashboard/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["dashboard", "stats"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Recent Activity",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/dashboard/recent-activity",
+							"host": ["{{baseUrl}}"],
+							"path": ["dashboard", "recent-activity"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Export",
+			"description": "PDF and Excel export for division and teacher timetables.",
+			"item": [
+				{
+					"name": "Export Division PDF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"divisionId\": \"{{divisionId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/export/division/pdf",
+							"host": ["{{baseUrl}}"],
+							"path": ["export", "division", "pdf"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Export Division Excel",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"divisionId\": \"{{divisionId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/export/division/excel",
+							"host": ["{{baseUrl}}"],
+							"path": ["export", "division", "excel"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Export Teacher PDF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/export/teacher/pdf",
+							"host": ["{{baseUrl}}"],
+							"path": ["export", "teacher", "pdf"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Export Teacher Excel",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/export/teacher/excel",
+							"host": ["{{baseUrl}}"],
+							"path": ["export", "teacher", "excel"]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

@@ -30,11 +30,11 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"schoolName\": \"Test School\",\n  \"email\": \"admin@testschool.com\",\n  \"password\": \"TestPass123!\"\n}"
+              "raw": "{\n  \"schoolName\": \"Test School\",\n  \"adminEmail\": \"admin@testschool.com\",\n  \"password\": \"TestPass123!\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/auth/register",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{authBaseUrl}}/auth/register",
+              "host": ["{{authBaseUrl}}"],
               "path": ["auth", "register"]
             }
           },
@@ -46,8 +46,7 @@
                   "if (pm.response.code === 201) {",
                   "  const data = pm.response.json().data;",
                   "  pm.environment.set('token', data.token);",
-                  "  pm.environment.set('schoolId', data.schoolId);",
-                  "  pm.environment.set('userId', data.userId);",
+                  "  pm.environment.set('schoolId', data.school.id);",
                   "  pm.test('Registration successful', () => pm.response.to.have.status(201));",
                   "}"
                 ],
@@ -70,8 +69,8 @@
               "raw": "{\n  \"email\": \"admin@testschool.com\",\n  \"password\": \"TestPass123!\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{authBaseUrl}}/auth/login",
+              "host": ["{{authBaseUrl}}"],
               "path": ["auth", "login"]
             }
           },
@@ -93,12 +92,48 @@
           "response": []
         },
         {
+          "name": "Login (Seeded School)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@sacredheart.edu\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/auth/login",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.environment.set('token', data.token);",
+                  "  pm.environment.set('schoolId', data.school.id);",
+                  "  pm.test('Seeded school login successful', () => pm.response.to.have.status(200));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
           "name": "Get Me",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/auth/me",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{authBaseUrl}}/auth/me",
+              "host": ["{{authBaseUrl}}"],
               "path": ["auth", "me"]
             }
           },
@@ -121,8 +156,8 @@
             "auth": { "type": "noauth" },
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/auth/health",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{authBaseUrl}}/auth/health",
+              "host": ["{{authBaseUrl}}"],
               "path": ["auth", "health"]
             }
           },
@@ -146,6 +181,30 @@
       "description": "Academic year CRUD — create, list, get, update, delete, activate.",
       "item": [
         {
+          "name": "Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{academicYearBaseUrl}}/academic-years/health",
+              "host": ["{{academicYearBaseUrl}}"],
+              "path": ["academic-years", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Health OK', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
           "name": "Create Academic Year",
           "request": {
             "method": "POST",
@@ -157,8 +216,8 @@
               "raw": "{\n  \"label\": \"2026-27\",\n  \"startDate\": \"2026-05-01\",\n  \"endDate\": \"2027-03-31\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/academic-years",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{academicYearBaseUrl}}/academic-years",
+              "host": ["{{academicYearBaseUrl}}"],
               "path": ["academic-years"]
             }
           },
@@ -184,8 +243,8 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/academic-years?page=1&limit=10",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{academicYearBaseUrl}}/academic-years?page=1&limit=10",
+              "host": ["{{academicYearBaseUrl}}"],
               "path": ["academic-years"],
               "query": [
                 { "key": "page", "value": "1" },
@@ -211,8 +270,8 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/academic-years/{{academicYearId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}",
+              "host": ["{{academicYearBaseUrl}}"],
               "path": ["academic-years", "{{academicYearId}}"]
             }
           },
@@ -241,8 +300,8 @@
               "raw": "{\n  \"label\": \"2026-27 (Updated)\",\n  \"startDate\": \"2026-05-01\",\n  \"endDate\": \"2027-03-31\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/academic-years/{{academicYearId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}",
+              "host": ["{{academicYearBaseUrl}}"],
               "path": ["academic-years", "{{academicYearId}}"]
             }
           },
@@ -264,8 +323,8 @@
           "request": {
             "method": "PATCH",
             "url": {
-              "raw": "{{baseUrl}}/academic-years/{{academicYearId}}/activate",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}/activate",
+              "host": ["{{academicYearBaseUrl}}"],
               "path": ["academic-years", "{{academicYearId}}", "activate"]
             }
           },
@@ -287,8 +346,8 @@
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{baseUrl}}/academic-years/{{academicYearId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{academicYearBaseUrl}}/academic-years/{{academicYearId}}",
+              "host": ["{{academicYearBaseUrl}}"],
               "path": ["academic-years", "{{academicYearId}}"]
             }
           },

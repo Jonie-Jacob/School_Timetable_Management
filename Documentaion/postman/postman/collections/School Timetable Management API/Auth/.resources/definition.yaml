@@ -1,0 +1,3 @@
+$kind: collection
+description: Authentication service — register, login, profile.
+order: 1000

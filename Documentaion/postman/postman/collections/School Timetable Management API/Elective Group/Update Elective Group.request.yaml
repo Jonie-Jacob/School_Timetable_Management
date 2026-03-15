@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/elective-groups/{{electiveGroupId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+  X-Academic-Year-Id: "{{academicYearId}}"
+body:
+  type: text
+  content: |-
+    {
+      "name": "Science Electives - Class XI (Updated)"
+    }
+order: 4000
