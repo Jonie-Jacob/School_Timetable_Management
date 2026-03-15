@@ -369,8 +369,22 @@
 		},
 		{
 			"name": "School Config",
-			"description": "Period structures, working days, and slot generation.",
+			"description": "Period structures, working days, and slot generation. Service runs on port 4003.",
 			"item": [
+				{
+					"name": "Health",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{schoolConfigBaseUrl}}/config/health",
+							"host": ["{{schoolConfigBaseUrl}}"],
+							"path": ["config", "health"]
+						}
+					},
+					"response": []
+				},
 				{
 					"name": "Period Structures",
 					"item": [
@@ -380,6 +394,8 @@
 								"method": "POST",
 								"header": [
 									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"body": {
@@ -387,8 +403,8 @@
 									"raw": "{\n  \"name\": \"Standard (8 Periods)\",\n  \"periods\": [\n    { \"order\": 1, \"type\": \"PERIOD\", \"startTime\": \"08:00\", \"endTime\": \"08:40\", \"label\": \"Period 1\" },\n    { \"order\": 2, \"type\": \"PERIOD\", \"startTime\": \"08:40\", \"endTime\": \"09:20\", \"label\": \"Period 2\" },\n    { \"order\": 3, \"type\": \"INTERVAL\", \"startTime\": \"09:20\", \"endTime\": \"09:35\", \"label\": \"Interval\" },\n    { \"order\": 4, \"type\": \"PERIOD\", \"startTime\": \"09:35\", \"endTime\": \"10:15\", \"label\": \"Period 3\" },\n    { \"order\": 5, \"type\": \"PERIOD\", \"startTime\": \"10:15\", \"endTime\": \"10:55\", \"label\": \"Period 4\" },\n    { \"order\": 6, \"type\": \"LUNCH_BREAK\", \"startTime\": \"10:55\", \"endTime\": \"11:30\", \"label\": \"Lunch Break\" },\n    { \"order\": 7, \"type\": \"PERIOD\", \"startTime\": \"11:30\", \"endTime\": \"12:10\", \"label\": \"Period 5\" },\n    { \"order\": 8, \"type\": \"PERIOD\", \"startTime\": \"12:10\", \"endTime\": \"12:50\", \"label\": \"Period 6\" },\n    { \"order\": 9, \"type\": \"INTERVAL\", \"startTime\": \"12:50\", \"endTime\": \"13:00\", \"label\": \"Interval\" },\n    { \"order\": 10, \"type\": \"PERIOD\", \"startTime\": \"13:00\", \"endTime\": \"13:40\", \"label\": \"Period 7\" },\n    { \"order\": 11, \"type\": \"PERIOD\", \"startTime\": \"13:40\", \"endTime\": \"14:20\", \"label\": \"Period 8\" }\n  ]\n}"
 								},
 								"url": {
-									"raw": "{{baseUrl}}/config/period-structures",
-									"host": ["{{baseUrl}}"],
+									"raw": "{{schoolConfigBaseUrl}}/config/period-structures",
+									"host": ["{{schoolConfigBaseUrl}}"],
 									"path": ["config", "period-structures"]
 								}
 							},
@@ -414,11 +430,13 @@
 							"request": {
 								"method": "GET",
 								"header": [
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"url": {
-									"raw": "{{baseUrl}}/config/period-structures",
-									"host": ["{{baseUrl}}"],
+									"raw": "{{schoolConfigBaseUrl}}/config/period-structures",
+									"host": ["{{schoolConfigBaseUrl}}"],
 									"path": ["config", "period-structures"]
 								}
 							},
@@ -429,11 +447,13 @@
 							"request": {
 								"method": "GET",
 								"header": [
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"url": {
-									"raw": "{{baseUrl}}/config/period-structures/{{periodStructureId}}",
-									"host": ["{{baseUrl}}"],
+									"raw": "{{schoolConfigBaseUrl}}/config/period-structures/{{periodStructureId}}",
+									"host": ["{{schoolConfigBaseUrl}}"],
 									"path": ["config", "period-structures", "{{periodStructureId}}"]
 								}
 							},
@@ -445,6 +465,8 @@
 								"method": "PUT",
 								"header": [
 									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"body": {
@@ -452,8 +474,8 @@
 									"raw": "{\n  \"name\": \"Standard (8 Periods) — Updated\"\n}"
 								},
 								"url": {
-									"raw": "{{baseUrl}}/config/period-structures/{{periodStructureId}}",
-									"host": ["{{baseUrl}}"],
+									"raw": "{{schoolConfigBaseUrl}}/config/period-structures/{{periodStructureId}}",
+									"host": ["{{schoolConfigBaseUrl}}"],
 									"path": ["config", "period-structures", "{{periodStructureId}}"]
 								}
 							},
@@ -464,11 +486,13 @@
 							"request": {
 								"method": "DELETE",
 								"header": [
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"url": {
-									"raw": "{{baseUrl}}/config/period-structures/{{periodStructureId}}",
-									"host": ["{{baseUrl}}"],
+									"raw": "{{schoolConfigBaseUrl}}/config/period-structures/{{periodStructureId}}",
+									"host": ["{{schoolConfigBaseUrl}}"],
 									"path": ["config", "period-structures", "{{periodStructureId}}"]
 								}
 							},
@@ -480,6 +504,8 @@
 								"method": "POST",
 								"header": [
 									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"body": {
@@ -487,8 +513,8 @@
 									"raw": "{\n  \"classIds\": [\"{{classId}}\"]\n}"
 								},
 								"url": {
-									"raw": "{{baseUrl}}/config/period-structures/{{periodStructureId}}/assign",
-									"host": ["{{baseUrl}}"],
+									"raw": "{{schoolConfigBaseUrl}}/config/period-structures/{{periodStructureId}}/assign",
+									"host": ["{{schoolConfigBaseUrl}}"],
 									"path": ["config", "period-structures", "{{periodStructureId}}", "assign"]
 								}
 							},
@@ -505,6 +531,8 @@
 								"method": "PUT",
 								"header": [
 									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"body": {
@@ -512,9 +540,12 @@
 									"raw": "{\n  \"days\": [\"MONDAY\", \"TUESDAY\", \"WEDNESDAY\", \"THURSDAY\", \"FRIDAY\", \"SATURDAY\"]\n}"
 								},
 								"url": {
-									"raw": "{{baseUrl}}/config/working-days",
-									"host": ["{{baseUrl}}"],
-									"path": ["config", "working-days"]
+									"raw": "{{schoolConfigBaseUrl}}/config/working-days?periodStructureId={{periodStructureId}}",
+									"host": ["{{schoolConfigBaseUrl}}"],
+									"path": ["config", "working-days"],
+									"query": [
+										{ "key": "periodStructureId", "value": "{{periodStructureId}}" }
+									]
 								}
 							},
 							"response": []
@@ -524,12 +555,17 @@
 							"request": {
 								"method": "GET",
 								"header": [
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"url": {
-									"raw": "{{baseUrl}}/config/working-days",
-									"host": ["{{baseUrl}}"],
-									"path": ["config", "working-days"]
+									"raw": "{{schoolConfigBaseUrl}}/config/working-days?periodStructureId={{periodStructureId}}",
+									"host": ["{{schoolConfigBaseUrl}}"],
+									"path": ["config", "working-days"],
+									"query": [
+										{ "key": "periodStructureId", "value": "{{periodStructureId}}" }
+									]
 								}
 							},
 							"response": []
@@ -544,17 +580,17 @@
 							"request": {
 								"method": "POST",
 								"header": [
-									{ "key": "Content-Type", "value": "application/json" },
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
-								"body": {
-									"mode": "raw",
-									"raw": "{}"
-								},
 								"url": {
-									"raw": "{{baseUrl}}/config/slots/generate",
-									"host": ["{{baseUrl}}"],
-									"path": ["config", "slots", "generate"]
+									"raw": "{{schoolConfigBaseUrl}}/config/slots/generate?periodStructureId={{periodStructureId}}",
+									"host": ["{{schoolConfigBaseUrl}}"],
+									"path": ["config", "slots", "generate"],
+									"query": [
+										{ "key": "periodStructureId", "value": "{{periodStructureId}}" }
+									]
 								}
 							},
 							"response": []
@@ -564,12 +600,17 @@
 							"request": {
 								"method": "GET",
 								"header": [
+									{ "key": "x-school-id", "value": "{{schoolId}}" },
+									{ "key": "x-user-id", "value": "{{userId}}" },
 									{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 								],
 								"url": {
-									"raw": "{{baseUrl}}/config/slots",
-									"host": ["{{baseUrl}}"],
-									"path": ["config", "slots"]
+									"raw": "{{schoolConfigBaseUrl}}/config/slots?periodStructureId={{periodStructureId}}",
+									"host": ["{{schoolConfigBaseUrl}}"],
+									"path": ["config", "slots"],
+									"query": [
+										{ "key": "periodStructureId", "value": "{{periodStructureId}}" }
+									]
 								}
 							},
 							"response": []

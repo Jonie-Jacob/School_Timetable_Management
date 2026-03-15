@@ -1,0 +1,58 @@
+service: timetable-school-config
+
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    STAGE: ${self:provider.stage}
+
+custom:
+  serverless-offline:
+    httpPort: 4003
+    lambdaPort: 4053
+    noPrependStageInUrl: true
+
+functions:
+  schoolConfig:
+    handler: src/handler.handler
+    timeout: 30
+    events:
+      - httpApi:
+          method: POST
+          path: /config/period-structures
+      - httpApi:
+          method: GET
+          path: /config/period-structures
+      - httpApi:
+          method: GET
+          path: /config/period-structures/{id}
+      - httpApi:
+          method: PUT
+          path: /config/period-structures/{id}
+      - httpApi:
+          method: DELETE
+          path: /config/period-structures/{id}
+      - httpApi:
+          method: POST
+          path: /config/period-structures/{id}/assign
+      - httpApi:
+          method: PUT
+          path: /config/working-days
+      - httpApi:
+          method: GET
+          path: /config/working-days
+      - httpApi:
+          method: POST
+          path: /config/slots/generate
+      - httpApi:
+          method: GET
+          path: /config/slots
+      - httpApi:
+          method: GET
+          path: /config/health

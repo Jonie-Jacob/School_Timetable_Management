@@ -24,6 +24,12 @@
 			"enabled": true
 		},
 		{
+			"key": "schoolConfigBaseUrl",
+			"value": "http://localhost:4003",
+			"type": "default",
+			"enabled": true
+		},
+		{
 			"key": "token",
 			"value": "",
 			"type": "default",

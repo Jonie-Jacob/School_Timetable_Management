@@ -14,7 +14,8 @@
     "db:seed": "npm run db:seed -w packages/shared",
     "dev:auth": "npm run dev -w services/auth",
     "dev:academic-year": "npm run dev -w services/academic-year",
-    "dev": "concurrently --names auth,acad-yr --prefix-colors blue,green \"npm run dev:auth\" \"npm run dev:academic-year\""
+    "dev:school-config": "npm run dev -w services/school-config",
+    "dev": "concurrently --names auth,acad-yr,config --prefix-colors blue,green,yellow \"npm run dev:auth\" \"npm run dev:academic-year\" \"npm run dev:school-config\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
