@@ -1,0 +1,42 @@
+service: timetable-subject
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    STAGE: ${self:provider.stage}
+
+custom:
+  serverless-offline:
+    httpPort: 4004
+    lambdaPort: 4054
+    noPrependStageInUrl: true
+
+functions:
+  subject:
+    handler: src/handler.handler
+    timeout: 30
+    events:
+      - httpApi:
+          method: POST
+          path: /subjects
+      - httpApi:
+          method: GET
+          path: /subjects
+      - httpApi:
+          method: GET
+          path: /subjects/{id}
+      - httpApi:
+          method: PUT
+          path: /subjects/{id}
+      - httpApi:
+          method: DELETE
+          path: /subjects/{id}
+      - httpApi:
+          method: GET
+          path: /subjects/health

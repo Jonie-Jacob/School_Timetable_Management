@@ -30,6 +30,12 @@
 			"enabled": true
 		},
 		{
+			"key": "subjectBaseUrl",
+			"value": "http://localhost:4004",
+			"type": "default",
+			"enabled": true
+		},
+		{
 			"key": "token",
 			"value": "",
 			"type": "default",

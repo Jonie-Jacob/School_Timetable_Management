@@ -621,23 +621,39 @@
 		},
 		{
 			"name": "Subject",
-			"description": "Subject CRUD operations.",
+			"description": "Subject CRUD operations. Service runs on port 4004.",
 			"item": [
+				{
+					"name": "Health",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{subjectBaseUrl}}/subjects/health",
+							"host": ["{{subjectBaseUrl}}"],
+							"path": ["subjects", "health"]
+						}
+					},
+					"response": []
+				},
 				{
 					"name": "Create Subject",
 					"request": {
 						"method": "POST",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "x-school-id", "value": "{{schoolId}}" },
+							{ "key": "x-user-id", "value": "{{userId}}" },
 							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Mathematics\",\n  \"code\": \"MATH\"\n}"
+							"raw": "{\n  \"name\": \"Mathematics\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/subjects",
-							"host": ["{{baseUrl}}"],
+							"raw": "{{subjectBaseUrl}}/subjects",
+							"host": ["{{subjectBaseUrl}}"],
 							"path": ["subjects"]
 						}
 					},
@@ -663,15 +679,17 @@
 					"request": {
 						"method": "GET",
 						"header": [
+							{ "key": "x-school-id", "value": "{{schoolId}}" },
+							{ "key": "x-user-id", "value": "{{userId}}" },
 							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 						],
 						"url": {
-							"raw": "{{baseUrl}}/subjects?page=1&limit=20&search=",
-							"host": ["{{baseUrl}}"],
+							"raw": "{{subjectBaseUrl}}/subjects?page=1&pageSize=20&search=",
+							"host": ["{{subjectBaseUrl}}"],
 							"path": ["subjects"],
 							"query": [
 								{ "key": "page", "value": "1" },
-								{ "key": "limit", "value": "20" },
+								{ "key": "pageSize", "value": "20" },
 								{ "key": "search", "value": "" }
 							]
 						}
@@ -683,11 +701,13 @@
 					"request": {
 						"method": "GET",
 						"header": [
+							{ "key": "x-school-id", "value": "{{schoolId}}" },
+							{ "key": "x-user-id", "value": "{{userId}}" },
 							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 						],
 						"url": {
-							"raw": "{{baseUrl}}/subjects/{{subjectId}}",
-							"host": ["{{baseUrl}}"],
+							"raw": "{{subjectBaseUrl}}/subjects/{{subjectId}}",
+							"host": ["{{subjectBaseUrl}}"],
 							"path": ["subjects", "{{subjectId}}"]
 						}
 					},
@@ -699,15 +719,17 @@
 						"method": "PUT",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "x-school-id", "value": "{{schoolId}}" },
+							{ "key": "x-user-id", "value": "{{userId}}" },
 							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Mathematics (Advanced)\",\n  \"code\": \"MATH-ADV\"\n}"
+							"raw": "{\n  \"name\": \"Mathematics (Advanced)\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/subjects/{{subjectId}}",
-							"host": ["{{baseUrl}}"],
+							"raw": "{{subjectBaseUrl}}/subjects/{{subjectId}}",
+							"host": ["{{subjectBaseUrl}}"],
 							"path": ["subjects", "{{subjectId}}"]
 						}
 					},
@@ -718,11 +740,13 @@
 					"request": {
 						"method": "DELETE",
 						"header": [
+							{ "key": "x-school-id", "value": "{{schoolId}}" },
+							{ "key": "x-user-id", "value": "{{userId}}" },
 							{ "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
 						],
 						"url": {
-							"raw": "{{baseUrl}}/subjects/{{subjectId}}",
-							"host": ["{{baseUrl}}"],
+							"raw": "{{subjectBaseUrl}}/subjects/{{subjectId}}",
+							"host": ["{{subjectBaseUrl}}"],
 							"path": ["subjects", "{{subjectId}}"]
 						}
 					},
