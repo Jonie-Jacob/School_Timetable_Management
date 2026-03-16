@@ -16,7 +16,8 @@
     "dev:academic-year": "npm run dev -w services/academic-year",
     "dev:school-config": "npm run dev -w services/school-config",
     "dev:subject": "npm run dev -w services/subject",
-    "dev": "concurrently --names auth,acad-yr,config,subject --prefix-colors blue,green,yellow,magenta \"npm run dev:auth\" \"npm run dev:academic-year\" \"npm run dev:school-config\" \"npm run dev:subject\""
+    "dev:teacher": "npm run dev -w services/teacher",
+    "dev": "concurrently --names auth,acad-yr,config,subject,teacher --prefix-colors blue,green,yellow,magenta,cyan \"npm run dev:auth\" \"npm run dev:academic-year\" \"npm run dev:school-config\" \"npm run dev:subject\" \"npm run dev:teacher\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
