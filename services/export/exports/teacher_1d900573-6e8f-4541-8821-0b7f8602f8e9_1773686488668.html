@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Akash - Teacher Timetable</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; }
+  h1 { text-align: center; font-size: 22px; margin-bottom: 4px; }
+  h2 { text-align: center; font-size: 14px; color: #555; margin-bottom: 16px; font-weight: normal; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #333; padding: 6px 8px; text-align: center; }
+  th { background: #2c3e50; color: #fff; font-weight: 600; }
+  .slot-label { background: #ecf0f1; font-weight: 600; width: 50px; }
+  .slot-time { background: #ecf0f1; font-size: 10px; width: 90px; white-space: nowrap; }
+  .period-cell { vertical-align: middle; }
+  .subject { font-weight: 600; font-size: 11px; }
+  .teacher { font-size: 10px; color: #555; }
+  .break-row { background: #ffeaa7; }
+  .break-cell { font-style: italic; color: #636e72; }
+  .empty-cell { color: #b2bec3; }
+  tr:nth-child(even):not(.break-row) td:not(.slot-label):not(.slot-time) { background: #f8f9fa; }
+</style>
+</head>
+<body>
+  <h1>Akash</h1>
+  <h2>Teacher Timetable</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Period</th>
+        <th>Time</th>
+        <th>Monday</th><th>Tuesday</th><th>Wednesday</th><th>Thursday</th><th>Friday</th>
+      </tr>
+    </thead>
+    <tbody>
+      
+          <tr>
+            <td class="slot-label">P1</td>
+            <td class="slot-time">08:30 - 09:10</td>
+            <td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td>
+          </tr>
+          <tr>
+            <td class="slot-label">P2</td>
+            <td class="slot-time">09:10 - 09:50</td>
+            <td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td>
+          </tr>
+          <tr class="break-row">
+            <td class="slot-label">Break</td>
+            <td class="slot-time">09:50 - 10:00</td>
+            <td colspan="5" class="break-cell">Break</td>
+          </tr>
+          <tr>
+            <td class="slot-label">P3</td>
+            <td class="slot-time">10:00 - 10:40</td>
+            <td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td>
+          </tr>
+          <tr>
+            <td class="slot-label">P4</td>
+            <td class="slot-time">10:40 - 11:20</td>
+            <td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td>
+          </tr>
+          <tr class="break-row">
+            <td class="slot-label">Lunch Break</td>
+            <td class="slot-time">11:20 - 11:50</td>
+            <td colspan="5" class="break-cell">Break</td>
+          </tr>
+          <tr>
+            <td class="slot-label">P5</td>
+            <td class="slot-time">11:50 - 12:30</td>
+            <td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="period-cell">
+            <div class="subject">Life Skills</div>
+            <div class="teacher">Class I-A</div>
+          </td><td class="empty-cell">-</td>
+          </tr>
+          <tr>
+            <td class="slot-label">P6</td>
+            <td class="slot-time">12:30 - 13:10</td>
+            <td class="empty-cell">-</td><td class="period-cell">
+            <div class="subject">Life Skills</div>
+            <div class="teacher">Class I-A</div>
+          </td><td class="empty-cell">-</td><td class="period-cell">
+            <div class="subject">Life Skills</div>
+            <div class="teacher">Class I-A</div>
+          </td><td class="period-cell">
+            <div class="subject">Physical Training</div>
+            <div class="teacher">Class I-A</div>
+          </td>
+          </tr>
+          <tr class="break-row">
+            <td class="slot-label">Break</td>
+            <td class="slot-time">13:10 - 13:20</td>
+            <td colspan="5" class="break-cell">Break</td>
+          </tr>
+          <tr>
+            <td class="slot-label">P7</td>
+            <td class="slot-time">13:20 - 14:00</td>
+            <td class="empty-cell">-</td><td class="period-cell">
+            <div class="subject">Life Skills</div>
+            <div class="teacher">Class I-A</div>
+          </td><td class="period-cell">
+            <div class="subject">Physical Training</div>
+            <div class="teacher">Class I-A</div>
+          </td><td class="empty-cell">-</td><td class="empty-cell">-</td>
+          </tr>
+          <tr>
+            <td class="slot-label">P8</td>
+            <td class="slot-time">14:00 - 14:40</td>
+            <td class="period-cell">
+            <div class="subject">Physical Training</div>
+            <div class="teacher">Class I-A</div>
+          </td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td><td class="empty-cell">-</td>
+          </tr>
+    </tbody>
+  </table>
+</body>
+</html>

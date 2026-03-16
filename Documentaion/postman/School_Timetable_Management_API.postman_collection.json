@@ -1569,8 +1569,22 @@
       "description": "PDF and Excel export for division and teacher timetables.",
       "item": [
         {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{exportBaseUrl}}/export/health",
+              "host": ["{{exportBaseUrl}}"],
+              "path": ["export", "health"]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Export Division PDF",
           "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
@@ -1578,11 +1592,11 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"divisionId\": \"{{divisionId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}"
+              "raw": "{\n  \"divisionId\": \"{{divisionId}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/export/division/pdf",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{exportBaseUrl}}/export/division/pdf",
+              "host": ["{{exportBaseUrl}}"],
               "path": ["export", "division", "pdf"]
             }
           },
@@ -1591,6 +1605,7 @@
         {
           "name": "Export Division Excel",
           "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
@@ -1598,11 +1613,11 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"divisionId\": \"{{divisionId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}"
+              "raw": "{\n  \"divisionId\": \"{{divisionId}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/export/division/excel",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{exportBaseUrl}}/export/division/excel",
+              "host": ["{{exportBaseUrl}}"],
               "path": ["export", "division", "excel"]
             }
           },
@@ -1611,6 +1626,7 @@
         {
           "name": "Export Teacher PDF",
           "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
@@ -1618,11 +1634,11 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}"
+              "raw": "{\n  \"teacherId\": \"{{teacherId}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/export/teacher/pdf",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{exportBaseUrl}}/export/teacher/pdf",
+              "host": ["{{exportBaseUrl}}"],
               "path": ["export", "teacher", "pdf"]
             }
           },
@@ -1631,6 +1647,7 @@
         {
           "name": "Export Teacher Excel",
           "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
@@ -1638,11 +1655,11 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"academicYearId\": \"{{academicYearId}}\"\n}"
+              "raw": "{\n  \"teacherId\": \"{{teacherId}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/export/teacher/excel",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{exportBaseUrl}}/export/teacher/excel",
+              "host": ["{{exportBaseUrl}}"],
               "path": ["export", "teacher", "excel"]
             }
           },

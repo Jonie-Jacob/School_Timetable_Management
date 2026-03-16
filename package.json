@@ -21,7 +21,8 @@
     "dev:assignment": "npm run dev -w services/division-assignment",
     "dev:timetable": "npm run dev -w services/timetable",
     "dev:dashboard": "npm run dev -w services/dashboard",
-    "dev": "concurrently --names auth,acad-yr,config,subject,teacher,class,assign,timetable,dashboard --prefix-colors blue,green,yellow,magenta,cyan,white,red,gray,blueBright \"npm run dev:auth\" \"npm run dev:academic-year\" \"npm run dev:school-config\" \"npm run dev:subject\" \"npm run dev:teacher\" \"npm run dev:class\" \"npm run dev:assignment\" \"npm run dev:timetable\" \"npm run dev:dashboard\""
+    "dev:export": "npm run dev -w services/export",
+    "dev": "concurrently --names auth,acad-yr,config,subject,teacher,class,assign,timetable,dashboard,export --prefix-colors blue,green,yellow,magenta,cyan,white,red,gray,blueBright,greenBright \"npm run dev:auth\" \"npm run dev:academic-year\" \"npm run dev:school-config\" \"npm run dev:subject\" \"npm run dev:teacher\" \"npm run dev:class\" \"npm run dev:assignment\" \"npm run dev:timetable\" \"npm run dev:dashboard\" \"npm run dev:export\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

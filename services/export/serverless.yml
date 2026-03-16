@@ -1,0 +1,39 @@
+service: timetable-export
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    STAGE: ${self:provider.stage}
+
+custom:
+  serverless-offline:
+    httpPort: 4010
+    lambdaPort: 4060
+    noPrependStageInUrl: true
+
+functions:
+  export:
+    handler: src/handler.handler
+    timeout: 60
+    events:
+      - httpApi:
+          method: POST
+          path: /export/division/pdf
+      - httpApi:
+          method: POST
+          path: /export/division/excel
+      - httpApi:
+          method: POST
+          path: /export/teacher/pdf
+      - httpApi:
+          method: POST
+          path: /export/teacher/excel
+      - httpApi:
+          method: GET
+          path: /export/health
