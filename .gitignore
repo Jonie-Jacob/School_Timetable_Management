@@ -29,6 +29,11 @@ dynamodata/
 # Lambda Layer build output
 layers/shared/nodejs/
 
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+
 # Terraform
 infra/terraform/.terraform/
 infra/terraform/*.tfstate*
