@@ -1666,6 +1666,99 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "WebSocket",
+      "description": "WebSocket connection management and broadcast. In production, uses API Gateway WebSocket. Locally simulated via HTTP endpoints.",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{websocketBaseUrl}}/ws/health",
+              "host": ["{{websocketBaseUrl}}"],
+              "path": ["ws", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Connect",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{websocketBaseUrl}}/ws/connect",
+              "host": ["{{websocketBaseUrl}}"],
+              "path": ["ws", "connect"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disconnect",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"connectionId\": \"{{connectionId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{websocketBaseUrl}}/ws/disconnect",
+              "host": ["{{websocketBaseUrl}}"],
+              "path": ["ws", "disconnect"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Broadcast",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"GENERATION_COMPLETE\",\n  \"payload\": {\n    \"timetableId\": \"{{timetableId}}\",\n    \"status\": \"COMPLETED\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{websocketBaseUrl}}/ws/broadcast",
+              "host": ["{{websocketBaseUrl}}"],
+              "path": ["ws", "broadcast"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Connections",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{websocketBaseUrl}}/ws/connections",
+              "host": ["{{websocketBaseUrl}}"],
+              "path": ["ws", "connections"]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

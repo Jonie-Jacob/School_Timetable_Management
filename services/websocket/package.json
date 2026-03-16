@@ -7,6 +7,17 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@timetable/shared": "*"
+    "@timetable/shared": "*",
+    "@aws-sdk/client-dynamodb": "^3.x",
+    "@aws-sdk/lib-dynamodb": "^3.x",
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.x",
+    "jsonwebtoken": "^9.x"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.151",
+    "@types/jsonwebtoken": "^9.x",
+    "serverless": "^4.33.0",
+    "serverless-offline": "^14.4.0",
+    "typescript": "^5.8.3"
   }
 }

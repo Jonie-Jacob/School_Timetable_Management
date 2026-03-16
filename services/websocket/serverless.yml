@@ -1,0 +1,41 @@
+service: timetable-websocket
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    DYNAMODB_ENDPOINT: ${env:DYNAMODB_ENDPOINT, 'http://localhost:8000'}
+    CONNECTIONS_TABLE: ${env:CONNECTIONS_TABLE, 'WebSocketConnections'}
+    STAGE: ${self:provider.stage}
+
+custom:
+  serverless-offline:
+    httpPort: 4011
+    lambdaPort: 4061
+    noPrependStageInUrl: true
+
+functions:
+  websocket:
+    handler: src/handler.handler
+    timeout: 30
+    events:
+      - httpApi:
+          method: GET
+          path: /ws/health
+      - httpApi:
+          method: POST
+          path: /ws/connect
+      - httpApi:
+          method: POST
+          path: /ws/disconnect
+      - httpApi:
+          method: POST
+          path: /ws/broadcast
+      - httpApi:
+          method: GET
+          path: /ws/connections
