@@ -1518,15 +1518,29 @@
       "description": "Aggregated statistics for the admin home screen.",
       "item": [
         {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{dashboardBaseUrl}}/dashboard/health",
+              "host": ["{{dashboardBaseUrl}}"],
+              "path": ["dashboard", "health"]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Get Stats",
           "request": {
             "method": "GET",
             "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/dashboard/stats",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{dashboardBaseUrl}}/dashboard/stats",
+              "host": ["{{dashboardBaseUrl}}"],
               "path": ["dashboard", "stats"]
             }
           },
@@ -1537,11 +1551,12 @@
           "request": {
             "method": "GET",
             "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/dashboard/recent-activity",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{dashboardBaseUrl}}/dashboard/recent-activity",
+              "host": ["{{dashboardBaseUrl}}"],
               "path": ["dashboard", "recent-activity"]
             }
           },

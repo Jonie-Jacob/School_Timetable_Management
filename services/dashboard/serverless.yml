@@ -1,0 +1,33 @@
+service: timetable-dashboard
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    STAGE: ${self:provider.stage}
+
+custom:
+  serverless-offline:
+    httpPort: 4009
+    lambdaPort: 4059
+    noPrependStageInUrl: true
+
+functions:
+  dashboard:
+    handler: src/handler.handler
+    timeout: 30
+    events:
+      - httpApi:
+          method: GET
+          path: /dashboard/stats
+      - httpApi:
+          method: GET
+          path: /dashboard/recent-activity
+      - httpApi:
+          method: GET
+          path: /dashboard/health
