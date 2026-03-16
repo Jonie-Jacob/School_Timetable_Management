@@ -1,0 +1,58 @@
+import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import { AppError } from '@timetable/shared';
+import { TimetableController } from './controller';
+
+const controller = new TimetableController();
+
+export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  const method = event.requestContext.http.method;
+  const path = event.rawPath;
+
+  // Health check
+  if (method === 'GET' && path === '/timetables/health') {
+    return controller.health();
+  }
+
+  // Trigger generation: POST /timetables/generate
+  if (method === 'POST' && path === '/timetables/generate') {
+    return controller.triggerGeneration(event);
+  }
+
+  // Get generation status: GET /timetables/generate/status/:jobId
+  const statusMatch = path.match(/^\/timetables\/generate\/status\/([^/]+)$/);
+  if (method === 'GET' && statusMatch) {
+    return controller.getGenerationStatus(event, statusMatch[1]);
+  }
+
+  // Get division timetable: GET /timetables/divisions/:divisionId
+  const divisionMatch = path.match(/^\/timetables\/divisions\/([^/]+)$/);
+  if (method === 'GET' && divisionMatch) {
+    return controller.getDivisionTimetable(event, divisionMatch[1]);
+  }
+
+  // Get teacher timetable: GET /timetables/teacher/:teacherId
+  const teacherMatch = path.match(/^\/timetables\/teacher\/([^/]+)$/);
+  if (method === 'GET' && teacherMatch) {
+    return controller.getTeacherTimetable(event, teacherMatch[1]);
+  }
+
+  // Override slot: PUT /timetables/slots/:slotId
+  const slotMatch = path.match(/^\/timetables\/slots\/([^/]+)$/);
+  if (method === 'PUT' && slotMatch) {
+    return controller.overrideSlot(event, slotMatch[1]);
+  }
+
+  // Publish timetable: POST /timetables/:id/publish
+  const publishMatch = path.match(/^\/timetables\/([^/]+)\/publish$/);
+  if (method === 'POST' && publishMatch) {
+    return controller.publishTimetable(event, publishMatch[1]);
+  }
+
+  // Get conflicts: GET /timetables/:id/conflicts
+  const conflictsMatch = path.match(/^\/timetables\/([^/]+)\/conflicts$/);
+  if (method === 'GET' && conflictsMatch) {
+    return controller.getConflicts(event, conflictsMatch[1]);
+  }
+
+  throw new AppError(`Route not found: ${method} ${path}`, 404, 'ROUTE_NOT_FOUND');
+}

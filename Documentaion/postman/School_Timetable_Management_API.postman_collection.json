@@ -1365,11 +1365,25 @@
       "description": "Timetable generation, viewing, editing, publishing.",
       "item": [
         {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{timetableBaseUrl}}/timetables/health",
+              "host": ["{{timetableBaseUrl}}"],
+              "path": ["timetables", "health"]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Trigger Generation",
           "request": {
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
@@ -1377,8 +1391,8 @@
               "raw": "{\n  \"divisionIds\": [\"{{divisionId}}\"]\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/timetables/generate",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{timetableBaseUrl}}/timetables/generate",
+              "host": ["{{timetableBaseUrl}}"],
               "path": ["timetables", "generate"]
             }
           },
@@ -1405,11 +1419,11 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/timetables/generate/status/{{jobId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{timetableBaseUrl}}/timetables/generate/status/{{jobId}}",
+              "host": ["{{timetableBaseUrl}}"],
               "path": ["timetables", "generate", "status", "{{jobId}}"]
             }
           },
@@ -1420,11 +1434,12 @@
           "request": {
             "method": "GET",
             "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/timetables/divisions/{{divisionId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{timetableBaseUrl}}/timetables/divisions/{{divisionId}}",
+              "host": ["{{timetableBaseUrl}}"],
               "path": ["timetables", "divisions", "{{divisionId}}"]
             }
           },
@@ -1436,15 +1451,15 @@
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"assignmentId\": \"{{assignmentId}}\"\n}"
+              "raw": "{\n  \"divisionAssignmentId\": \"{{assignmentId}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/timetables/slots/{{timetableSlotId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{timetableBaseUrl}}/timetables/slots/{{timetableSlotId}}",
+              "host": ["{{timetableBaseUrl}}"],
               "path": ["timetables", "slots", "{{timetableSlotId}}"]
             }
           },
@@ -1455,11 +1470,11 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/timetables/{{timetableId}}/publish",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{timetableBaseUrl}}/timetables/{{timetableId}}/publish",
+              "host": ["{{timetableBaseUrl}}"],
               "path": ["timetables", "{{timetableId}}", "publish"]
             }
           },
@@ -1470,11 +1485,11 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/timetables/{{timetableId}}/conflicts",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{timetableBaseUrl}}/timetables/{{timetableId}}/conflicts",
+              "host": ["{{timetableBaseUrl}}"],
               "path": ["timetables", "{{timetableId}}", "conflicts"]
             }
           },
@@ -1485,11 +1500,12 @@
           "request": {
             "method": "GET",
             "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/timetables/teacher/{{teacherId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{timetableBaseUrl}}/timetables/teacher/{{teacherId}}",
+              "host": ["{{timetableBaseUrl}}"],
               "path": ["timetables", "teacher", "{{teacherId}}"]
             }
           },
