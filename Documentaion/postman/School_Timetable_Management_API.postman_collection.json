@@ -1076,15 +1076,30 @@
       "description": "Division assignments — link subjects + teachers to divisions.",
       "item": [
         {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{assignmentBaseUrl}}/assignments/health",
+              "host": ["{{assignmentBaseUrl}}"],
+              "path": ["assignments", "health"]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "List Division Assignments",
           "request": {
             "method": "GET",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/divisions/{{divisionId}}/assignments",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/divisions/{{divisionId}}/assignments",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["divisions", "{{divisionId}}", "assignments"]
             }
           },
@@ -1096,15 +1111,17 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"subjectId\": \"{{subjectId}}\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"periodsPerWeek\": 5\n}"
+              "raw": "{\n  \"subjectId\": \"{{subjectId}}\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"weightage\": 5\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/divisions/{{divisionId}}/assignments",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/divisions/{{divisionId}}/assignments",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["divisions", "{{divisionId}}", "assignments"]
             }
           },
@@ -1131,15 +1148,17 @@
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"periodsPerWeek\": 6\n}"
+              "raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"weightage\": 6\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/assignments/{{assignmentId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/assignments/{{assignmentId}}",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["assignments", "{{assignmentId}}"]
             }
           },
@@ -1150,11 +1169,13 @@
           "request": {
             "method": "DELETE",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/assignments/{{assignmentId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/assignments/{{assignmentId}}",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["assignments", "{{assignmentId}}"]
             }
           },
@@ -1166,15 +1187,17 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"electiveGroupId\": \"{{electiveGroupId}}\",\n  \"periodsPerWeek\": 3\n}"
+              "raw": "{\n  \"subjectId\": \"{{subjectId}}\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"electiveGroupId\": \"{{electiveGroupId}}\",\n  \"weightage\": 3\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/divisions/{{divisionId}}/assignments/elective",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/divisions/{{divisionId}}/assignments/elective",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["divisions", "{{divisionId}}", "assignments", "elective"]
             }
           },
@@ -1192,6 +1215,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
@@ -1199,8 +1224,8 @@
               "raw": "{\n  \"name\": \"Science Electives - Class XI\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/elective-groups",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/elective-groups",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["elective-groups"]
             }
           },
@@ -1226,11 +1251,13 @@
           "request": {
             "method": "GET",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/elective-groups",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/elective-groups",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["elective-groups"]
             }
           },
@@ -1241,11 +1268,13 @@
           "request": {
             "method": "GET",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/elective-groups/{{electiveGroupId}}",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["elective-groups", "{{electiveGroupId}}"]
             }
           },
@@ -1257,6 +1286,8 @@
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
@@ -1264,8 +1295,8 @@
               "raw": "{\n  \"name\": \"Science Electives - Class XI (Updated)\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/elective-groups/{{electiveGroupId}}",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["elective-groups", "{{electiveGroupId}}"]
             }
           },
@@ -1276,11 +1307,13 @@
           "request": {
             "method": "DELETE",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/elective-groups/{{electiveGroupId}}",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["elective-groups", "{{electiveGroupId}}"]
             }
           },
@@ -1292,6 +1325,8 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
@@ -1299,8 +1334,8 @@
               "raw": "{\n  \"subjectId\": \"{{subjectId}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}/subjects",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/elective-groups/{{electiveGroupId}}/subjects",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["elective-groups", "{{electiveGroupId}}", "subjects"]
             }
           },
@@ -1311,11 +1346,13 @@
           "request": {
             "method": "DELETE",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/elective-groups/{{electiveGroupId}}/subjects/{{subjectId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{assignmentBaseUrl}}/elective-groups/{{electiveGroupId}}/subjects/{{subjectId}}",
+              "host": ["{{assignmentBaseUrl}}"],
               "path": ["elective-groups", "{{electiveGroupId}}", "subjects", "{{subjectId}}"]
             }
           },

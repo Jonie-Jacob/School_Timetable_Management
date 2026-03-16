@@ -1,0 +1,63 @@
+service: timetable-division-assignment
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    STAGE: ${self:provider.stage}
+
+custom:
+  serverless-offline:
+    httpPort: 4007
+    lambdaPort: 4057
+    noPrependStageInUrl: true
+
+functions:
+  assignment:
+    handler: src/handler.handler
+    timeout: 30
+    events:
+      - httpApi:
+          method: GET
+          path: /divisions/{divisionId}/assignments
+      - httpApi:
+          method: POST
+          path: /divisions/{divisionId}/assignments
+      - httpApi:
+          method: POST
+          path: /divisions/{divisionId}/assignments/elective
+      - httpApi:
+          method: PUT
+          path: /assignments/{id}
+      - httpApi:
+          method: DELETE
+          path: /assignments/{id}
+      - httpApi:
+          method: POST
+          path: /elective-groups
+      - httpApi:
+          method: GET
+          path: /elective-groups
+      - httpApi:
+          method: GET
+          path: /elective-groups/{id}
+      - httpApi:
+          method: PUT
+          path: /elective-groups/{id}
+      - httpApi:
+          method: DELETE
+          path: /elective-groups/{id}
+      - httpApi:
+          method: POST
+          path: /elective-groups/{id}/subjects
+      - httpApi:
+          method: DELETE
+          path: /elective-groups/{groupId}/subjects/{subjectId}
+      - httpApi:
+          method: GET
+          path: /assignments/health
