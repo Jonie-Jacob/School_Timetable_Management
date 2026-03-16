@@ -871,20 +871,35 @@
       "description": "Class and division CRUD.",
       "item": [
         {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{classBaseUrl}}/classes/health",
+              "host": ["{{classBaseUrl}}"],
+              "path": ["classes", "health"]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Create Class",
           "request": {
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Class I\",\n  \"numericLevel\": 1\n}"
+              "raw": "{\n  \"name\": \"Class I\",\n  \"sortOrder\": 1,\n  \"requiresStream\": false\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/classes",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{classBaseUrl}}/classes",
+              "host": ["{{classBaseUrl}}"],
               "path": ["classes"]
             }
           },
@@ -910,11 +925,13 @@
           "request": {
             "method": "GET",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/classes",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{classBaseUrl}}/classes",
+              "host": ["{{classBaseUrl}}"],
               "path": ["classes"]
             }
           },
@@ -925,11 +942,13 @@
           "request": {
             "method": "GET",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/classes/{{classId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{classBaseUrl}}/classes/{{classId}}",
+              "host": ["{{classBaseUrl}}"],
               "path": ["classes", "{{classId}}"]
             }
           },
@@ -941,6 +960,8 @@
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
@@ -948,8 +969,8 @@
               "raw": "{\n  \"name\": \"Class I (Updated)\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/classes/{{classId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{classBaseUrl}}/classes/{{classId}}",
+              "host": ["{{classBaseUrl}}"],
               "path": ["classes", "{{classId}}"]
             }
           },
@@ -960,11 +981,13 @@
           "request": {
             "method": "DELETE",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/classes/{{classId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{classBaseUrl}}/classes/{{classId}}",
+              "host": ["{{classBaseUrl}}"],
               "path": ["classes", "{{classId}}"]
             }
           },
@@ -976,15 +999,17 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"A\"\n}"
+              "raw": "{\n  \"label\": \"A\",\n  \"streamName\": null\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/classes/{{classId}}/divisions",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{classBaseUrl}}/classes/{{classId}}/divisions",
+              "host": ["{{classBaseUrl}}"],
               "path": ["classes", "{{classId}}", "divisions"]
             }
           },
@@ -1011,15 +1036,17 @@
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"A\",\n  \"stream\": null\n}"
+              "raw": "{\n  \"label\": \"A\",\n  \"streamName\": null\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/classes/{{classId}}/divisions/{{divisionId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{classBaseUrl}}/classes/{{classId}}/divisions/{{divisionId}}",
+              "host": ["{{classBaseUrl}}"],
               "path": ["classes", "{{classId}}", "divisions", "{{divisionId}}"]
             }
           },
@@ -1030,11 +1057,13 @@
           "request": {
             "method": "DELETE",
             "header": [
+              { "key": "x-school-id", "value": "{{schoolId}}" },
+              { "key": "x-user-id", "value": "{{userId}}" },
               { "key": "X-Academic-Year-Id", "value": "{{academicYearId}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/classes/{{classId}}/divisions/{{divisionId}}",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{classBaseUrl}}/classes/{{classId}}/divisions/{{divisionId}}",
+              "host": ["{{classBaseUrl}}"],
               "path": ["classes", "{{classId}}", "divisions", "{{divisionId}}"]
             }
           },

@@ -1,0 +1,51 @@
+service: timetable-class
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'dev'}
+  region: ap-south-1
+  environment:
+    DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
+    STAGE: ${self:provider.stage}
+
+custom:
+  serverless-offline:
+    httpPort: 4006
+    lambdaPort: 4056
+    noPrependStageInUrl: true
+
+functions:
+  class:
+    handler: src/handler.handler
+    timeout: 30
+    events:
+      - httpApi:
+          method: POST
+          path: /classes
+      - httpApi:
+          method: GET
+          path: /classes
+      - httpApi:
+          method: GET
+          path: /classes/{id}
+      - httpApi:
+          method: PUT
+          path: /classes/{id}
+      - httpApi:
+          method: DELETE
+          path: /classes/{id}
+      - httpApi:
+          method: POST
+          path: /classes/{id}/divisions
+      - httpApi:
+          method: PUT
+          path: /classes/{classId}/divisions/{divisionId}
+      - httpApi:
+          method: DELETE
+          path: /classes/{classId}/divisions/{divisionId}
+      - httpApi:
+          method: GET
+          path: /classes/health
