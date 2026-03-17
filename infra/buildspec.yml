@@ -1,0 +1,86 @@
+version: 0.2
+
+env:
+  parameter-store:
+    DATABASE_URL: /timetable/prod/database-url
+    COGNITO_USER_POOL_ID: /timetable/prod/cognito-user-pool-id
+    COGNITO_CLIENT_ID: /timetable/prod/cognito-client-id
+    LAMBDA_SG_ID: /timetable/prod/lambda-sg-id
+    LAMBDA_ROLE_ARN: /timetable/prod/lambda-role-arn
+    EXPORT_BUCKET: /timetable/prod/export-bucket-name
+    CONNECTIONS_TABLE: /timetable/prod/dynamodb-table-name
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+      python: 3.13
+    commands:
+      - npm ci
+
+  pre_build:
+    commands:
+      - echo "Building shared package..."
+      - npm run build -w packages/shared
+      - echo "Building Lambda Layer..."
+      - chmod +x scripts/build-layer.sh
+      - bash scripts/build-layer.sh
+      - echo "Building all services..."
+      - |
+        for svc in auth academic-year school-config subject teacher class division-assignment timetable dashboard export websocket; do
+          echo "Building $svc..."
+          npm run build -w "services/$svc" || true
+        done
+
+  build:
+    commands:
+      - echo "Deploying Lambda Layer..."
+      - >
+        LAYER_ARN=$(aws lambda publish-layer-version
+        --layer-name timetable-prod-shared-deps
+        --zip-file fileb://layers/shared/shared-layer.zip
+        --compatible-runtimes nodejs22.x
+        --region ap-south-1
+        --query 'LayerVersionArn'
+        --output text)
+      - >
+        aws ssm put-parameter
+        --name /timetable/prod/shared-layer-arn
+        --value "$LAYER_ARN"
+        --type String
+        --overwrite
+        --region ap-south-1
+      - export SHARED_LAYER_ARN="$LAYER_ARN"
+      - export PRIVATE_SUBNET_IDS=$(aws ssm get-parameter --name /timetable/prod/private-subnet-ids --query 'Parameter.Value' --output text --region ap-south-1)
+      - export COGNITO_ISSUER_URL="https://cognito-idp.ap-south-1.amazonaws.com/$COGNITO_USER_POOL_ID"
+      - export ECS_CLUSTER_ARN=$(aws ssm get-parameter --name /timetable/prod/ecs-cluster-arn --query 'Parameter.Value' --output text --region ap-south-1)
+      - export ECS_TASK_DEF_ARN=$(aws ssm get-parameter --name /timetable/prod/ecs-task-definition-arn --query 'Parameter.Value' --output text --region ap-south-1)
+      - export ECS_SUBNET_IDS="$PRIVATE_SUBNET_IDS"
+      - export ECS_SECURITY_GROUP_ID="$LAMBDA_SG_ID"
+      - echo "Deploying services..."
+      - |
+        for svc in auth academic-year school-config subject teacher class division-assignment timetable dashboard export websocket; do
+          echo "Deploying $svc..."
+          cd "services/$svc"
+          npx serverless deploy --stage prod --region ap-south-1
+          cd ../..
+        done
+      - echo "Building and pushing Docker image for timetable engine..."
+      - ECR_URL=$(aws ssm get-parameter --name /timetable/prod/ecr-repository-url --query 'Parameter.Value' --output text --region ap-south-1)
+      - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin "$ECR_URL"
+      - docker build -t timetable-engine engine/timetable-generator/
+      - docker tag timetable-engine:latest "$ECR_URL:latest"
+      - docker tag timetable-engine:latest "$ECR_URL:$CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - docker push "$ECR_URL:latest"
+      - docker push "$ECR_URL:$CODEBUILD_RESOLVED_SOURCE_VERSION"
+
+  post_build:
+    commands:
+      - echo "Running Prisma migrations..."
+      - cd packages/shared && npx prisma migrate deploy && cd ../..
+      - echo "Deployment complete!"
+
+artifacts:
+  files:
+    - '**/*'
+  discard-paths: no

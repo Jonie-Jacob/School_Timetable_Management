@@ -859,6 +859,8 @@ Implement the genetic algorithm engine that generates optimal timetables. This i
 
 After all services are implemented and tested locally, provision the AWS infrastructure and deploy everything.
 
+> **Deployment Region**: All resources are provisioned in **`ap-south-1` (Mumbai, India)**. CloudFront ACM certificates are the sole exception — AWS requires these in `us-east-1`, handled automatically by Terraform.
+
 ### 18.2 Tasks
 
 1. **Terraform modules** (`infra/terraform/modules/`):

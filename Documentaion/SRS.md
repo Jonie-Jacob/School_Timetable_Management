@@ -110,7 +110,7 @@ The system covers the following functional areas:
 
 ### 1.5 Assumptions
 
-1. The system will be deployed to a **single AWS region** (to be decided — likely `ap-south-1` Mumbai).
+1. The system will be deployed to a **single AWS region** — `ap-south-1` (Mumbai, India). All AWS resources (Lambda, RDS, Cognito, S3, DynamoDB, ECS, API Gateway, SSM) are provisioned in this region.
 2. The initial deployment is a **single-school pilot**; multi-tenancy infrastructure is built in from day one but scaling optimizations (e.g., RDS Proxy, provisioned concurrency) will be added as needed.
 3. All users access the system via a **modern web browser** (Chrome, Firefox, Safari, Edge — latest two major versions). No native mobile app is required.
 4. The school provides **complete assignment data** (subjects, teachers, weightages) before timetable generation can proceed.

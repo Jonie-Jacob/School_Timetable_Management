@@ -11,10 +11,12 @@
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React |
-| Backend | Node.js |
-| Database | PostgreSQL / MySQL |
-| Auth | JWT / Session-based |
+| Frontend | React (hosted on S3 + CloudFront) |
+| Backend | Node.js on AWS Lambda (Serverless Framework) |
+| Database | PostgreSQL 16 (AWS RDS) |
+| Auth | AWS Cognito (JWT) |
+| Timetable Engine | Python on AWS ECS Fargate |
+| **Deployment Region** | **`ap-south-1` (Mumbai, India)** |
 
 ---
 

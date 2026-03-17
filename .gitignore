@@ -28,6 +28,8 @@ dynamodata/
 
 # Lambda Layer build output
 layers/shared/nodejs/
+layers/shared/.build/
+layers/shared/shared-layer.zip
 
 # Python virtual environment
 venv/

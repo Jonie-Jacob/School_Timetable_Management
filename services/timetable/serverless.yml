@@ -1,15 +1,30 @@
 service: timetable-service
+
 plugins:
   - serverless-offline
+  - ../../plugins/serverless-prod-config
 
 provider:
   name: aws
   runtime: nodejs22.x
   stage: ${opt:stage, 'dev'}
   region: ap-south-1
+  memorySize: 256
   environment:
     DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
     STAGE: ${self:provider.stage}
+    ECS_CLUSTER_ARN: ${env:ECS_CLUSTER_ARN, ''}
+    ECS_TASK_DEF_ARN: ${env:ECS_TASK_DEF_ARN, ''}
+    ECS_SUBNET_IDS: ${env:ECS_SUBNET_IDS, ''}
+    ECS_SECURITY_GROUP_ID: ${env:ECS_SECURITY_GROUP_ID, ''}
+  httpApi:
+    authorizers:
+      cognitoAuthorizer:
+        type: jwt
+        identitySource: $request.header.Authorization
+        issuerUrl: ${env:COGNITO_ISSUER_URL, 'https://cognito-idp.ap-south-1.amazonaws.com/local'}
+        audience:
+          - ${env:COGNITO_CLIENT_ID, 'local'}
 
 custom:
   serverless-offline:
@@ -25,24 +40,38 @@ functions:
       - httpApi:
           method: POST
           path: /timetables/generate
+          authorizer:
+            name: cognitoAuthorizer
       - httpApi:
           method: GET
           path: /timetables/generate/status/{jobId}
+          authorizer:
+            name: cognitoAuthorizer
       - httpApi:
           method: GET
           path: /timetables/divisions/{divisionId}
+          authorizer:
+            name: cognitoAuthorizer
       - httpApi:
           method: PUT
           path: /timetables/slots/{slotId}
+          authorizer:
+            name: cognitoAuthorizer
       - httpApi:
           method: POST
           path: /timetables/{id}/publish
+          authorizer:
+            name: cognitoAuthorizer
       - httpApi:
           method: GET
           path: /timetables/{id}/conflicts
+          authorizer:
+            name: cognitoAuthorizer
       - httpApi:
           method: GET
           path: /timetables/teacher/{teacherId}
+          authorizer:
+            name: cognitoAuthorizer
       - httpApi:
           method: GET
           path: /timetables/health
