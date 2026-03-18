@@ -1,0 +1,58 @@
+{
+  "appName": "School Timetable Manager",
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "create": "Create",
+    "confirm": "Confirm",
+    "dismiss": "Dismiss",
+    "dismissAll": "Dismiss All",
+    "retry": "Retry",
+    "goHome": "Go Home",
+    "viewAll": "View All",
+    "export": "Export",
+    "search": "Search...",
+    "back": "Back",
+    "close": "Close",
+    "reset": "Reset"
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "archived": "Archived",
+    "generated": "Generated",
+    "outdated": "Outdated",
+    "pending": "Pending",
+    "loading": "Loading..."
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "showing": "Showing {{from}} to {{to}} of {{total}}"
+  },
+  "errors": {
+    "somethingWentWrong": "Something went wrong",
+    "networkError": "Unable to connect. Please check your internet connection.",
+    "notFound": "Page not found",
+    "unauthorized": "Your session has expired. Please log in again."
+  },
+  "readOnly": {
+    "banner": "You are viewing archived data ({{year}}). Changes are disabled."
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "academicYears": "Academic Years",
+    "periodStructures": "Period Structures",
+    "classes": "Classes",
+    "subjects": "Subjects",
+    "teachers": "Teachers",
+    "electiveGroups": "Elective Groups",
+    "notifications": "Notifications",
+    "teacherTimetable": "Teacher Timetable",
+    "settings": "Settings",
+    "more": "More"
+  }
+}
