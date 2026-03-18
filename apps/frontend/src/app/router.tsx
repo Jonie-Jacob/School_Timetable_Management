@@ -13,7 +13,42 @@ export const router = createBrowserRouter([
         index: true,
         lazy: () => import('@/features/dashboard/DashboardPage'),
       },
-      // Routes are added incrementally per phase
+      {
+        path: 'academic-years',
+        lazy: () => import('@/features/academic-years/AcademicYearsPage'),
+      },
+      {
+        path: 'period-structures',
+        lazy: () => import('@/features/period-structures/PeriodStructuresPage'),
+      },
+      {
+        path: 'classes',
+        lazy: () => import('@/features/classes/ClassesPage'),
+      },
+      {
+        path: 'subjects',
+        lazy: () => import('@/features/subjects/SubjectsPage'),
+      },
+      {
+        path: 'teachers',
+        lazy: () => import('@/features/teachers/TeachersPage'),
+      },
+      {
+        path: 'elective-groups',
+        lazy: () => import('@/features/elective-groups/ElectiveGroupsPage'),
+      },
+      {
+        path: 'notifications',
+        lazy: () => import('@/features/notifications/NotificationsPage'),
+      },
+      {
+        path: 'teacher-timetable',
+        lazy: () => import('@/features/teacher-timetable/TeacherTimetablePage'),
+      },
+      {
+        path: 'settings',
+        lazy: () => import('@/features/settings/SettingsPage'),
+      },
     ],
   },
 ]);

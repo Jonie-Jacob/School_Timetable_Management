@@ -1,5 +1,6 @@
-import { Outlet, Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAppSelector } from '@/app/hooks';
+import { AppShell } from '@/components/layout/AppShell';
 
 export function Component() {
   const { isAuthenticated, isLoading } = useAppSelector((state) => state.auth);
@@ -16,12 +17,5 @@ export function Component() {
     return <Navigate to="/login" replace />;
   }
 
-  return (
-    <div className="flex h-screen bg-background text-foreground">
-      {/* Shell layout will be built in Phase 2 */}
-      <main className="flex-1 overflow-auto p-6">
-        <Outlet />
-      </main>
-    </div>
-  );
+  return <AppShell />;
 }
