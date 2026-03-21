@@ -14,15 +14,17 @@ export function authMiddleware(event: APIGatewayProxyEventV2): Partial<RequestCo
   const claims = (event.requestContext as unknown as Record<string, unknown>)?.authorizer as
     | Record<string, unknown>
     | undefined;
-
+  console.log('Authorizer claims:', claims);
   if (claims?.jwt) {
-    const jwtClaims = (claims.jwt as Record<string, unknown>).claims as Record<string, string>;
-    const schoolId = jwtClaims['custom:school_id'];
-    const userId = jwtClaims.sub;
-    if (!schoolId || !userId) {
-      throw new AppError('Missing school_id or user_id in token claims', 401, 'UNAUTHORIZED');
+    const jwtClaims = (claims.jwt as Record<string, unknown>)?.claims as
+      | Record<string, string>
+      | undefined;
+    console.log('JWT claims:', jwtClaims);
+    const schoolId = jwtClaims?.['custom:school_id'];
+    const userId = jwtClaims?.sub;
+    if (schoolId && userId) {
+      return { schoolId, userId };
     }
-    return { schoolId, userId };
   }
 
   // Local dev path: mock auth headers

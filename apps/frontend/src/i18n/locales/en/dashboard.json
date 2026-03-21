@@ -1,0 +1,26 @@
+{
+  "title": "Dashboard",
+  "summaryCards": {
+    "classes": "Classes",
+    "divisions": "Divisions",
+    "teachers": "Teachers",
+    "subjects": "Subjects",
+    "generated": "Generated",
+    "pending": "Pending"
+  },
+  "conflictBanner": {
+    "message": "{{count}} timetable(s) have conflicts.",
+    "viewNotifications": "View Notifications →"
+  },
+  "quickLinks": {
+    "title": "Quick Links",
+    "manageClasses": "Manage Classes & Divisions",
+    "generateTimetables": "Generate Timetables",
+    "teacherView": "View Teacher Timetable"
+  },
+  "welcome": {
+    "title": "Welcome to School Timetable Manager!",
+    "description": "Get started by creating your first academic year. Then add classes, subjects, and teachers to begin generating timetables.",
+    "cta": "Create Academic Year →"
+  }
+}
