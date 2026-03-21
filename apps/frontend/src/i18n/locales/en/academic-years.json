@@ -1,0 +1,45 @@
+{
+  "title": "Academic Years",
+  "createNew": "Create New Year",
+  "create": "Create",
+  "table": {
+    "label": "Label",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "ARCHIVED": "Archived"
+  },
+  "form": {
+    "title": "Create Academic Year",
+    "label": "Label",
+    "labelPlaceholder": "e.g. 2026-27",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "save": "Save",
+    "cancel": "Cancel",
+    "labelRequired": "Label is required",
+    "startDateRequired": "Start date is required",
+    "endDateRequired": "End date is required",
+    "endDateAfterStart": "End date must be after start date"
+  },
+  "activate": {
+    "title": "Set as Active Year",
+    "description": "This will archive the current active year and set \"{{label}}\" as the active academic year. Continue?",
+    "confirm": "Set Active",
+    "success": "\"{{label}}\" is now the active academic year",
+    "error": "Failed to activate academic year"
+  },
+  "createSuccess": "Academic year created successfully",
+  "createError": "Failed to create academic year",
+  "setActive": "Set Active",
+  "view": "View",
+  "empty": {
+    "title": "No Academic Years",
+    "description": "Create your first academic year to get started."
+  },
+  "loading": "Loading academic years..."
+}

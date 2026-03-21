@@ -4,13 +4,14 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import enCommon from './locales/en/common.json';
 import enAuth from './locales/en/auth.json';
 import enDashboard from './locales/en/dashboard.json';
+import enAcademicYears from './locales/en/academic-years.json';
 
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
-      en: { common: enCommon, auth: enAuth, dashboard: enDashboard },
+      en: { common: enCommon, auth: enAuth, dashboard: enDashboard, 'academic-years': enAcademicYears },
     },
     defaultNS: 'common',
     fallbackLng: 'en',
