@@ -4,6 +4,7 @@ import authReducer from '@/features/auth/authSlice';
 import wsReducer from '@/slices/wsSlice';
 import { dashboardApi } from '@/features/dashboard/dashboardApi';
 import { academicYearApi } from '@/features/academic-years/academicYearApi';
+import { configApi } from '@/features/period-structures/configApi';
 
 export const store = configureStore({
   reducer: {
@@ -11,11 +12,13 @@ export const store = configureStore({
     ws: wsReducer,
     [dashboardApi.reducerPath]: dashboardApi.reducer,
     [academicYearApi.reducerPath]: academicYearApi.reducer,
+    [configApi.reducerPath]: configApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
       .concat(dashboardApi.middleware)
-      .concat(academicYearApi.middleware),
+      .concat(academicYearApi.middleware)
+      .concat(configApi.middleware),
 });
 
 setupListeners(store.dispatch);

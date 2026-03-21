@@ -22,6 +22,14 @@ export const router = createBrowserRouter([
         lazy: () => import('@/features/period-structures/PeriodStructuresPage'),
       },
       {
+        path: 'period-structures/new',
+        lazy: () => import('@/features/period-structures/PeriodStructureEditor'),
+      },
+      {
+        path: 'period-structures/:id',
+        lazy: () => import('@/features/period-structures/PeriodStructureEditor'),
+      },
+      {
         path: 'classes',
         lazy: () => import('@/features/classes/ClassesPage'),
       },

@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useAppDispatch } from '@/app/hooks';
 import { setActiveAcademicYear } from '@/features/auth/authSlice';
 import { Button } from '@/components/ui/button';
-import { PageHeader, DataTable, StatusBadge, ConfirmDialog, EmptyState } from '@/components/shared';
+import { PageHeader, DataTable, StatusBadge, ConfirmDialog } from '@/components/shared';
 import {
   useGetAcademicYearsQuery,
   useCreateAcademicYearMutation,

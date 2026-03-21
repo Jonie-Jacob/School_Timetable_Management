@@ -1,0 +1,82 @@
+{
+  "title": "Period Structures",
+  "addStructure": "Add Structure",
+  "table": {
+    "name": "Name",
+    "workingDays": "Working Days",
+    "classes": "Classes",
+    "actions": "Actions"
+  },
+  "edit": "Edit",
+  "delete": "Delete",
+  "deleteConfirm": {
+    "title": "Delete Period Structure",
+    "description": "Are you sure you want to delete \"{{name}}\"? This cannot be undone.",
+    "descriptionWithClasses": "\"{{name}}\" is assigned to {{count}} class(es). Deleting it will remove those assignments. Continue?",
+    "confirm": "Delete",
+    "success": "Period structure deleted",
+    "error": "Failed to delete period structure"
+  },
+  "empty": {
+    "title": "No Period Structures",
+    "description": "Create your first period structure to define the school day."
+  },
+  "editor": {
+    "titleNew": "New Period Structure",
+    "titleEdit": "Edit Period Structure",
+    "name": "Structure Name",
+    "namePlaceholder": "e.g. Senior Block",
+    "nameRequired": "Name is required",
+    "workingDays": "Working Days",
+    "workingDaysRequired": "At least one working day is required",
+    "assignedClasses": "Assigned Classes",
+    "classesPlaceholder": "Select classes...",
+    "daySlots": "Day-wise Slot Configuration",
+    "selectDay": "Select Day",
+    "copyFrom": "Copy from",
+    "copyFromDay": "Copy from Day",
+    "copyConfirm": {
+      "title": "Copy Slots",
+      "description": "This will overwrite {{target}}'s slots with {{source}}'s configuration. Continue?"
+    },
+    "addSlot": "Add Slot",
+    "resetDefault": "Reset to Default",
+    "resetConfirm": {
+      "title": "Reset to Default",
+      "description": "This will reset the slots to the system default configuration (8 periods with breaks). Continue?"
+    },
+    "save": "Save",
+    "cancel": "Cancel",
+    "saveSuccess": "Period structure saved successfully",
+    "saveError": "Failed to save period structure",
+    "slot": {
+      "number": "#",
+      "type": "Type",
+      "startTime": "Start",
+      "endTime": "End",
+      "duration": "Duration",
+      "period": "Period",
+      "interval": "Interval",
+      "lunchBreak": "Lunch Break",
+      "minutes": "{{count}}m"
+    }
+  },
+  "days": {
+    "MONDAY": "Monday",
+    "TUESDAY": "Tuesday",
+    "WEDNESDAY": "Wednesday",
+    "THURSDAY": "Thursday",
+    "FRIDAY": "Friday",
+    "SATURDAY": "Saturday",
+    "SUNDAY": "Sunday"
+  },
+  "daysShort": {
+    "MONDAY": "Mon",
+    "TUESDAY": "Tue",
+    "WEDNESDAY": "Wed",
+    "THURSDAY": "Thu",
+    "FRIDAY": "Fri",
+    "SATURDAY": "Sat",
+    "SUNDAY": "Sun"
+  }
+}
