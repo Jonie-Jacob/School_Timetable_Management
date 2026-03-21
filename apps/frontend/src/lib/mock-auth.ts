@@ -43,3 +43,15 @@ export function mockGetSession(): Promise<MockUser> {
 export function mockLogout(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
+
+export function mockForgotPassword(_email: string): Promise<void> {
+  return Promise.resolve();
+}
+
+export function mockConfirmResetPassword(
+  _email: string,
+  _code: string,
+  _newPassword: string,
+): Promise<void> {
+  return Promise.resolve();
+}
