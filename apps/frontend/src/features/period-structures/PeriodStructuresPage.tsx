@@ -51,19 +51,19 @@ export function Component() {
       cell: ({ row }) => formatWorkingDays(row.original.workingDays, t),
     },
     {
-      id: 'classes',
-      header: t('table.classes'),
+      id: 'divisions',
+      header: t('table.divisions'),
       cell: ({ row }) => {
-        const classes = row.original.classes;
-        if (!classes?.length) return '—';
+        const divs = row.original.divisions;
+        if (!divs?.length) return '—';
         return (
           <div className="flex flex-wrap gap-1">
-            {classes.map((c) => (
+            {divs.map((d: { id: string; label: string; class: { name: string } }) => (
               <span
-                key={c.classId}
+                key={d.id}
                 className="inline-flex items-center rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-medium text-secondary-foreground"
               >
-                {c.class.name}
+                {d.class.name} {d.label}
               </span>
             ))}
           </div>
@@ -116,14 +116,14 @@ export function Component() {
         </div>
       </div>
       <p className="text-sm text-muted-foreground">{formatWorkingDays(ps.workingDays, t)}</p>
-      {ps.classes?.length > 0 && (
+      {ps.divisions?.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {ps.classes.map((c) => (
+          {ps.divisions.map((d: { id: string; label: string; class: { name: string } }) => (
             <span
-              key={c.classId}
+              key={d.id}
               className="inline-flex items-center rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-medium text-secondary-foreground"
             >
-              {c.class.name}
+              {d.class.name} {d.label}
             </span>
           ))}
         </div>
@@ -131,10 +131,10 @@ export function Component() {
     </div>
   );
 
-  const deleteDescription = deleteTarget?.classes?.length
-    ? t('deleteConfirm.descriptionWithClasses', {
+  const deleteDescription = deleteTarget?.divisions?.length
+    ? t('deleteConfirm.descriptionWithDivisions', {
         name: deleteTarget.name,
-        count: deleteTarget.classes.length,
+        count: deleteTarget.divisions.length,
       })
     : t('deleteConfirm.description', { name: deleteTarget?.name ?? '' });
 

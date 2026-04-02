@@ -22,7 +22,7 @@ import {
   useGetPeriodStructureQuery,
   useCreatePeriodStructureMutation,
   useUpdatePeriodStructureMutation,
-  useAssignClassesMutation,
+  useAssignDivisionsMutation,
   useSetWorkingDaysMutation,
   useGetClassesQuery,
   type SlotEntry,
@@ -104,7 +104,7 @@ export function Component() {
   const { data: allClasses = [] } = useGetClassesQuery();
   const [createStructure, { isLoading: isCreating }] = useCreatePeriodStructureMutation();
   const [updateStructure, { isLoading: isUpdating }] = useUpdatePeriodStructureMutation();
-  const [assignClasses] = useAssignClassesMutation();
+  const [assignDivisions] = useAssignDivisionsMutation();
   const [setWorkingDaysMutation] = useSetWorkingDaysMutation();
 
   // Form state
@@ -131,7 +131,7 @@ export function Component() {
       ?.map((wd) => NUMBER_TO_DAY[wd.dayOfWeek])
       .filter(Boolean) ?? DEFAULT_WORKING_DAYS;
     setWorkingDaysList(days);
-    setSelectedClassIds(existing.classes?.map((c) => c.classId) ?? []);
+    setSelectedClassIds(existing.divisions?.map((d) => d.id) ?? []);
 
     // Build day slots from existing data
     const newDaySlots: Partial<Record<DayKey, EditorSlot[]>> = {};
@@ -279,7 +279,7 @@ export function Component() {
 
       // Assign classes
       if (selectedClassIds.length > 0) {
-        await assignClasses({ periodStructureId: structureId, classIds: selectedClassIds }).unwrap();
+        await assignDivisions({ periodStructureId: structureId, divisionIds: selectedClassIds }).unwrap();
       }
 
       toast.success(t('editor.saveSuccess'));

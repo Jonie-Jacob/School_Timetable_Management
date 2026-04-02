@@ -211,13 +211,20 @@ async function main() {
     },
   });
 
-  // Link classes to period structures
-  for (const [className, classId] of classMap) {
+  // Link divisions to period structures via Division.periodStructureId
+  for (const [className] of classMap) {
     const sortOrder = classesData.find((c) => c.name === className)!.sortOrder;
     const psId = sortOrder >= 10 ? ps9.id : ps8.id; // Class X(10), XI(11), XII(12) → 9 periods
-    await prisma.periodStructureClass.create({
-      data: { schoolId: school.id, periodStructureId: psId, classId },
+    // Find all divisions belonging to this class and assign the period structure
+    const classDivisions = await prisma.division.findMany({
+      where: { classId: classMap.get(className)!, schoolId: school.id, academicYearId: ay.id },
     });
+    for (const div of classDivisions) {
+      await prisma.division.update({
+        where: { id: div.id },
+        data: { periodStructureId: psId },
+      });
+    }
   }
   console.log(`  ✓ Period Structures: 2 (Standard 8, Extended 9)`);
 
@@ -760,7 +767,7 @@ async function main() {
     teachers: await prisma.teacher.count(),
     teacherSubjects: await prisma.teacherSubject.count(),
     periodStructures: await prisma.periodStructure.count(),
-    periodStructureClasses: await prisma.periodStructureClass.count(),
+    divisionsWithPeriodStructure: await prisma.division.count({ where: { periodStructureId: { not: null } } }),
     workingDays: await prisma.workingDay.count(),
     slots: await prisma.slot.count(),
     divisionAssignments: await prisma.divisionAssignment.count(),

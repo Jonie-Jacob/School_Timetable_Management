@@ -53,7 +53,10 @@ export class SchoolConfigService {
     return prisma.periodStructure.findMany({
       where: { schoolId, academicYearId, deletedAt: null },
       include: {
-        classes: { include: { class: true } },
+        divisions: {
+          where: { deletedAt: null },
+          include: { class: { select: { id: true, name: true } } },
+        },
         workingDays: { orderBy: { sortOrder: 'asc' } },
       },
       orderBy: { createdAt: 'asc' },
@@ -64,7 +67,10 @@ export class SchoolConfigService {
     const structure = await prisma.periodStructure.findFirst({
       where: { id, schoolId, academicYearId, deletedAt: null },
       include: {
-        classes: { include: { class: true } },
+        divisions: {
+          where: { deletedAt: null },
+          include: { class: { select: { id: true, name: true } } },
+        },
         workingDays: {
           orderBy: { sortOrder: 'asc' },
           include: {
@@ -125,12 +131,12 @@ export class SchoolConfigService {
       throw new NotFoundError('Period structure', id);
     }
 
-    const assignedClasses = await prisma.periodStructureClass.count({
-      where: { periodStructureId: id },
+    const assignedDivisions = await prisma.division.count({
+      where: { periodStructureId: id, deletedAt: null },
     });
-    if (assignedClasses > 0) {
+    if (assignedDivisions > 0) {
       throw new AppError(
-        'Cannot delete period structure with assigned classes. Remove class assignments first.',
+        'Cannot delete period structure with assigned divisions. Remove division assignments first.',
         400,
         'BAD_REQUEST',
       );
@@ -142,7 +148,7 @@ export class SchoolConfigService {
     });
   }
 
-  async assignToClasses(schoolId: string, academicYearId: string, periodStructureId: string, input: AssignPeriodStructureDto) {
+  async assignToDivisions(schoolId: string, academicYearId: string, periodStructureId: string, input: AssignPeriodStructureDto) {
     const ps = await prisma.periodStructure.findFirst({
       where: { id: periodStructureId, schoolId, academicYearId, deletedAt: null },
     });
@@ -150,46 +156,29 @@ export class SchoolConfigService {
       throw new NotFoundError('Period structure', periodStructureId);
     }
 
-    // Verify all class IDs belong to this school+academic year
-    const classes = await prisma.class.findMany({
-      where: { id: { in: input.classIds }, schoolId, academicYearId, deletedAt: null },
+    // Verify all division IDs belong to this school+academic year
+    const divisions = await prisma.division.findMany({
+      where: { id: { in: input.divisionIds }, schoolId, academicYearId, deletedAt: null },
     });
-    if (classes.length !== input.classIds.length) {
-      const foundIds = new Set(classes.map((c) => c.id));
-      const missing = input.classIds.filter((cid) => !foundIds.has(cid));
-      throw new NotFoundError('Class', missing.join(', '));
+    if (divisions.length !== input.divisionIds.length) {
+      const foundIds = new Set(divisions.map((d) => d.id));
+      const missing = input.divisionIds.filter((did) => !foundIds.has(did));
+      throw new NotFoundError('Division', missing.join(', '));
     }
 
-    // Check for classes already assigned to a DIFFERENT period structure
-    const existingAssignments = await prisma.periodStructureClass.findMany({
-      where: { classId: { in: input.classIds } },
-    });
-    const conflicting = existingAssignments.filter((a) => a.periodStructureId !== periodStructureId);
-    if (conflicting.length > 0) {
-      const conflictClassIds = conflicting.map((a) => a.classId);
-      throw new ConflictError(
-        `Classes [${conflictClassIds.join(', ')}] are already assigned to a different period structure. Remove them first.`,
-      );
-    }
-
-    // Remove existing assignments for this structure's classes, then create fresh
-    await prisma.$transaction([
-      prisma.periodStructureClass.deleteMany({
-        where: { periodStructureId, classId: { in: input.classIds } },
-      }),
-      ...input.classIds.map((classId) =>
-        prisma.periodStructureClass.create({
-          data: { schoolId, periodStructureId, classId },
-        }),
-      ),
-    ]);
-
-    const assignments = await prisma.periodStructureClass.findMany({
-      where: { periodStructureId },
-      include: { class: true },
+    // Update all specified divisions to point to this period structure
+    await prisma.division.updateMany({
+      where: { id: { in: input.divisionIds }, schoolId },
+      data: { periodStructureId },
     });
 
-    return { periodStructureId, assignments };
+    // Return updated divisions
+    const updated = await prisma.division.findMany({
+      where: { periodStructureId, schoolId, deletedAt: null },
+      include: { class: { select: { id: true, name: true } } },
+    });
+
+    return { periodStructureId, divisions: updated };
   }
 
   // ── Working Days ───────────────────────────────────────────

@@ -66,7 +66,6 @@ model School {
   teacherSubjects        TeacherSubject[]
   teacherAvailability    TeacherAvailability[]
   periodStructures       PeriodStructure[]
-  periodStructureClasses PeriodStructureClass[]
   workingDays            WorkingDay[]
   slots                  Slot[]
   electiveGroups         ElectiveGroup[]
@@ -129,7 +128,6 @@ model Class {
   school              School                 @relation(fields: [schoolId], references: [id])
   academicYear        AcademicYear           @relation(fields: [academicYearId], references: [id])
   divisions           Division[]
-  periodStructureClasses PeriodStructureClass[]
 
   @@unique([schoolId, academicYearId, name])
   @@index([schoolId, academicYearId, sortOrder])
@@ -141,19 +139,21 @@ model Class {
 // ──────────────────────────────────────────────
 
 model Division {
-  id             String    @id @default(uuid())
-  schoolId       String    @map("school_id")
-  classId        String    @map("class_id")
-  academicYearId String    @map("academic_year_id")
-  label          String    @db.VarChar(10)
-  streamName     String?   @map("stream_name") @db.VarChar(100)
-  deletedAt      DateTime? @map("deleted_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  schoolId          String    @map("school_id")
+  classId           String    @map("class_id")
+  academicYearId    String    @map("academic_year_id")
+  label             String    @db.VarChar(10)
+  streamName        String?   @map("stream_name") @db.VarChar(100)
+  periodStructureId String?   @map("period_structure_id")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   school              School               @relation(fields: [schoolId], references: [id])
   class               Class                @relation(fields: [classId], references: [id])
   academicYear        AcademicYear         @relation(fields: [academicYearId], references: [id])
+  periodStructure     PeriodStructure?     @relation(fields: [periodStructureId], references: [id])
   divisionAssignments DivisionAssignment[]
   timetables          Timetable[]
   generationJobs      GenerationJob[]
@@ -161,6 +161,7 @@ model Division {
 
   @@unique([schoolId, classId, label, streamName])
   @@index([schoolId, classId, academicYearId])
+  @@index([periodStructureId])
   @@map("divisions")
 }
 
@@ -192,14 +193,15 @@ model Subject {
 // ──────────────────────────────────────────────
 
 model Teacher {
-  id             String    @id @default(uuid())
-  schoolId       String    @map("school_id")
-  academicYearId String    @map("academic_year_id")
-  name           String    @db.VarChar(255)
-  contact        String?   @db.Text
-  deletedAt      DateTime? @map("deleted_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  schoolId          String    @map("school_id")
+  academicYearId    String    @map("academic_year_id")
+  name              String    @db.VarChar(255)
+  contact           String?   @db.Text
+  maxPeriodsPerWeek Int?      @map("max_periods_per_week")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   school                School               @relation(fields: [schoolId], references: [id])
   academicYear          AcademicYear         @relation(fields: [academicYearId], references: [id])
@@ -268,7 +270,7 @@ model PeriodStructure {
 
   school       School                 @relation(fields: [schoolId], references: [id])
   academicYear AcademicYear           @relation(fields: [academicYearId], references: [id])
-  classes      PeriodStructureClass[]
+  divisions    Division[]
   workingDays  WorkingDay[]
 
   @@unique([schoolId, academicYearId, name])
@@ -276,25 +278,7 @@ model PeriodStructure {
 }
 
 // ──────────────────────────────────────────────
-// Table 10: period_structure_classes
-// ──────────────────────────────────────────────
-
-model PeriodStructureClass {
-  id                String @id @default(uuid())
-  schoolId          String @map("school_id")
-  periodStructureId String @map("period_structure_id")
-  classId           String @map("class_id")
-
-  school          School          @relation(fields: [schoolId], references: [id])
-  periodStructure PeriodStructure @relation(fields: [periodStructureId], references: [id])
-  class           Class           @relation(fields: [classId], references: [id])
-
-  @@unique([classId])
-  @@map("period_structure_classes")
-}
-
-// ──────────────────────────────────────────────
-// Table 11: working_days
+// Table 10: working_days (renumbered — period_structure_classes removed)
 // ──────────────────────────────────────────────
 
 model WorkingDay {

@@ -86,16 +86,13 @@ export class TimetableService {
       });
     }
 
-    // Get all working days + their PERIOD slots for the school's period structure
-    // Get the period structure for this division's class via PeriodStructureClass
-    const periodStructureClass = await prisma.periodStructureClass.findUnique({
-      where: { classId: (await prisma.division.findUniqueOrThrow({ where: { id: divisionId } })).classId },
-    });
-    if (!periodStructureClass) {
-      throw new AppError('No period structure assigned to this class', 400, 'NO_PERIOD_STRUCTURE');
+    // Get the period structure for this division directly from Division.periodStructureId
+    const division = await prisma.division.findUniqueOrThrow({ where: { id: divisionId } });
+    if (!division.periodStructureId) {
+      throw new AppError('No period structure assigned to this division', 400, 'NO_PERIOD_STRUCTURE');
     }
 
-    const periodStructureId = periodStructureClass.periodStructureId;
+    const periodStructureId = division.periodStructureId;
     const workingDays = await prisma.workingDay.findMany({
       where: { schoolId, periodStructureId },
       include: { slots: { where: { slotType: SlotType.PERIOD }, orderBy: { sortOrder: 'asc' } } },

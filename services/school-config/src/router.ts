@@ -18,7 +18,7 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
   // POST /config/period-structures/:id/assign
   const assignMatch = path.match(/^\/config\/period-structures\/([^/]+)\/assign$/);
   if (method === 'POST' && assignMatch) {
-    return controller.assignToClasses(event, assignMatch[1]);
+    return controller.assignToDivisions(event, assignMatch[1]);
   }
 
   // Match /config/period-structures/:id

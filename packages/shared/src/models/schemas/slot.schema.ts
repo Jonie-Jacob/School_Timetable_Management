@@ -21,7 +21,7 @@ export const updatePeriodStructureSchema = z.object({
 });
 
 export const assignPeriodStructureSchema = z.object({
-  classIds: z.array(z.string().uuid()).min(1),
+  divisionIds: z.array(z.string().uuid()).min(1, 'At least one division is required'),
 });
 
 export const setWorkingDaysSchema = z.object({

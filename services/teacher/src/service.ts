@@ -32,6 +32,7 @@ export class TeacherService {
         academicYearId,
         name: input.name,
         contact: input.contact ?? null,
+        maxPeriodsPerWeek: input.maxPeriodsPerWeek ?? null,
       },
     });
   }
@@ -114,6 +115,7 @@ export class TeacherService {
     const data: Record<string, unknown> = {};
     if (input.name !== undefined) data.name = input.name;
     if (input.contact !== undefined) data.contact = input.contact;
+    if (input.maxPeriodsPerWeek !== undefined) data.maxPeriodsPerWeek = input.maxPeriodsPerWeek;
 
     const updated = await prisma.teacher.update({ where: { id }, data });
 

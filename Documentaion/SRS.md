@@ -957,7 +957,7 @@ Each microservice owns specific database tables and is the **sole writer** to th
 | Microservice | Owned Tables (write) | Reads From |
 |-------------|---------------------|------------|
 | **Academic Year Service** | `academic_years` | — |
-| **School Config Service** | `classes`, `period_structures`, `period_structure_classes`, `working_days`, `slots` | `academic_years` |
+| **School Config Service** | `classes`, `period_structures`, `working_days`, `slots` | `academic_years` |
 | **Subject Service** | `subjects` | `division_assignments` (for deletion check) |
 | **Teacher Service** | `teachers`, `teacher_subjects`, `teacher_availability` | `division_assignments` (for deletion check) |
 | **Division & Assignment Service** | `divisions`, `division_assignments`, `elective_groups`, `elective_group_subjects` | `classes`, `subjects`, `teachers`, `period_structures` |
@@ -1086,7 +1086,7 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 |----------|--------|
 | **Responsibility** | Manage classes (user-defined, dynamic), class sort order, period structures, working days, and per-day slot sequences. |
 | **Runtime** | Node.js 22 · Lambda · VPC-attached |
-| **Owned Tables** | `classes`, `period_structures`, `period_structure_classes`, `working_days`, `slots` |
+| **Owned Tables** | `classes`, `period_structures`, `working_days`, `slots` |
 | **API Base Path** | `/config` |
 
 **Routes Summary**:
@@ -1100,8 +1100,8 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 | PUT | `/config/classes/sort-order` | Batch update class sort order (drag-to-reorder) |
 | GET | `/config/period-structures` | List all period structures |
 | POST | `/config/period-structures` | Create a new period structure |
-| GET | `/config/period-structures/:id` | Get full detail (working days + per-day slots + assigned classes) |
-| PUT | `/config/period-structures/:id` | Update name, working days, assigned classes |
+| GET | `/config/period-structures/:id` | Get full detail (working days + per-day slots + assigned divisions) |
+| PUT | `/config/period-structures/:id` | Update name, working days, assigned divisions |
 | DELETE | `/config/period-structures/:id` | Delete (warns if classes assigned) |
 | POST | `/config/period-structures/:id/reset` | Reset to default (Mon–Fri, 8 periods, standard breaks) |
 | GET | `/config/period-structures/:id/days/:dayId/slots` | Get slot sequence for a specific day |
@@ -1114,7 +1114,7 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 **Business Logic**:
 - Classes are **not fixed** to any predefined set. The school creates them with any name (e.g., "KG", "Nursery", "Class I", "Grade 10").
 - `sort_order` is an integer field. The batch reorder endpoint receives an array of `{ classId, sortOrder }` pairs.
-- A class can only belong to **one period structure** at a time. Assigning a class to a new structure removes it from the previous one.
+- A division can only belong to **one period structure** at a time. Assigning a division to a new structure removes it from the previous one. Different divisions within the same class may use different period structures.
 - Slot numbers for `PERIOD`-type slots auto-recalculate after every reorder or deletion within a day.
 - Slot validation: warns if `end_time <= start_time` or if a gap/overlap exists between consecutive slots.
 - Deleting a slot that is referenced by a timetable requires user confirmation (the API caller sends `?confirm=true`).
@@ -1182,6 +1182,7 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 - Availability is scoped to the active academic year.
 - When updating qualifications: if a subject is removed from a teacher's qualified list, and that teacher is still assigned to divisions for that subject, a warning is returned (no auto-removal of assignments).
 - Deletion with active assignments returns `409 Conflict` with affected division list.
+- A teacher record has an optional `maxPeriodsPerWeek` field — a soft cap on total weekly teaching load. The timetable engine treats violations as soft constraints (S9) — it tries to respect the cap but may exceed it.
 
 **Events Emitted** (sync invoke → Notification Service):
 - `TEACHER_UPDATED` — qualification or name change.
@@ -1734,6 +1735,7 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 | `academic_year_id` | UUID | FK → academic_years.id, NOT NULL | |
 | `label` | VARCHAR(10) | NOT NULL | e.g., "A", "B" |
 | `stream_name` | VARCHAR(100) | NULLABLE | e.g., "Science", "Commerce" |
+| `period_structure_id` | UUID | FK → period_structures.id, NULLABLE | Period structure assigned to this division |
 | `deleted_at` | TIMESTAMP | NULLABLE | |
 | `created_at` | TIMESTAMP | NOT NULL | |
 | `updated_at` | TIMESTAMP | NOT NULL | |
@@ -1767,6 +1769,7 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 | `academic_year_id` | UUID | FK → academic_years.id, NOT NULL | |
 | `name` | VARCHAR(255) | NOT NULL | |
 | `contact` | TEXT | NULLABLE | Free-form contact details |
+| `max_periods_per_week` | INTEGER | NULLABLE | Soft cap on weekly teaching load |
 | `deleted_at` | TIMESTAMP | NULLABLE | |
 | `created_at` | TIMESTAMP | NOT NULL | |
 | `updated_at` | TIMESTAMP | NOT NULL | |
@@ -1823,14 +1826,7 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 
 #### 6.3.10 `period_structure_classes`
 
-| Column | Type | Constraints | Description |
-|--------|------|------------|-------------|
-| `id` | UUID | PK | |
-| `school_id` | UUID | FK → schools.id, NOT NULL | |
-| `period_structure_id` | UUID | FK → period_structures.id, NOT NULL | |
-| `class_id` | UUID | FK → classes.id, NOT NULL | |
-
-**Indexes**: `(class_id)` UNIQUE (a class belongs to exactly one structure).
+**Table removed** — period structures are now assigned directly to divisions via `divisions.period_structure_id`.
 
 ---
 
@@ -3609,6 +3605,7 @@ Each violation adds a **small penalty** (1–10 points per occurrence).
 | S6 | **Scheduling preference — limits (soft)** | 6 | When `constraintType = 'SOFT'`: penalize exceeding `maxPeriodsPerDay` or falling below `minPeriodsPerDay`. |
 | S7 | **Scheduling preference — adjacency (soft)** | 7 | When `preferAdjacentPeriods = true` and `constraintType = 'SOFT'`: penalize non-adjacent periods of the same subject on the same day (per-assignment, independent of the global adjacency toggle). |
 | S8 | **Scheduling preference — adjacency (hard as soft fallback)** | 10 | When `preferAdjacentPeriods = true` and `constraintType = 'HARD'`: treated as S3-equivalent but with higher weight. |
+| S9 | **Teacher weekly load cap** | 4 | If a teacher has `maxPeriodsPerWeek` set, penalize schedules where the teacher's total assigned periods across all divisions exceed this cap. |
 
 ### 10.7 Fitness Function
 
@@ -3638,6 +3635,7 @@ def fitness(chromosome: list[int], context: GenerationContext) -> float:
     score -= 8 * count_soft_preference_day_period_violations(chromosome, context)
     score -= 6 * count_soft_preference_limit_violations(chromosome, context)
     score -= 7 * count_soft_preference_adjacency_violations(chromosome, context)
+    score -= 4 * count_teacher_weekly_load_violations(chromosome, context)
 
     return score
 ```

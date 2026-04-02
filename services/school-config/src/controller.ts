@@ -62,11 +62,11 @@ export class SchoolConfigController {
     return noContent();
   }
 
-  async assignToClasses(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
+  async assignToDivisions(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
     const auth = authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const body = parseBody(event, assignPeriodStructureSchema);
-    const result = await service.assignToClasses(ctx.schoolId, ctx.academicYearId, id, body);
+    const result = await service.assignToDivisions(ctx.schoolId, ctx.academicYearId, id, body);
     return success(result);
   }
 

@@ -41,7 +41,7 @@
 2. Each Period Structure specifies:
    - A user-defined **name** (e.g., "Primary Block", "Senior Block").
    - A configurable **set of working days** — any combination of the seven days of the week (e.g., Mon–Fri, Mon–Sat). Working days are not fixed to any default set.
-   - An **assigned classes** list — each class is linked to exactly one Period Structure at a time.
+   - An **assigned divisions** list — each division is linked to exactly one Period Structure at a time. Different divisions within the same class may use different Period Structures.
    - A **day-wise slot configuration**: each working day has its own independent ordered sequence of slots. Different days within the same structure may have a completely different number, type, ordering, and timing of slots.
 3. Each **slot** within a day's configuration has:
    - A **type**: Period, Interval, or Lunch Break.
@@ -87,6 +87,7 @@
 1. Authorised users shall be able to **create, edit, and delete** teacher records.
 2. A teacher record shall capture: name, optional contact details, and the list of subjects the teacher is qualified to teach.
 3. Deletion of a teacher who is actively assigned to one or more divisions shall trigger a warning. The user must confirm before proceeding.
+4. Each teacher record may optionally specify a **maximum periods per week** (`maxPeriodsPerWeek`) — a soft cap on the teacher's total weekly teaching load across all divisions. The timetable engine will attempt to respect this limit but may exceed it if necessary; violations appear as warnings.
 
 ---
 
@@ -514,7 +515,7 @@
 | Class structure | User-defined classes with custom naming and sort order; not limited to a fixed set (BR-1) |
 | Division optionality | Zero or more divisions per class (BR-8) |
 | Timetable scope | Per division (not per class) |
-| Period Structures | Multiple user-defined; each linked to a set of classes; per-day slot sequences; configurable working days (BR-2) |
+| Period Structures | Multiple user-defined; each linked to a set of divisions; different divisions in the same class may use different structures; per-day slot sequences; configurable working days (BR-2) |
 | Break slots | Configurable per Period Structure per working day; drag-and-drop reorder supported (BR-3) |
 | Adjacency constraint | Optional toggle per timetable generation run; off by default (Screen 11). Also available per-assignment via scheduling preferences (BR-17). |
 | Scheduling preferences | Optional per assignment — preferred/excluded days, preferred/excluded period ranges, adjacent preference, min/max per day. Hard or Soft constraint type (BR-17). |

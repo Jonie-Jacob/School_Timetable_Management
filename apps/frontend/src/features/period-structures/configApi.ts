@@ -9,14 +9,13 @@ export interface SlotEntry {
   label: string;
 }
 
-export interface PeriodStructureClass {
+export interface PeriodStructureDivision {
   id: string;
-  periodStructureId: string;
-  classId: string;
+  periodStructureId: string | null;
+  label: string;
   class: {
     id: string;
     name: string;
-    sortOrder: number;
   };
 }
 
@@ -43,7 +42,7 @@ export interface PeriodStructure {
   academicYearId: string;
   name: string;
   periods: SlotEntry[];
-  classes: PeriodStructureClass[];
+  divisions: PeriodStructureDivision[];
   workingDays: WorkingDay[];
   createdAt: string;
   updatedAt: string;
@@ -115,11 +114,11 @@ export const configApi = createApi({
       invalidatesTags: [{ type: 'PeriodStructure', id: 'LIST' }],
     }),
 
-    assignClasses: builder.mutation<void, { periodStructureId: string; classIds: string[] }>({
-      query: ({ periodStructureId, classIds }) => ({
+    assignDivisions: builder.mutation<void, { periodStructureId: string; divisionIds: string[] }>({
+      query: ({ periodStructureId, divisionIds }) => ({
         url: `/config/period-structures/${periodStructureId}/assign`,
         method: 'POST',
-        body: { classIds },
+        body: { divisionIds },
       }),
       invalidatesTags: [{ type: 'PeriodStructure', id: 'LIST' }],
     }),
@@ -151,7 +150,7 @@ export const {
   useCreatePeriodStructureMutation,
   useUpdatePeriodStructureMutation,
   useDeletePeriodStructureMutation,
-  useAssignClassesMutation,
+  useAssignDivisionsMutation,
   useSetWorkingDaysMutation,
   useGetClassesQuery,
 } = configApi;

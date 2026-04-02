@@ -3,11 +3,13 @@ import { z } from 'zod';
 export const createTeacherSchema = z.object({
   name: z.string().min(1).max(255),
   contact: z.string().nullable().optional(),
+  maxPeriodsPerWeek: z.number().int().min(1).optional().nullable(),
 });
 
 export const updateTeacherSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   contact: z.string().nullable().optional(),
+  maxPeriodsPerWeek: z.number().int().min(1).optional().nullable(),
 });
 
 export const setTeacherSubjectsSchema = z.object({

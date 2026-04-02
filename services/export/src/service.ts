@@ -94,12 +94,12 @@ export class ExportService {
     }
 
     // Also fetch break slots from the period structure for this division
-    const periodStructureClass = await prisma.periodStructureClass.findUnique({
-      where: { classId: timetable.division.classId },
+    const divisionRecord = await prisma.division.findUnique({
+      where: { id: divisionId },
     });
-    if (periodStructureClass) {
+    if (divisionRecord?.periodStructureId) {
       const allStructureSlots = await prisma.slot.findMany({
-        where: { workingDay: { periodStructureId: periodStructureClass.periodStructureId } },
+        where: { workingDay: { periodStructureId: divisionRecord.periodStructureId } },
         orderBy: { sortOrder: 'asc' },
       });
       for (const sl of allStructureSlots) {
@@ -201,33 +201,24 @@ export class ExportService {
     }
 
     // For teacher view, also load break slots from any period structure they teach in
-    const anyClassId = timetableSlots[0]?.timetable?.division?.class;
-    if (anyClassId) {
-      // Get a sample division's class to find its period structure
-      const sampleDiv = await prisma.division.findFirst({
-        where: { schoolId, academicYearId, deletedAt: null },
-        include: { class: true },
+    // Get a sample division that has a period structure assigned
+    const sampleDiv = await prisma.division.findFirst({
+      where: { schoolId, academicYearId, deletedAt: null, periodStructureId: { not: null } },
+    });
+    if (sampleDiv?.periodStructureId) {
+      const allSlots = await prisma.slot.findMany({
+        where: { workingDay: { periodStructureId: sampleDiv.periodStructureId } },
+        orderBy: { sortOrder: 'asc' },
       });
-      if (sampleDiv) {
-        const psc = await prisma.periodStructureClass.findUnique({
-          where: { classId: sampleDiv.classId },
-        });
-        if (psc) {
-          const allSlots = await prisma.slot.findMany({
-            where: { workingDay: { periodStructureId: psc.periodStructureId } },
-            orderBy: { sortOrder: 'asc' },
+      for (const sl of allSlots) {
+        if (!slotMap.has(sl.sortOrder)) {
+          slotMap.set(sl.sortOrder, {
+            slotType: sl.slotType,
+            slotNumber: sl.slotNumber,
+            startTime: sl.startTime,
+            endTime: sl.endTime,
+            sortOrder: sl.sortOrder,
           });
-          for (const sl of allSlots) {
-            if (!slotMap.has(sl.sortOrder)) {
-              slotMap.set(sl.sortOrder, {
-                slotType: sl.slotType,
-                slotNumber: sl.slotNumber,
-                startTime: sl.startTime,
-                endTime: sl.endTime,
-                sortOrder: sl.sortOrder,
-              });
-            }
-          }
         }
       }
     }
