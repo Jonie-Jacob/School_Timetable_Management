@@ -4,6 +4,7 @@ import {
   NotFoundError,
   ConflictError,
   AppError,
+  flagAffectedTimetables,
   type CreateSubjectDto,
   type UpdateSubjectDto,
   type PaginationParams,
@@ -82,25 +83,95 @@ export class SubjectService {
       }
     }
 
-    return prisma.subject.update({
+    const updated = await prisma.subject.update({
       where: { id },
       data: { ...(input.name ? { name: input.name } : {}) },
     });
+
+    if (input.name) {
+      await flagAffectedTimetables({
+        schoolId,
+        academicYearId,
+        entityType: 'SUBJECT',
+        entityId: id,
+        changeDescription: `Subject name changed to '${input.name}'`,
+      });
+    }
+
+    return updated;
   }
 
-  async delete(schoolId: string, academicYearId: string, id: string) {
+  async delete(schoolId: string, academicYearId: string, id: string, confirm: boolean = false) {
     await this.getById(schoolId, academicYearId, id);
 
-    // Prevent deleting a subject referenced by active division assignments
-    const assignmentCount = await prisma.divisionAssignment.count({
+    // Check for active division assignments
+    const assignments = await prisma.divisionAssignment.findMany({
       where: { subjectId: id, deletedAt: null },
+      select: { id: true, divisionId: true },
     });
-    if (assignmentCount > 0) {
+
+    if (assignments.length > 0 && !confirm) {
+      // Return 409 with affected info so the client can ask user to confirm
+      const affectedDivisionIds = [...new Set(assignments.map(a => a.divisionId))];
+      const affectedTimetables = await prisma.timetable.findMany({
+        where: {
+          divisionId: { in: affectedDivisionIds },
+          schoolId,
+        },
+        select: { id: true, divisionId: true },
+      });
+
       throw new AppError(
-        'Cannot delete subject with active division assignments. Remove assignments first.',
-        400,
-        'BAD_REQUEST',
+        JSON.stringify({
+          message: 'Subject has active assignments. Confirm to proceed with cascade deletion.',
+          affectedDivisions: affectedDivisionIds.length,
+          affectedTimetables: affectedTimetables.length,
+        }),
+        409,
+        'CONFIRM_REQUIRED',
       );
+    }
+
+    if (assignments.length > 0) {
+      // Cascade: nullify timetable slots referencing these assignments
+      const assignmentIds = assignments.map(a => a.id);
+
+      await prisma.timetableSlot.updateMany({
+        where: { divisionAssignmentId: { in: assignmentIds } },
+        data: { divisionAssignmentId: null },
+      });
+
+      // Flag affected timetables as OUTDATED
+      const affectedDivisionIds = [...new Set(assignments.map(a => a.divisionId))];
+      const affectedTimetables = await prisma.timetable.findMany({
+        where: {
+          divisionId: { in: affectedDivisionIds },
+          schoolId,
+        },
+      });
+
+      for (const tt of affectedTimetables) {
+        await prisma.timetable.update({
+          where: { id: tt.id },
+          data: { status: 'OUTDATED' },
+        });
+
+        await prisma.timetableNotification.create({
+          data: {
+            schoolId,
+            timetableId: tt.id,
+            divisionId: tt.divisionId,
+            conflictType: 'SUBJECT_DELETED',
+            changeDescription: `Subject was deleted. ${assignmentIds.length} assignment(s) affected. Timetable slots set to empty.`,
+          },
+        });
+      }
+
+      // Soft-delete the assignments
+      await prisma.divisionAssignment.updateMany({
+        where: { id: { in: assignmentIds } },
+        data: { deletedAt: new Date() },
+      });
     }
 
     await softDelete('subject', id, schoolId);

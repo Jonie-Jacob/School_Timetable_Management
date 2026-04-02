@@ -28,8 +28,27 @@ export const setWorkingDaysSchema = z.object({
   days: z.array(z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'])).min(1),
 });
 
+export const addSlotSchema = z.object({
+  slotType: z.enum(['PERIOD', 'INTERVAL', 'LUNCH_BREAK']),
+  startTime: z.string().regex(timeRegex, 'Must be HH:mm'),
+  endTime: z.string().regex(timeRegex, 'Must be HH:mm'),
+});
+
+export const updateSlotSchema = z.object({
+  slotType: z.enum(['PERIOD', 'INTERVAL', 'LUNCH_BREAK']).optional(),
+  startTime: z.string().regex(timeRegex, 'Must be HH:mm').optional(),
+  endTime: z.string().regex(timeRegex, 'Must be HH:mm').optional(),
+});
+
+export const reorderSlotsSchema = z.object({
+  slotIds: z.array(z.string().uuid()).min(1),
+});
+
 export type CreatePeriodStructureDto = z.infer<typeof createPeriodStructureSchema>;
 export type UpdatePeriodStructureDto = z.infer<typeof updatePeriodStructureSchema>;
 export type AssignPeriodStructureDto = z.infer<typeof assignPeriodStructureSchema>;
 export type SetWorkingDaysDto = z.infer<typeof setWorkingDaysSchema>;
 export type SlotEntry = z.infer<typeof slotEntrySchema>;
+export type AddSlotDto = z.infer<typeof addSlotSchema>;
+export type UpdateSlotDto = z.infer<typeof updateSlotSchema>;
+export type ReorderSlotsDto = z.infer<typeof reorderSlotsSchema>;

@@ -19,6 +19,7 @@ export {
   type PaginationParams,
   parseBody,
   invokeLambda,
+  flagAffectedTimetables,
 } from './helpers';
 
 // Middleware
@@ -51,8 +52,10 @@ export {
   type UpdateAcademicYearDto,
   createClassSchema,
   updateClassSchema,
+  updateSortOrderSchema,
   type CreateClassDto,
   type UpdateClassDto,
+  type UpdateSortOrderDto,
   createDivisionSchema,
   updateDivisionSchema,
   type CreateDivisionDto,
@@ -87,9 +90,15 @@ export {
   updatePeriodStructureSchema,
   assignPeriodStructureSchema,
   setWorkingDaysSchema,
+  addSlotSchema,
+  updateSlotSchema,
+  reorderSlotsSchema,
   type CreatePeriodStructureDto,
   type UpdatePeriodStructureDto,
   type AssignPeriodStructureDto,
   type SetWorkingDaysDto,
   type SlotEntry,
+  type AddSlotDto,
+  type UpdateSlotDto,
+  type ReorderSlotsDto,
 } from './models';

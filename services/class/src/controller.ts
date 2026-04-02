@@ -4,6 +4,7 @@ import {
   parseBody, authMiddleware, academicYearMiddleware,
   createClassSchema, updateClassSchema,
   createDivisionSchema, updateDivisionSchema,
+  updateSortOrderSchema,
 } from '@timetable/shared';
 import { ClassService } from './service';
 
@@ -49,6 +50,14 @@ export class ClassController {
     const ctx = await academicYearMiddleware(event, auth);
     await service.delete(ctx.schoolId, ctx.academicYearId, id);
     return noContent();
+  }
+
+  async updateSortOrder(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const body = parseBody(event, updateSortOrderSchema);
+    const result = await service.updateSortOrder(ctx.schoolId, ctx.academicYearId, body);
+    return success(result);
   }
 
   async addDivision(event: APIGatewayProxyEventV2, classId: string): Promise<APIGatewayProxyResultV2> {

@@ -287,35 +287,6 @@ export class TimetableService {
     return updated;
   }
 
-  // ── Publish Timetable ──
-
-  async publishTimetable(schoolId: string, timetableId: string) {
-    const timetable = await prisma.timetable.findFirst({
-      where: { id: timetableId, schoolId },
-    });
-    if (!timetable) throw new NotFoundError('Timetable', timetableId);
-
-    if (timetable.status === TimetableStatus.OUTDATED) {
-      throw new AppError(
-        'Cannot publish an outdated timetable. Please regenerate first.',
-        400,
-        'TIMETABLE_OUTDATED',
-      );
-    }
-
-    // "Publish" means confirming the generated timetable — dismiss all notifications
-    await prisma.timetableNotification.updateMany({
-      where: { timetableId, schoolId, dismissed: false },
-      data: { dismissed: true },
-    });
-
-    return {
-      id: timetable.id,
-      status: timetable.status,
-      message: 'Timetable published successfully. All conflict notifications dismissed.',
-    };
-  }
-
   // ── Get Conflicts ──
 
   async getConflicts(schoolId: string, timetableId: string) {

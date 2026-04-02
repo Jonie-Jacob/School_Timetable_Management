@@ -14,3 +14,11 @@ export const updateClassSchema = z.object({
 
 export type CreateClassDto = z.infer<typeof createClassSchema>;
 export type UpdateClassDto = z.infer<typeof updateClassSchema>;
+
+export const updateSortOrderSchema = z.object({
+  order: z.array(z.object({
+    classId: z.string().uuid(),
+    sortOrder: z.number().int().min(0),
+  })).min(1),
+});
+export type UpdateSortOrderDto = z.infer<typeof updateSortOrderSchema>;

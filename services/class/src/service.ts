@@ -2,6 +2,7 @@ import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
   type CreateClassDto, type UpdateClassDto,
   type CreateDivisionDto, type UpdateDivisionDto,
+  type UpdateSortOrderDto,
 } from '@timetable/shared';
 
 export class ClassService {
@@ -100,6 +101,29 @@ export class ClassService {
     }
 
     await softDelete('class', id, schoolId);
+  }
+
+  async updateSortOrder(schoolId: string, academicYearId: string, input: UpdateSortOrderDto) {
+    // Verify all class IDs belong to this school
+    const classIds = input.order.map((o: { classId: string; sortOrder: number }) => o.classId);
+    const classes = await prisma.class.findMany({
+      where: { id: { in: classIds }, schoolId, academicYearId, deletedAt: null },
+    });
+    if (classes.length !== classIds.length) {
+      throw new NotFoundError('Class', 'some class IDs not found');
+    }
+
+    // Update sort order in a transaction
+    await prisma.$transaction(
+      input.order.map((o: { classId: string; sortOrder: number }) =>
+        prisma.class.update({
+          where: { id: o.classId },
+          data: { sortOrder: o.sortOrder },
+        })
+      )
+    );
+
+    return { updated: input.order.length };
   }
 
   // ── Division CRUD ──

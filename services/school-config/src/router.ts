@@ -44,24 +44,68 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.deletePeriodStructure(event, psIdMatch[1]);
   }
 
-  // --- Working Days ---
+  // --- Working Days (nested under period structures) ---
 
-  if (method === 'PUT' && path === '/config/working-days') {
-    return controller.setWorkingDays(event);
+  // PUT /config/period-structures/:id/working-days
+  const workingDaysPutMatch = path.match(/^\/config\/period-structures\/([^/]+)\/working-days$/);
+  if (method === 'PUT' && workingDaysPutMatch) {
+    return controller.setWorkingDays(event, workingDaysPutMatch[1]);
   }
 
-  if (method === 'GET' && path === '/config/working-days') {
-    return controller.getWorkingDays(event);
+  // GET /config/period-structures/:id/working-days
+  const workingDaysGetMatch = path.match(/^\/config\/period-structures\/([^/]+)\/working-days$/);
+  if (method === 'GET' && workingDaysGetMatch) {
+    return controller.getWorkingDays(event, workingDaysGetMatch[1]);
   }
 
-  // --- Slots ---
+  // --- Slots (nested under period structures) ---
 
-  if (method === 'POST' && path === '/config/slots/generate') {
-    return controller.generateSlots(event);
+  // POST /config/period-structures/:id/days/:dayId/copy-from/:sourceDayId
+  const copyDaySlotsMatch = path.match(/^\/config\/period-structures\/([^/]+)\/days\/([^/]+)\/copy-from\/([^/]+)$/);
+  if (method === 'POST' && copyDaySlotsMatch) {
+    return controller.copyDaySlots(event, copyDaySlotsMatch[1], copyDaySlotsMatch[2], copyDaySlotsMatch[3]);
   }
 
-  if (method === 'GET' && path === '/config/slots') {
-    return controller.getSlots(event);
+  // PUT /config/period-structures/:id/days/:dayId/slots/reorder
+  const reorderSlotsMatch = path.match(/^\/config\/period-structures\/([^/]+)\/days\/([^/]+)\/slots\/reorder$/);
+  if (method === 'PUT' && reorderSlotsMatch) {
+    return controller.reorderSlots(event, reorderSlotsMatch[1], reorderSlotsMatch[2]);
+  }
+
+  // PUT /config/period-structures/:id/days/:dayId/slots/:slotId
+  const updateSlotMatch = path.match(/^\/config\/period-structures\/([^/]+)\/days\/([^/]+)\/slots\/([^/]+)$/);
+  if (method === 'PUT' && updateSlotMatch) {
+    return controller.updateSlot(event, updateSlotMatch[1], updateSlotMatch[2], updateSlotMatch[3]);
+  }
+
+  // DELETE /config/period-structures/:id/days/:dayId/slots/:slotId
+  const deleteSlotMatch = path.match(/^\/config\/period-structures\/([^/]+)\/days\/([^/]+)\/slots\/([^/]+)$/);
+  if (method === 'DELETE' && deleteSlotMatch) {
+    return controller.deleteSlot(event, deleteSlotMatch[1], deleteSlotMatch[2], deleteSlotMatch[3]);
+  }
+
+  // POST /config/period-structures/:id/days/:dayId/slots
+  const addSlotMatch = path.match(/^\/config\/period-structures\/([^/]+)\/days\/([^/]+)\/slots$/);
+  if (method === 'POST' && addSlotMatch) {
+    return controller.addSlot(event, addSlotMatch[1], addSlotMatch[2]);
+  }
+
+  // POST /config/period-structures/:id/slots/generate
+  const generateSlotsMatch = path.match(/^\/config\/period-structures\/([^/]+)\/slots\/generate$/);
+  if (method === 'POST' && generateSlotsMatch) {
+    return controller.generateSlots(event, generateSlotsMatch[1]);
+  }
+
+  // GET /config/period-structures/:id/slots
+  const getSlotsMatch = path.match(/^\/config\/period-structures\/([^/]+)\/slots$/);
+  if (method === 'GET' && getSlotsMatch) {
+    return controller.getSlots(event, getSlotsMatch[1]);
+  }
+
+  // POST /config/period-structures/:id/reset
+  const resetMatch = path.match(/^\/config\/period-structures\/([^/]+)\/reset$/);
+  if (method === 'POST' && resetMatch) {
+    return controller.resetToDefault(event, resetMatch[1]);
   }
 
   throw new AppError(`Route not found: ${method} ${path}`, 404, 'ROUTE_NOT_FOUND');

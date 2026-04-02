@@ -636,7 +636,8 @@ Implement division assignments — the core link between divisions, subjects, an
    - Validation: teacher must teach the subject (check `teacher_subjects`). Uses **Lambda invoke** to Teacher Service if needed, or direct DB query.
    - Elective groups: a group of mutually exclusive subjects scheduled in the same slot. All subjects in the group get the same `periods_per_week`.
    - Elective assignment: links a division to an elective group, overriding individual subject assignments for those subjects.
-   - Duplicate prevention: cannot assign the same subject twice to the same division (unless one is an elective replacement).
+   - Duplicate prevention: cannot assign the same subject + same teacher twice to the same division. The same subject with a **different teacher** is allowed (multi-teacher pattern — e.g., English: Teacher X — 3 periods, Teacher Y — 2 periods). The sum of weightages for the same subject represents the total periods/week.
+   - **Cross-division elective enforcement**: When assigning an elective group to a division, if the same group is already assigned to another division of the same class, the system enforces the same teachers across all linked divisions. Changing a teacher in one division updates all linked divisions automatically.
    - `periods_per_week` must be a positive integer.
    - **Scheduling preferences**: Each assignment may carry an optional `scheduling_preferences` JSONB field with preferred/excluded days, preferred/excluded period ranges, adjacent preference, max/min periods per day, and a constraint type (HARD/SOFT). Preferences are validated for consistency (e.g., preferred and excluded days must not overlap). For elective group assignments, all assignments in the group must share identical preferences.
 4. **Update Postman collection**: Add `Assignment` and `Elective Group` folders.
@@ -862,7 +863,9 @@ Implement the genetic algorithm engine that generates optimal timetables. This i
    - Flatten all divisions × slots into a single chromosome.
 
 4. **Implement fitness function** (`ga/fitness.py`):
-   - Hard constraints (H1–H6): teacher no double-booking, correct periods_per_week, teacher availability, no breaks assigned, elective group parallel alignment, teacher-subject match.
+   - Hard constraints (H1–H6, H9–H10): teacher no double-booking, correct periods_per_week, teacher availability, no breaks assigned, elective group parallel alignment, teacher-subject match.
+   - **H9**: Cross-division elective co-scheduling — same elective group across divisions of the same class must occupy identical `(day, slot)` positions.
+   - **H10**: Adjacent periods same teacher — when the same subject has consecutive periods on a day, they must be the same teacher.
    - Soft constraints (S1–S4): subject spread across days, weightage-based period preference, avoid consecutive same-subject, teacher workload balance.
    - Hard violations → heavy penalty. Soft violations → weighted penalty.
 

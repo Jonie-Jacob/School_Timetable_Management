@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs basename:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

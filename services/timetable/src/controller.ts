@@ -41,12 +41,6 @@ export class TimetableController {
     return success(result);
   }
 
-  async publishTimetable(event: APIGatewayProxyEventV2, timetableId: string): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
-    const result = await service.publishTimetable(auth.schoolId!, timetableId);
-    return success(result);
-  }
-
   async getConflicts(event: APIGatewayProxyEventV2, timetableId: string): Promise<APIGatewayProxyResultV2> {
     const auth = authMiddleware(event);
     const result = await service.getConflicts(auth.schoolId!, timetableId);

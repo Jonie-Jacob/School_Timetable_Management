@@ -2,3 +2,4 @@ export { success, paginated, created, accepted, noContent, errorResponse } from 
 export { parsePagination, type PaginationParams } from './pagination';
 export { parseBody } from './validate';
 export { invokeLambda } from './lambdaInvoke';
+export { flagAffectedTimetables } from './notificationHelper';

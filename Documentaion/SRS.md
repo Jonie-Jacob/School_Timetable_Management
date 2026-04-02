@@ -1222,12 +1222,13 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 **Business Logic**:
 - Divisions are optional — a class may have zero divisions.
 - Division labels: for classes without a stream requirement, just a letter (e.g., "A"). With stream: letter + stream name (e.g., "B — Science").
-- The same subject may appear multiple times per division with **different teachers**.
+- The same subject may appear multiple times per division with **different teachers** (multi-teacher for one subject). The same subject + same division + **same teacher** is NOT allowed (duplicate prevention). The sum of weightages for the same subject across all teachers represents the total periods/week for that subject.
 - Each assignment has an optional `assistant_teacher_id`. The assistant must be qualified for the subject and must not be the same as the primary teacher.
 - **Elective groups** are school-level entities (not per-division). An elective group has a name and 2+ member subjects. When assigned to a division:
   - One `division_assignment` row is created per subject in the group, all sharing the same `elective_group_id` and the same `weightage`.
   - Each assignment within the group must have a **different teacher** (students split into parallel sessions).
   - During timetable generation, all assignments in an elective group are scheduled into the **same time slot(s)**.
+- **Cross-division elective enforcement**: When assigning an elective group to a division, the system checks if the same elective group is already assigned to another division of the same class. If so, the teachers must match. The API either auto-fills the teachers from the existing assignment or validates that the provided teachers match.
 - Copy division: creates a new division and duplicates all `division_assignments` (including elective group links) from the source. No timetable is generated for the copy.
 - The API returns a `totalWeightage` (sum of all assignment weightages) and `availablePeriods` (total period slots per week from the period structure) for the division, so the UI can show over/under-allocation.
 
@@ -3309,6 +3310,18 @@ The elective group model spans three tables:
 | asgn-1 | Biology | Anu S Nair | 9 | eg-bio-cs |
 | asgn-2 | Computer Science | Swetha | 9 | eg-bio-cs |
 
+#### 9.3.4 Cross-Division Elective Assignment
+
+When the same elective group is assigned to multiple divisions of the **same class** (e.g., XII A and XII B both receive "Bio/Maths"):
+
+1. Students from all linked divisions **physically regroup** during the elective period — all Bio students from XII A + B attend one session, all Maths students attend another.
+2. Because students regroup, each subject in the group has **one teacher** serving all combined students. The system **enforces the same teachers** across all divisions sharing the elective group within the same class.
+3. When assigning the elective group to the second (or subsequent) division, the system auto-fills the teachers from the first division's assignment. The user cannot change teachers independently per division — changing the teacher for one division updates all linked divisions.
+4. Cross-division electives are restricted to **the same class**. They cannot span different classes (e.g., XI and XII).
+5. The timetable generation engine treats all linked divisions as a single scheduling unit for this elective group — the `(day, slot)` positions must be identical across all divisions. This is a **hard constraint** (H9).
+
+**Detection**: The system identifies cross-division electives by checking: same `elective_group_id` + divisions belonging to the same `class_id`. No additional schema field is needed.
+
 #### 9.3.3 Display in the Assignments Table
 
 Elective group assignments are visually grouped in the UI:
@@ -3346,6 +3359,7 @@ During genetic algorithm execution, elective groups impose these **hard constrai
 | **No teacher clash** | Each subject in the group has a different teacher. The GA must ensure none of these teachers are scheduled elsewhere in the same slot (across all divisions). |
 | **Weightage match** | The number of slots assigned to the group must equal the `weightage` value. Since all subjects share the same weightage, they automatically get the same count. |
 | **Adjacency (if enabled)** | If `adjacencyConstraint` is on and the group has >1 slot on the same day, the slots must be adjacent (no break or other subject between them). |
+| **Cross-division co-scheduling** | When the same elective group is assigned to multiple divisions of the same class, all those divisions must have the elective group in the exact same `(working_day_id, slot_id)` positions. The GA must align these across division timetables. |
 
 ### 9.5 Timetable Display
 
@@ -3578,6 +3592,8 @@ Each violation adds a **large penalty** (1000 points per occurrence) to the fitn
 | H6 | **Elective group co-scheduling** | All assignments sharing the same `elective_group_id` must occupy the **exact same set** of `(day, slot)` positions. |
 | H7 | **Scheduling preference — day/period (hard)** | When an assignment has `constraintType = 'HARD'`: the subject must not appear on `excludedDays`, must not appear in `excludedPeriodRange`, must appear only on `preferredDays` (if specified), and must appear only in `preferredPeriodRange` (if specified). |
 | H8 | **Scheduling preference — limits (hard)** | When `constraintType = 'HARD'`: `maxPeriodsPerDay` and `minPeriodsPerDay` must be respected. |
+| H9 | **Cross-division elective co-scheduling** | When the same elective group is assigned to multiple divisions of the same class, all divisions must have the elective group's subjects scheduled in the exact same `(day, slot)` positions. |
+| H10 | **Adjacent periods — same teacher** | When the same subject has adjacent (back-to-back) periods on the same day for a division, all those adjacent periods must be assigned to the same teacher (within the multi-teacher assignment set). |
 
 #### 10.6.2 Soft Constraints (Optimized But Can Be Relaxed)
 
@@ -3617,6 +3633,8 @@ def fitness(chromosome: list[int], context: GenerationContext) -> float:
     # Scheduling preferences
     score -= 1000 * count_hard_preference_day_period_violations(chromosome, context)
     score -= 1000 * count_hard_preference_limit_violations(chromosome, context)
+    score -= 1000 * count_cross_division_elective_violations(chromosome, context)
+    score -= 1000 * count_adjacent_same_teacher_violations(chromosome, context)
     score -= 8 * count_soft_preference_day_period_violations(chromosome, context)
     score -= 6 * count_soft_preference_limit_violations(chromosome, context)
     score -= 7 * count_soft_preference_adjacency_violations(chromosome, context)

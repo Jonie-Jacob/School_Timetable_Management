@@ -42,12 +42,6 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.overrideSlot(event, slotMatch[1]);
   }
 
-  // Publish timetable: POST /timetables/:id/publish
-  const publishMatch = path.match(/^\/timetables\/([^/]+)\/publish$/);
-  if (method === 'POST' && publishMatch) {
-    return controller.publishTimetable(event, publishMatch[1]);
-  }
-
   // Get conflicts: GET /timetables/:id/conflicts
   const conflictsMatch = path.match(/^\/timetables\/([^/]+)\/conflicts$/);
   if (method === 'GET' && conflictsMatch) {

@@ -4,6 +4,7 @@ import {
   NotFoundError,
   ConflictError,
   AppError,
+  flagAffectedTimetables,
   type CreateTeacherDto,
   type UpdateTeacherDto,
   type SetTeacherSubjectsDto,
@@ -114,24 +115,106 @@ export class TeacherService {
     if (input.name !== undefined) data.name = input.name;
     if (input.contact !== undefined) data.contact = input.contact;
 
-    return prisma.teacher.update({ where: { id }, data });
+    const updated = await prisma.teacher.update({ where: { id }, data });
+
+    if (input.name !== undefined || input.contact !== undefined) {
+      const changes: string[] = [];
+      if (input.name !== undefined) changes.push(`name changed to '${input.name}'`);
+      if (input.contact !== undefined) changes.push(`contact updated`);
+
+      await flagAffectedTimetables({
+        schoolId,
+        academicYearId,
+        entityType: 'TEACHER',
+        entityId: id,
+        changeDescription: `Teacher ${changes.join(', ')}`,
+      });
+    }
+
+    return updated;
   }
 
-  async delete(schoolId: string, academicYearId: string, id: string) {
+  async delete(schoolId: string, academicYearId: string, id: string, confirm: boolean = false) {
     await this.getById(schoolId, academicYearId, id);
 
-    const assignmentCount = await prisma.divisionAssignment.count({
+    // Check for active assignments where teacher is primary or assistant
+    const assignments = await prisma.divisionAssignment.findMany({
       where: {
         deletedAt: null,
-        OR: [{ teacherId: id }, { assistantTeacherId: id }],
+        OR: [
+          { teacherId: id },
+          { assistantTeacherId: id },
+        ],
       },
+      select: { id: true, divisionId: true, teacherId: true, assistantTeacherId: true },
     });
-    if (assignmentCount > 0) {
+
+    if (assignments.length > 0 && !confirm) {
+      const affectedDivisionIds = [...new Set(assignments.map(a => a.divisionId))];
+      const affectedTimetables = await prisma.timetable.findMany({
+        where: { divisionId: { in: affectedDivisionIds }, schoolId },
+        select: { id: true, divisionId: true },
+      });
+
       throw new AppError(
-        'Cannot delete teacher with active division assignments. Remove assignments first.',
-        400,
-        'BAD_REQUEST',
+        JSON.stringify({
+          message: 'Teacher has active assignments. Confirm to proceed with cascade deletion.',
+          affectedAssignments: assignments.length,
+          affectedTimetables: affectedTimetables.length,
+        }),
+        409,
+        'CONFIRM_REQUIRED',
       );
+    }
+
+    if (assignments.length > 0) {
+      const primaryAssignmentIds = assignments.filter(a => a.teacherId === id).map(a => a.id);
+      const assistantAssignmentIds = assignments.filter(a => a.assistantTeacherId === id).map(a => a.id);
+
+      // Nullify timetable slots for assignments where this teacher is primary
+      if (primaryAssignmentIds.length > 0) {
+        await prisma.timetableSlot.updateMany({
+          where: { divisionAssignmentId: { in: primaryAssignmentIds } },
+          data: { divisionAssignmentId: null },
+        });
+
+        // Soft-delete primary assignments
+        await prisma.divisionAssignment.updateMany({
+          where: { id: { in: primaryAssignmentIds } },
+          data: { deletedAt: new Date() },
+        });
+      }
+
+      // Clear assistant teacher from assignments where this teacher is assistant
+      if (assistantAssignmentIds.length > 0) {
+        await prisma.divisionAssignment.updateMany({
+          where: { id: { in: assistantAssignmentIds } },
+          data: { assistantTeacherId: null },
+        });
+      }
+
+      // Flag affected timetables as OUTDATED
+      const affectedDivisionIds = [...new Set(assignments.map(a => a.divisionId))];
+      const affectedTimetables = await prisma.timetable.findMany({
+        where: { divisionId: { in: affectedDivisionIds }, schoolId },
+      });
+
+      for (const tt of affectedTimetables) {
+        await prisma.timetable.update({
+          where: { id: tt.id },
+          data: { status: 'OUTDATED' },
+        });
+
+        await prisma.timetableNotification.create({
+          data: {
+            schoolId,
+            timetableId: tt.id,
+            divisionId: tt.divisionId,
+            conflictType: 'TEACHER_DELETED',
+            changeDescription: `Teacher was deleted. Affected assignments removed or updated. Timetable slots set to empty.`,
+          },
+        });
+      }
     }
 
     await softDelete('teacher', id, schoolId);
@@ -168,6 +251,14 @@ export class TeacherService {
           ]
         : []),
     ]);
+
+    await flagAffectedTimetables({
+      schoolId,
+      academicYearId,
+      entityType: 'TEACHER',
+      entityId: teacherId,
+      changeDescription: `Teacher qualifications updated (${input.subjectIds.length} subject(s))`,
+    });
 
     return this.getById(schoolId, academicYearId, teacherId);
   }
@@ -211,6 +302,14 @@ export class TeacherService {
           ]
         : []),
     ]);
+
+    await flagAffectedTimetables({
+      schoolId,
+      academicYearId,
+      entityType: 'AVAILABILITY',
+      entityId: teacherId,
+      changeDescription: `Teacher availability updated (${input.unavailableSlots.length} unavailable slot(s))`,
+    });
 
     return this.getById(schoolId, academicYearId, teacherId);
   }

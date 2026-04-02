@@ -26,6 +26,11 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.addDivision(event, divisionsMatch[1]);
   }
 
+  // Batch update sort order: PUT /classes/sort-order
+  if (method === 'PUT' && path === '/classes/sort-order') {
+    return controller.updateSortOrder(event);
+  }
+
   // Class routes: /classes/:id
   const idMatch = path.match(/^\/classes\/([^/]+)$/);
 

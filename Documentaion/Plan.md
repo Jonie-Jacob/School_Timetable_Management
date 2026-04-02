@@ -109,11 +109,12 @@
 ### BR-9 · Subject–Teacher–Weightage Assignment (per Division)
 
 1. Subjects and their corresponding teachers are assigned at the **division level**.
-2. The **same subject may be assigned to a division more than once**, each time with a different teacher (e.g., two teachers sharing a subject in one class division).
-3. Each subject–teacher assignment carries a **weightage**, defined as the number of periods per week that subject–teacher pair should be taught.
-4. Each subject–teacher assignment may optionally have an **assistant teacher** co-assigned (BR-16). The assistant teacher shares the same period slots as the primary teacher for that assignment and carries no independent weightage.
-5. The assistant teacher co-assignment may be added, changed, or removed independently at any time without altering the primary assignment or regenerating the timetable.
-6. Each assignment may optionally have **scheduling preferences** (BR-17) that influence when the subject is placed in the timetable.
+2. The **same subject may be assigned to a division more than once**, each time with a **different teacher** and an **independent weightage** (e.g., English in VII-A: Teacher X — 3 periods/week, Teacher Y — 2 periods/week). The same subject + same teacher combination may not appear twice.
+3. Each subject–teacher assignment carries a **weightage**, defined as the number of periods per week that specific teacher should teach that subject to the division. The sum of all teacher weightages for the same subject in a division represents the total periods per week for that subject.
+4. When the same subject has **adjacent/clubbed periods** on the same day (i.e., scheduled back-to-back), all adjacent periods must be assigned to the **same teacher**. The timetable engine shall enforce this as a hard constraint.
+5. Each subject–teacher assignment may optionally have an **assistant teacher** co-assigned (BR-16). The assistant teacher shares the same period slots as the primary teacher for that assignment and carries no independent weightage.
+6. The assistant teacher co-assignment may be added, changed, or removed independently at any time without altering the primary assignment or regenerating the timetable.
+7. Each assignment may optionally have **scheduling preferences** (BR-17) that influence when the subject is placed in the timetable.
 
 ---
 
@@ -231,6 +232,15 @@
 8. **Editing an elective group definition** (adding/removing subjects) after it has been assigned to divisions triggers a warning. Removing a subject deletes the corresponding assignment rows and flags affected timetables as `OUTDATED`.
 9. **Deleting an elective group** that is assigned to divisions requires confirmation. On deletion, linked assignments become standalone (no longer co-scheduled) and affected timetables are flagged as `OUTDATED`.
 10. Conflict detection (BR-10, BR-11, BR-12) shall apply to all teachers within an elective group — none of the group's teachers may be double-booked at the group's scheduled slots.
+
+#### Cross-Division Elective Groups
+
+11. The same elective group may be assigned to **multiple divisions within the same class** (e.g., XII A, XII B, and XII C all share "Bio/Maths"). This enables students from different divisions to **physically regroup** — all Bio students attend one session, all Maths students attend another — regardless of their home division.
+12. Cross-division electives are limited to divisions of the **same class**. They shall not span different classes (e.g., XI and XII cannot share an elective).
+13. When the same elective group is assigned to a second (or subsequent) division of the same class, the system shall **enforce the same teachers** as the first division's assignment. Since students physically regroup across divisions, each subject is taught by **one teacher** serving all combined students.
+14. The timetable generation engine shall co-schedule cross-division elective slots into the **exact same** `(day, slot)` positions across **all linked divisions**. This is a hard constraint — generation fails if the slots cannot be aligned.
+15. In the timetable grid, cross-division elective cells shall display a visual indicator (e.g., "⟐ Shared: XII A, B, C") showing which divisions are linked.
+16. Modifying the teacher for one division's elective assignment shall automatically update all other divisions sharing the same elective group within the same class.
 
 ---
 

@@ -1,5 +1,6 @@
 import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
+  flagAffectedTimetables,
   type CreateAssignmentDto, type UpdateAssignmentDto,
   type CreateElectiveGroupDto, type UpdateElectiveGroupDto,
   type AddElectiveSubjectDto,
@@ -31,19 +32,20 @@ export class AssignmentService {
       await this.ensureTeacherExists(schoolId, input.assistantTeacherId);
     }
 
-    // Duplicate prevention: same subject + division (unless different elective group)
+    // Duplicate prevention: same subject + division + teacher combination
     const existing = await prisma.divisionAssignment.findFirst({
       where: {
         schoolId,
         academicYearId,
         divisionId,
         subjectId: input.subjectId,
+        teacherId: input.teacherId,
         electiveGroupId: input.electiveGroupId ?? null,
         deletedAt: null,
       },
     });
     if (existing) {
-      throw new ConflictError('This subject is already assigned to this division');
+      throw new ConflictError('This subject is already assigned to this teacher in this division');
     }
 
     if (input.electiveGroupId) {
@@ -60,6 +62,7 @@ export class AssignmentService {
         assistantTeacherId: input.assistantTeacherId ?? null,
         weightage: input.weightage,
         electiveGroupId: input.electiveGroupId ?? null,
+        schedulingPreferences: input.schedulingPreferences ?? undefined,
       },
       include: {
         subject: { select: { id: true, name: true } },
@@ -88,8 +91,9 @@ export class AssignmentService {
     if (input.teacherId !== undefined) data.teacherId = input.teacherId;
     if (input.assistantTeacherId !== undefined) data.assistantTeacherId = input.assistantTeacherId;
     if (input.weightage !== undefined) data.weightage = input.weightage;
+    if (input.schedulingPreferences !== undefined) data.schedulingPreferences = input.schedulingPreferences;
 
-    return prisma.divisionAssignment.update({
+    const updated = await prisma.divisionAssignment.update({
       where: { id },
       data,
       include: {
@@ -99,6 +103,35 @@ export class AssignmentService {
         electiveGroup: { select: { id: true, name: true } },
       },
     });
+
+    // If this is an elective group assignment and teacher changed, sync across divisions
+    if (input.teacherId && assignment.electiveGroupId) {
+      const div = await prisma.division.findFirst({ where: { id: assignment.divisionId } });
+      if (div) {
+        await prisma.divisionAssignment.updateMany({
+          where: {
+            schoolId,
+            academicYearId,
+            electiveGroupId: assignment.electiveGroupId,
+            subjectId: assignment.subjectId,
+            deletedAt: null,
+            divisionId: { not: assignment.divisionId },
+            division: { classId: div.classId },
+          },
+          data: { teacherId: input.teacherId },
+        });
+      }
+    }
+
+    await flagAffectedTimetables({
+      schoolId,
+      academicYearId,
+      entityType: 'ASSIGNMENT',
+      entityId: id,
+      changeDescription: `Assignment updated (${Object.keys(data).join(', ')} changed)`,
+    });
+
+    return updated;
   }
 
   async deleteAssignment(schoolId: string, academicYearId: string, id: string) {
@@ -114,6 +147,15 @@ export class AssignmentService {
     if (slotCount > 0) {
       throw new AppError('Cannot delete assignment with active timetable slots. Remove timetable data first.', 400, 'BAD_REQUEST');
     }
+
+    await flagAffectedTimetables({
+      schoolId,
+      academicYearId,
+      entityType: 'ASSIGNMENT',
+      entityId: id,
+      changeDescription: `Assignment deleted`,
+      isDeleted: true,
+    });
 
     await softDelete('divisionAssignment', id, schoolId);
   }
@@ -141,13 +183,41 @@ export class AssignmentService {
       await this.ensureTeacherExists(schoolId, input.assistantTeacherId);
     }
 
-    // Duplicate check: same subject + division + elective group
+    // Cross-division elective enforcement: if same elective group is assigned
+    // to another division of the same class, enforce same teachers
+    const division = await this.ensureDivisionExists(schoolId, divisionId);
+    const existingCrossDivAssignments = await prisma.divisionAssignment.findMany({
+      where: {
+        schoolId,
+        academicYearId,
+        electiveGroupId: input.electiveGroupId,
+        subjectId: input.subjectId,
+        deletedAt: null,
+        divisionId: { not: divisionId },
+        division: { classId: division.classId, deletedAt: null },
+      },
+      select: { teacherId: true, divisionId: true },
+    });
+
+    if (existingCrossDivAssignments.length > 0) {
+      const requiredTeacherId = existingCrossDivAssignments[0].teacherId;
+      if (input.teacherId !== requiredTeacherId) {
+        throw new AppError(
+          `This elective group is shared across divisions of the same class. The teacher for this subject must be '${requiredTeacherId}' to match the existing assignment.`,
+          400,
+          'CROSS_DIVISION_TEACHER_MISMATCH',
+        );
+      }
+    }
+
+    // Duplicate check: same subject + division + elective group + teacher
     const existing = await prisma.divisionAssignment.findFirst({
       where: {
         schoolId,
         academicYearId,
         divisionId,
         subjectId: input.subjectId,
+        teacherId: input.teacherId,
         electiveGroupId: input.electiveGroupId,
         deletedAt: null,
       },
@@ -166,6 +236,7 @@ export class AssignmentService {
         assistantTeacherId: input.assistantTeacherId ?? null,
         weightage: input.weightage,
         electiveGroupId: input.electiveGroupId,
+        schedulingPreferences: input.schedulingPreferences ?? undefined,
       },
       include: {
         subject: { select: { id: true, name: true } },
@@ -230,7 +301,7 @@ export class AssignmentService {
       if (existing) throw new ConflictError(`Elective group '${input.name}' already exists`);
     }
 
-    return prisma.electiveGroup.update({
+    const updated = await prisma.electiveGroup.update({
       where: { id },
       data: { ...(input.name !== undefined && { name: input.name }) },
       include: {
@@ -241,6 +312,16 @@ export class AssignmentService {
         },
       },
     });
+
+    await flagAffectedTimetables({
+      schoolId,
+      academicYearId,
+      entityType: 'ELECTIVE_GROUP',
+      entityId: id,
+      changeDescription: `Elective group updated${input.name ? ` (name changed to '${input.name}')` : ''}`,
+    });
+
+    return updated;
   }
 
   async deleteElectiveGroup(schoolId: string, academicYearId: string, id: string) {
@@ -252,6 +333,15 @@ export class AssignmentService {
     if (assignmentCount > 0) {
       throw new AppError('Cannot delete elective group with active assignments. Remove assignments first.', 400, 'BAD_REQUEST');
     }
+
+    await flagAffectedTimetables({
+      schoolId,
+      academicYearId,
+      entityType: 'ELECTIVE_GROUP',
+      entityId: id,
+      changeDescription: `Elective group deleted`,
+      isDeleted: true,
+    });
 
     await softDelete('electiveGroup', id, schoolId);
   }

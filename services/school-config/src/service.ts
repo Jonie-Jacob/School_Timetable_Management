@@ -7,6 +7,9 @@ import {
   type UpdatePeriodStructureDto,
   type AssignPeriodStructureDto,
   type SetWorkingDaysDto,
+  type AddSlotDto,
+  type UpdateSlotDto,
+  type ReorderSlotsDto,
   type SlotEntry,
   DayOfWeek,
 } from '@timetable/shared';
@@ -309,7 +312,284 @@ export class SchoolConfigService {
     return this.groupSlotsByDay(workingDays, slots);
   }
 
+  // ── Reset to Default ───────────────────────────────────────
+
+  async resetToDefault(schoolId: string, academicYearId: string, periodStructureId: string) {
+    const ps = await prisma.periodStructure.findFirst({
+      where: { id: periodStructureId, schoolId, academicYearId, deletedAt: null },
+    });
+    if (!ps) {
+      throw new NotFoundError('Period structure', periodStructureId);
+    }
+
+    // Set working days to Mon-Fri
+    const defaultDays: Array<'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY'> = [
+      'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY',
+    ];
+    await this.setWorkingDays(schoolId, academicYearId, periodStructureId, { days: defaultDays });
+
+    // Load newly created working days
+    const workingDays = await prisma.workingDay.findMany({
+      where: { periodStructureId, schoolId },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    // Define the default schedule: 8 periods with standard breaks
+    const defaultSlots: Array<{ type: 'PERIOD' | 'INTERVAL' | 'LUNCH_BREAK'; startTime: string; endTime: string }> = [
+      { type: 'PERIOD',      startTime: '09:00', endTime: '09:45' },
+      { type: 'PERIOD',      startTime: '09:45', endTime: '10:30' },
+      { type: 'INTERVAL',    startTime: '10:30', endTime: '10:45' },
+      { type: 'PERIOD',      startTime: '10:45', endTime: '11:30' },
+      { type: 'PERIOD',      startTime: '11:30', endTime: '12:15' },
+      { type: 'LUNCH_BREAK', startTime: '12:15', endTime: '12:45' },
+      { type: 'PERIOD',      startTime: '12:45', endTime: '13:30' },
+      { type: 'PERIOD',      startTime: '13:30', endTime: '14:15' },
+      { type: 'INTERVAL',    startTime: '14:15', endTime: '14:30' },
+      { type: 'PERIOD',      startTime: '14:30', endTime: '15:15' },
+      { type: 'PERIOD',      startTime: '15:15', endTime: '16:00' },
+    ];
+
+    const slotData = workingDays.flatMap((day) => {
+      let periodNumber = 0;
+      return defaultSlots.map((slot, index) => {
+        if (slot.type === 'PERIOD') periodNumber++;
+        return {
+          schoolId,
+          workingDayId: day.id,
+          slotType: slot.type,
+          slotNumber: slot.type === 'PERIOD' ? periodNumber : null,
+          startTime: this.parseTime(slot.startTime),
+          endTime: this.parseTime(slot.endTime),
+          sortOrder: index + 1,
+        };
+      });
+    });
+
+    await prisma.slot.createMany({ data: slotData });
+
+    return this.getSlots(schoolId, periodStructureId);
+  }
+
+  // ── Individual Slot Operations ────────────────────────────
+
+  async addSlot(schoolId: string, periodStructureId: string, dayId: string, input: AddSlotDto) {
+    // Verify the working day belongs to this period structure
+    const workingDay = await prisma.workingDay.findFirst({
+      where: { id: dayId, periodStructureId, schoolId },
+    });
+    if (!workingDay) {
+      throw new NotFoundError('Working day', dayId);
+    }
+
+    // Get current max sortOrder for this day
+    const maxSlot = await prisma.slot.findFirst({
+      where: { workingDayId: dayId, schoolId },
+      orderBy: { sortOrder: 'desc' },
+    });
+    const sortOrder = (maxSlot?.sortOrder ?? 0) + 1;
+
+    // Calculate slotNumber for PERIOD type
+    let slotNumber: number | null = null;
+    if (input.slotType === 'PERIOD') {
+      const periodCount = await prisma.slot.count({
+        where: { workingDayId: dayId, schoolId, slotType: 'PERIOD' },
+      });
+      slotNumber = periodCount + 1;
+    }
+
+    const slot = await prisma.slot.create({
+      data: {
+        schoolId,
+        workingDayId: dayId,
+        slotType: input.slotType as 'PERIOD' | 'INTERVAL' | 'LUNCH_BREAK',
+        slotNumber,
+        startTime: this.parseTime(input.startTime),
+        endTime: this.parseTime(input.endTime),
+        sortOrder,
+      },
+    });
+
+    return slot;
+  }
+
+  async updateSlot(schoolId: string, periodStructureId: string, dayId: string, slotId: string, input: UpdateSlotDto) {
+    const workingDay = await prisma.workingDay.findFirst({
+      where: { id: dayId, periodStructureId, schoolId },
+    });
+    if (!workingDay) {
+      throw new NotFoundError('Working day', dayId);
+    }
+
+    const existing = await prisma.slot.findFirst({
+      where: { id: slotId, workingDayId: dayId, schoolId },
+    });
+    if (!existing) {
+      throw new NotFoundError('Slot', slotId);
+    }
+
+    const data: Record<string, unknown> = {};
+    if (input.startTime) data.startTime = this.parseTime(input.startTime);
+    if (input.endTime) data.endTime = this.parseTime(input.endTime);
+    if (input.slotType) data.slotType = input.slotType;
+
+    const updated = await prisma.slot.update({
+      where: { id: slotId },
+      data,
+    });
+
+    // If slot type changed, recalculate period numbers for all slots in this day
+    if (input.slotType && input.slotType !== existing.slotType) {
+      await this.recalculatePeriodNumbers(dayId, schoolId);
+    }
+
+    return updated;
+  }
+
+  async deleteSlot(schoolId: string, periodStructureId: string, dayId: string, slotId: string, confirm: boolean) {
+    const workingDay = await prisma.workingDay.findFirst({
+      where: { id: dayId, periodStructureId, schoolId },
+    });
+    if (!workingDay) {
+      throw new NotFoundError('Working day', dayId);
+    }
+
+    const existing = await prisma.slot.findFirst({
+      where: { id: slotId, workingDayId: dayId, schoolId },
+    });
+    if (!existing) {
+      throw new NotFoundError('Slot', slotId);
+    }
+
+    // Check for timetable slot references
+    const timetableSlotCount = await prisma.timetableSlot.count({
+      where: { slotId, schoolId },
+    });
+
+    if (timetableSlotCount > 0 && !confirm) {
+      throw new ConflictError(
+        `This slot is referenced by ${timetableSlotCount} timetable slot(s). Pass ?confirm=true to delete and nullify timetable references.`,
+      );
+    }
+
+    if (timetableSlotCount > 0 && confirm) {
+      // Nullify timetable slot references by deleting them
+      await prisma.timetableSlot.deleteMany({
+        where: { slotId, schoolId },
+      });
+    }
+
+    await prisma.slot.delete({ where: { id: slotId } });
+
+    // Recalculate period numbers for remaining slots
+    await this.recalculatePeriodNumbers(dayId, schoolId);
+  }
+
+  async reorderSlots(schoolId: string, periodStructureId: string, dayId: string, input: ReorderSlotsDto) {
+    const workingDay = await prisma.workingDay.findFirst({
+      where: { id: dayId, periodStructureId, schoolId },
+    });
+    if (!workingDay) {
+      throw new NotFoundError('Working day', dayId);
+    }
+
+    // Verify all slot IDs belong to this day
+    const existingSlots = await prisma.slot.findMany({
+      where: { workingDayId: dayId, schoolId },
+    });
+    const existingIds = new Set(existingSlots.map((s) => s.id));
+    for (const id of input.slotIds) {
+      if (!existingIds.has(id)) {
+        throw new NotFoundError('Slot', id);
+      }
+    }
+
+    // Update sort orders in a transaction
+    await prisma.$transaction(
+      input.slotIds.map((id: string, index: number) =>
+        prisma.slot.update({
+          where: { id },
+          data: { sortOrder: index + 1 },
+        }),
+      ),
+    );
+
+    // Recalculate period numbers based on new order
+    await this.recalculatePeriodNumbers(dayId, schoolId);
+
+    // Return updated slots
+    return prisma.slot.findMany({
+      where: { workingDayId: dayId, schoolId },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  async copyDaySlots(schoolId: string, periodStructureId: string, targetDayId: string, sourceDayId: string) {
+    // Verify both days belong to this period structure
+    const [sourceDay, targetDay] = await Promise.all([
+      prisma.workingDay.findFirst({ where: { id: sourceDayId, periodStructureId, schoolId } }),
+      prisma.workingDay.findFirst({ where: { id: targetDayId, periodStructureId, schoolId } }),
+    ]);
+    if (!sourceDay) {
+      throw new NotFoundError('Source working day', sourceDayId);
+    }
+    if (!targetDay) {
+      throw new NotFoundError('Target working day', targetDayId);
+    }
+
+    // Get source day slots
+    const sourceSlots = await prisma.slot.findMany({
+      where: { workingDayId: sourceDayId, schoolId },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    // Delete existing target day slots
+    await prisma.slot.deleteMany({
+      where: { workingDayId: targetDayId, schoolId },
+    });
+
+    // Deep-copy slots from source to target
+    if (sourceSlots.length > 0) {
+      await prisma.slot.createMany({
+        data: sourceSlots.map((slot) => ({
+          schoolId,
+          workingDayId: targetDayId,
+          slotType: slot.slotType,
+          slotNumber: slot.slotNumber,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          sortOrder: slot.sortOrder,
+        })),
+      });
+    }
+
+    // Return the new target day slots
+    return prisma.slot.findMany({
+      where: { workingDayId: targetDayId, schoolId },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
   // ── Private helpers ────────────────────────────────────────
+
+  private async recalculatePeriodNumbers(dayId: string, schoolId: string) {
+    const slots = await prisma.slot.findMany({
+      where: { workingDayId: dayId, schoolId },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    let periodNumber = 0;
+    const updates = slots.map((slot) => {
+      const newNumber = slot.slotType === 'PERIOD' ? ++periodNumber : null;
+      return prisma.slot.update({
+        where: { id: slot.id },
+        data: { slotNumber: newNumber },
+      });
+    });
+
+    if (updates.length > 0) {
+      await prisma.$transaction(updates);
+    }
+  }
 
   private validatePeriods(periods: SlotEntry[]) {
     // Unique order numbers

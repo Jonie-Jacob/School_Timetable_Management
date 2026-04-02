@@ -1819,7 +1819,9 @@ Split into 2 sub-parts.
 │  ┌──────────┬───────────┬────────────────┬──────┬───────┬──────────┐│
 │  │ Subject  │ Teacher   │ Asst. Teacher  │ Wt.  │ Prefs │ Actions  ││
 │  ├──────────┼───────────┼────────────────┼──────┼───────┼──────────┤│
-│  │ English  │ Soumya    │ —              │  5   │ —     │ ✎  🗑    ││
+│  │ English  │ Soumya    │ —              │  3   │ —     │ ✎  🗑    ││
+│  │ English  │ Lin Maria │ —              │  2   │ —     │ ✎  🗑    ││
+│  │  ↳ Total: 5 periods/week                                        ││
 │  │ Physics  │ Divya     │ —              │  7   │ ⚙    │ ✎  🗑    ││
 │  │ Chemistry│ Lin Maria │ —              │  7   │ —     │ ✎  🗑    ││
 │  ├──────────┴───────────┴────────────────┴──────┴───────┴──────────┤│
@@ -1893,6 +1895,8 @@ Split into 2 sub-parts.
 | Assistant Teacher | Searchable dropdown (optional) | Filtered: qualified for the subject, excludes selected primary teacher |
 | Weightage | Number input | Min 1. Represents periods per week. |
 
+**Multi-teacher note**: The same subject may be assigned multiple times with different teachers. When adding a subject that already exists in this division, the Subject dropdown allows re-selection but the Teacher dropdown excludes teachers already assigned to that subject in this division. The Weightage for each teacher entry is independent.
+
 **Scheduling Preferences** (collapsible section, all fields optional):
 
 | Field | Type | Behavior |
@@ -1915,6 +1919,8 @@ On mobile: full-screen form instead of modal.
 | Elective Group | Dropdown | All elective groups for this school/year |
 | For each subject in group: Teacher | Searchable dropdown | Qualified teachers, no duplicate across subjects in the group |
 | Weightage | Number input | Single value applied to all subjects in the group |
+
+**Cross-division note**: When assigning an elective group that is already assigned to another division of the same class (e.g., XII B already has "Bio/Maths"), the teacher fields are **auto-filled and locked** to match the existing assignment. A notice is shown: "This elective group is shared with Division B. Teachers are synchronized across all divisions." Changing a teacher updates all linked divisions.
 
 **Scheduling Preferences** (same as regular assignment — applies to the entire elective group):
 
@@ -2208,6 +2214,10 @@ function getSubjectColor(subjectName: string): string {
 │                                                                      │
 │  🟡 Preference warning: Physics prefers periods 1-3, placed in P6   │
 │     → Click to highlight affected cell                              │
+│                                                                      │
+│  🔴 Adjacent teacher conflict: English P3-P4 on Mon assigned to     │
+│     different teachers (Soumya P3, Lin Maria P4). Must be same.     │
+│     → Click to highlight affected cells                             │
 │                                                                      │
 │  ────────────────────────────────────────────────────────────────── │
 │  3 conflicts (1 error, 2 warnings)                                   │

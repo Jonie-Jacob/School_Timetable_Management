@@ -56,7 +56,8 @@ export class TeacherController {
   async delete(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
     const auth = authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
-    await service.delete(ctx.schoolId, ctx.academicYearId, id);
+    const confirm = event.queryStringParameters?.confirm === 'true';
+    await service.delete(ctx.schoolId, ctx.academicYearId, id, confirm);
     return noContent();
   }
 

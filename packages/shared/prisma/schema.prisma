@@ -385,18 +385,19 @@ model ElectiveGroupSubject {
 // ──────────────────────────────────────────────
 
 model DivisionAssignment {
-  id                 String    @id @default(uuid())
-  schoolId           String    @map("school_id")
-  divisionId         String    @map("division_id")
-  subjectId          String    @map("subject_id")
-  teacherId          String    @map("teacher_id")
-  assistantTeacherId String?   @map("assistant_teacher_id")
-  weightage          Int
-  electiveGroupId    String?   @map("elective_group_id")
-  academicYearId     String    @map("academic_year_id")
-  deletedAt          DateTime? @map("deleted_at")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  id                      String    @id @default(uuid())
+  schoolId                String    @map("school_id")
+  divisionId              String    @map("division_id")
+  subjectId               String    @map("subject_id")
+  teacherId               String    @map("teacher_id")
+  assistantTeacherId      String?   @map("assistant_teacher_id")
+  weightage               Int
+  electiveGroupId         String?   @map("elective_group_id")
+  academicYearId          String    @map("academic_year_id")
+  schedulingPreferences   Json?     @map("scheduling_preferences") @db.JsonB
+  deletedAt               DateTime? @map("deleted_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
 
   school           School         @relation(fields: [schoolId], references: [id])
   division         Division       @relation(fields: [divisionId], references: [id])
