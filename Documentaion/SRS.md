@@ -54,7 +54,7 @@ The system covers the following functional areas:
 |------|-------------|
 | **Authentication** | School account registration, email-based login, password reset, JWT session management via AWS Cognito. |
 | **Academic Year Management** | Create, activate, and archive academic years. All operational data is scoped to the active academic year. |
-| **Class & Division Management** | User-defined classes (not limited to a fixed set). Each class may optionally have one or more divisions. Classes XI–XII-style divisions support an additional stream/group label. User-defined sort ordering for classes. |
+| **Class & Division Management** | User-defined classes (not limited to a fixed set). Each class may optionally have zero or more divisions. Classes XI–XII-style divisions support an additional stream/group label. User-defined sort ordering for classes. |
 | **Period Structure Configuration** | Multiple named period structures, each with configurable working days (any combination of Mon–Sun) and independent per-day slot sequences (periods, intervals, lunch breaks). |
 | **Subject Management** | CRUD for subjects with unique names per school. Deletion warnings when actively assigned. |
 | **Teacher Management** | CRUD for teacher records with qualification-to-subject mapping. Per-day/per-period availability configuration. |
@@ -127,7 +127,7 @@ The system covers the following functional areas:
 | **AWS Fargate** | Used exclusively for the timetable generation engine (Python). No execution time limit, configurable vCPU/memory. |
 | **VPC cold starts** | Lambda functions attached to the VPC may experience cold-start latency (~1–3s). Mitigated by AWS Hyperplane ENIs; provisioned concurrency may be added later. |
 | **Cognito limits** | Free tier: 50,000 MAUs. Sufficient for pilot. |
-| **Single language constraint** | UI is English-only. No internationalization framework is required. |
+| **Single language constraint** | UI is English-only at launch. The frontend uses react-i18next infrastructure to support future translation without rework. |
 | **No unit tests** | Automated testing is out of scope for the initial build. Manual validation will be used. |
 | **Browser only** | No native mobile app. Responsive web design (mobile, tablet, laptop, desktop) via Tailwind CSS breakpoints. |
 
@@ -321,7 +321,7 @@ The following features are explicitly **out of scope** for the initial pilot rel
 | **Source Control** | GitHub | Monorepo |
 | **Package Manager** | npm | Workspaces for monorepo |
 | **Monitoring** | Amazon CloudWatch | Logs, metrics, alarms |
-| **Language** | English only | No i18n framework |
+| **Language** | English only (launch) | Frontend uses react-i18next skeleton for future i18n readiness |
 
 ### 3.2 Frontend Stack Detail
 
@@ -334,7 +334,7 @@ The following features are explicitly **out of scope** for the initial pilot rel
 #### 3.2.2 Tailwind CSS
 
 - Utility-first CSS with the Tailwind configuration file defining:
-  - **Four responsive breakpoints**: `sm` (640px), `md` (768px), `lg` (1024px), `xl` (1440px).
+  - **Four responsive breakpoints**: `sm` (< 640px), `md` (640px–1023px), `lg` (1024px–1439px), `xl` (≥ 1440px).
   - **Custom color palette** for the application brand.
   - **Dark mode** via the `class` strategy — a `.dark` class on `<html>` toggles all `dark:` variants. User preference is stored in `localStorage` and respected on page load (with system preference as default).
 - No additional CSS-in-JS library. Global styles are minimal (Tailwind's `@layer base` for typography resets).
@@ -560,7 +560,7 @@ functions:
 | `amazon-cognito-identity-js` | Cognito auth SDK |
 | `dayjs` | Date/time utilities |
 | `lucide-react` | Icon library |
-| `react-hot-toast` | Toast notifications |
+| `sonner` | Toast notifications |
 | `recharts` | Dashboard charts (optional) |
 | `clsx` | Conditional class names |
 
@@ -1147,7 +1147,7 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 **Business Logic**:
 - Subject names must be **unique** within a school (case-insensitive).
 - On GET, the response includes `assignedTeacherCount` and `assignedDivisionCount` for display in the list view.
-- On DELETE, if the subject is referenced in any `division_assignments` or `elective_group_subjects`, the API returns `409 Conflict` with a list of affected divisions. The client may re-send with `?confirm=true` to cascade soft-delete.
+- On DELETE, if the subject is referenced in any `division_assignments` or `elective_group_subjects`, the API returns `409 Conflict` with a list of affected divisions and timetables. The client may re-send with `?confirm=true` to cascade soft-delete. Upon confirmed deletion, any `timetable_slots` referencing assignments for this subject are set to `division_assignment_id = NULL` (empty slots). Affected timetables are flagged as `OUTDATED` and conflict notifications of type `SUBJECT_DELETED` are created.
 
 **Events Emitted** (sync invoke → Notification Service):
 - `SUBJECT_UPDATED` — name change may affect timetable display.
@@ -1910,6 +1910,7 @@ The Export Service additionally attaches a second layer (`ChromiumLayer`) contai
 | `elective_group_id` | UUID | FK → elective_groups.id, NULLABLE | If part of an elective group |
 | `academic_year_id` | UUID | FK → academic_years.id, NOT NULL | |
 | `deleted_at` | TIMESTAMP | NULLABLE | |
+| `scheduling_preferences` | JSONB | NULLABLE | Optional scheduling preferences (see Section 9A) |
 | `created_at` | TIMESTAMP | NOT NULL | |
 | `updated_at` | TIMESTAMP | NOT NULL | |
 
@@ -3402,6 +3403,70 @@ When an elective group is modified (subjects added/removed, group deleted), the 
 
 ---
 
+## 9A. Scheduling Preferences Model
+
+### 9A.1 Concept
+
+Each division assignment (BR-9) may carry optional **scheduling preferences** that influence when the timetable generation engine places the subject. Preferences allow schools to express constraints such as "lab subjects should be in morning periods" or "PE should not be on Mondays".
+
+### 9A.2 Preference Types
+
+| Preference | Field | Type | Description |
+|-----------|-------|------|-------------|
+| **Preferred days** | `preferredDays` | `integer[]` | Day-of-week values (0=Mon … 6=Sun) the subject should be scheduled on. |
+| **Excluded days** | `excludedDays` | `integer[]` | Day-of-week values the subject must/should not be scheduled on. |
+| **Preferred period range** | `preferredPeriodRange` | `{ min: integer, max: integer }` | Period slot numbers the subject should preferably be placed in (e.g., `{ min: 1, max: 3 }`). |
+| **Excluded period range** | `excludedPeriodRange` | `{ min: integer, max: integer }` | Period slot numbers the subject must/should not be placed in. |
+| **Prefer adjacent periods** | `preferAdjacentPeriods` | `boolean` | When the subject has >1 period on the same day, prefer placing them consecutively. |
+| **Max periods per day** | `maxPeriodsPerDay` | `integer` | Upper limit on how many periods of this subject may appear on a single day. |
+| **Min periods per day** | `minPeriodsPerDay` | `integer` | When the subject is scheduled on a day, it must appear at least this many times. |
+
+### 9A.3 Constraint Type
+
+Each assignment's scheduling preferences carry a **constraint type** field:
+
+| Value | Behavior |
+|-------|----------|
+| `HARD` | The timetable engine **must** respect the preference. If the preference cannot be satisfied, generation fails with an error message identifying the unsatisfiable preference. Hard preferences are added to the GA's hard constraint set (H7–H8). |
+| `SOFT` | The engine **attempts** to honour the preference but may relax it if necessary. Violations appear as warnings in the timetable editor's conflict panel. Soft preferences are added to the GA's soft constraint set (S5–S8). |
+
+### 9A.4 JSON Schema
+
+The `scheduling_preferences` JSONB column on `division_assignments` uses this schema:
+
+```json
+{
+  "constraintType": "HARD | SOFT",
+  "preferredDays": [0, 2, 4],
+  "excludedDays": [1, 3],
+  "preferredPeriodRange": { "min": 1, "max": 3 },
+  "excludedPeriodRange": { "min": 7, "max": 8 },
+  "preferAdjacentPeriods": true,
+  "maxPeriodsPerDay": 2,
+  "minPeriodsPerDay": 1
+}
+```
+
+All fields except `constraintType` are optional. If `scheduling_preferences` is NULL, no preferences apply.
+
+### 9A.5 Elective Group Interaction
+
+When an assignment belongs to an elective group (Section 9), the scheduling preferences apply to the **entire group as a unit**. All subjects in the group share the same time slots, so the preference governs the group's placement. The preferences are stored on each individual `division_assignment` row but must be identical across all assignments in the same elective group for a given division.
+
+### 9A.6 Copy Division
+
+When a division is copied (BR-8), the `scheduling_preferences` JSON is duplicated to each new assignment. The copied preferences may be independently edited afterwards.
+
+### 9A.7 GA Engine Integration
+
+See Section 10.6 for how scheduling preferences map to hard and soft constraints in the genetic algorithm.
+
+---
+
+*End of Section 9A.*
+
+---
+
 ## 10. Timetable Generation Engine
 
 ### 10.1 Overview
@@ -3511,6 +3576,8 @@ Each violation adds a **large penalty** (1000 points per occurrence) to the fitn
 | H4 | **Teacher clash (cross-division)** | The teacher must not be scheduled in the same `(day, slot)` in any other division's existing timetable. |
 | H5 | **Assistant teacher clash** | If an assignment has an assistant teacher, the assistant must not be double-booked in the same slot (intra- or cross-division). |
 | H6 | **Elective group co-scheduling** | All assignments sharing the same `elective_group_id` must occupy the **exact same set** of `(day, slot)` positions. |
+| H7 | **Scheduling preference — day/period (hard)** | When an assignment has `constraintType = 'HARD'`: the subject must not appear on `excludedDays`, must not appear in `excludedPeriodRange`, must appear only on `preferredDays` (if specified), and must appear only in `preferredPeriodRange` (if specified). |
+| H8 | **Scheduling preference — limits (hard)** | When `constraintType = 'HARD'`: `maxPeriodsPerDay` and `minPeriodsPerDay` must be respected. |
 
 #### 10.6.2 Soft Constraints (Optimized But Can Be Relaxed)
 
@@ -3522,6 +3589,10 @@ Each violation adds a **small penalty** (1–10 points per occurrence).
 | S2 | **Teacher workload balance** | 3 | Avoid scheduling all of a teacher's periods in a single day. Penalize if a teacher has >5 periods on one day. |
 | S3 | **Adjacency** (when enabled) | 10 | If `ADJACENCY_CONSTRAINT=true`: when a subject appears >1 time on the same day, the periods must be consecutive (no gap). Each non-adjacent pair adds penalty. |
 | S4 | **First/last period variety** | 2 | Avoid scheduling the same subject in the first period every day. |
+| S5 | **Scheduling preference — day/period (soft)** | 8 | When `constraintType = 'SOFT'`: penalize placement on excluded days/periods or outside preferred days/periods. |
+| S6 | **Scheduling preference — limits (soft)** | 6 | When `constraintType = 'SOFT'`: penalize exceeding `maxPeriodsPerDay` or falling below `minPeriodsPerDay`. |
+| S7 | **Scheduling preference — adjacency (soft)** | 7 | When `preferAdjacentPeriods = true` and `constraintType = 'SOFT'`: penalize non-adjacent periods of the same subject on the same day (per-assignment, independent of the global adjacency toggle). |
+| S8 | **Scheduling preference — adjacency (hard as soft fallback)** | 10 | When `preferAdjacentPeriods = true` and `constraintType = 'HARD'`: treated as S3-equivalent but with higher weight. |
 
 ### 10.7 Fitness Function
 
@@ -3543,6 +3614,12 @@ def fitness(chromosome: list[int], context: GenerationContext) -> float:
     if context.adjacency_enabled:
         score -= 10 * count_adjacency_violations(chromosome, context)
     score -= 2 * count_first_period_repetition(chromosome, context)
+    # Scheduling preferences
+    score -= 1000 * count_hard_preference_day_period_violations(chromosome, context)
+    score -= 1000 * count_hard_preference_limit_violations(chromosome, context)
+    score -= 8 * count_soft_preference_day_period_violations(chromosome, context)
+    score -= 6 * count_soft_preference_limit_violations(chromosome, context)
+    score -= 7 * count_soft_preference_adjacency_violations(chromosome, context)
 
     return score
 ```
@@ -3713,7 +3790,7 @@ This section details every screen in the application. Screens map 1-to-1 with Re
 | **User menu** | Dropdown: School Name (display), Logout. |
 | **Sidebar** | Collapsible. Active route highlighted. Badge on "Notifications" if unread count >0. |
 | **Breadcrumb** | Shown on nested pages (e.g., Classes > Class VII > Division A > Assignments). Clickable segments for navigation. |
-| **Toast notifications** | `react-hot-toast` bottom-right. Success (green), Error (red), Info (blue). Auto-dismiss after 4 seconds. |
+| **Toast notifications** | `sonner` bottom-right. Success (green), Error (red), Info (blue). Auto-dismiss after 4 seconds. |
 
 **Responsive behavior**:
 

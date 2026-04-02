@@ -461,25 +461,30 @@ Implement the School Config Service, responsible for period structures (bell sch
 |--------|------|-------------|
 | POST | `/config/period-structures` | Create period structure |
 | GET | `/config/period-structures` | List period structures |
-| GET | `/config/period-structures/:id` | Get period structure with slots |
-| PUT | `/config/period-structures/:id` | Update period structure |
+| GET | `/config/period-structures/:id` | Get period structure with working days, slots, and assigned classes |
+| PUT | `/config/period-structures/:id` | Update period structure (name, working days, assigned classes) |
 | DELETE | `/config/period-structures/:id` | Soft-delete period structure |
+| POST | `/config/period-structures/:id/reset` | Reset to default (Mon–Fri, 8 periods, standard breaks) |
+| GET | `/config/period-structures/:id/days/:dayId/slots` | Get slot sequence for a specific day |
+| POST | `/config/period-structures/:id/days/:dayId/slots` | Add a slot to a day |
+| PUT | `/config/period-structures/:id/days/:dayId/slots/:slotId` | Update slot type, times |
+| DELETE | `/config/period-structures/:id/days/:dayId/slots/:slotId` | Delete a slot |
+| PUT | `/config/period-structures/:id/days/:dayId/slots/reorder` | Batch reorder slots within a day |
+| POST | `/config/period-structures/:id/days/:dayId/copy-from/:sourceDayId` | Copy slots from another day |
 | POST | `/config/period-structures/:id/assign` | Assign period structure to classes |
-| PUT | `/config/working-days` | Set working days for the academic year |
-| GET | `/config/working-days` | Get working days |
-| POST | `/config/slots/generate` | Generate slots matrix (days × periods) |
-| GET | `/config/slots` | Get all generated slots |
 
 ### 8.3 Tasks
 
 1. **Scaffold service** (`services/school-config/`).
-2. **Implement period structure CRUD** — a period structure is a named set of periods/breaks with timings. Classes can be assigned to different structures (e.g., Class I–IX: 8 periods, Class X–XII: 9 periods).
-3. **Implement working days management** — which days of the week are school days (e.g., Mon–Sat).
-4. **Implement slot generation** — cross-product of working days × periods → creates `slots` rows. This is a key building block for timetable generation.
+2. **Implement period structure CRUD** — a period structure has a name, a set of working days (any combination of Mon–Sun), and per-day slot sequences.
+3. **Implement per-day slot management** — each working day within a structure has its own independent ordered sequence of slots (periods, intervals, lunch breaks).
+4. **Implement class assignment** — assign classes to period structures. A class can only belong to one structure per academic year.
 5. **Business logic**:
-   - A class can only be assigned to one period structure per academic year.
-   - Slot generation is idempotent — regenerating deletes old slots and creates new ones.
-   - Breaks are included in the period structure but are not assignable slots.
+   - Working days are defined per period structure (not global). Each structure may have a different set of working days.
+   - Slot numbers for PERIOD-type slots auto-recalculate after reorder/deletion.
+   - Slot validation: warns if end_time ≤ start_time or gap/overlap with adjacent slots.
+   - Deleting a slot referenced by a timetable requires confirmation.
+   - Reset to default restores Mon–Fri, 8 periods, standard break positions.
 6. **Update Postman collection**: Add `School Config` folder.
 
 ### 8.4 Verification
@@ -514,7 +519,7 @@ Implement CRUD for subjects.
 3. **Business logic**:
    - Subject name is unique per school (case-insensitive).
    - Search filter on name.
-   - Cannot delete a subject that is referenced by active assignments.
+   - On deletion of a subject with active assignments, returns `409 Conflict` with a list of affected divisions. With `?confirm=true`: cascade soft-delete. Timetable slots referencing the subject's assignments are set to NULL (empty). Affected timetables are flagged OUTDATED via the Notification Service.
 4. **Update Postman collection**: Add `Subject` folder.
 
 ### 9.4 Verification
@@ -584,9 +589,9 @@ Implement CRUD for classes and divisions. Classes have a 1-to-many relationship 
 1. **Scaffold service** (`services/class/`).
 2. **Implement all 8 routes**.
 3. **Business logic**:
-   - Class numeric level (1–12) is unique per school.
+   - Class name is unique per school within an academic year (case-insensitive). Classes are user-defined — not limited to a fixed set.
    - Division name is unique within a class (e.g., only one "A" in Class X).
-   - Listing returns classes ordered by numeric level, each with nested divisions.
+   - Listing returns classes ordered by `sort_order`, each with nested divisions.
    - Classes XI–XII may have a `stream` field (Science, Commerce, Humanities).
    - Cannot delete a class/division that has active assignments or timetable data.
 4. **Update Postman collection**: Add `Class` folder.
@@ -610,8 +615,8 @@ Implement division assignments — the core link between divisions, subjects, an
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/divisions/:divisionId/assignments` | List all assignments for a division |
-| POST | `/divisions/:divisionId/assignments` | Create a regular assignment |
-| PUT | `/assignments/:id` | Update assignment (change teacher, periods_per_week, etc.) |
+| POST | `/divisions/:divisionId/assignments` | Create a regular assignment (with optional scheduling preferences) |
+| PUT | `/assignments/:id` | Update assignment (change teacher, periods_per_week, scheduling preferences, etc.) |
 | DELETE | `/assignments/:id` | Delete assignment |
 | POST | `/elective-groups` | Create elective group |
 | GET | `/elective-groups` | List elective groups |
@@ -633,6 +638,7 @@ Implement division assignments — the core link between divisions, subjects, an
    - Elective assignment: links a division to an elective group, overriding individual subject assignments for those subjects.
    - Duplicate prevention: cannot assign the same subject twice to the same division (unless one is an elective replacement).
    - `periods_per_week` must be a positive integer.
+   - **Scheduling preferences**: Each assignment may carry an optional `scheduling_preferences` JSONB field with preferred/excluded days, preferred/excluded period ranges, adjacent preference, max/min periods per day, and a constraint type (HARD/SOFT). Preferences are validated for consistency (e.g., preferred and excluded days must not overlap). For elective group assignments, all assignments in the group must share identical preferences.
 4. **Update Postman collection**: Add `Assignment` and `Elective Group` folders.
 
 ### 12.4 Verification
@@ -658,20 +664,18 @@ Implement timetable management — triggering generation, viewing/editing genera
 | GET | `/timetables/generate/status/:jobId` | Get generation job status |
 | GET | `/timetables/divisions/:divisionId` | Get timetable grid for a division |
 | PUT | `/timetables/slots/:slotId` | Manual override — reassign a single slot |
-| POST | `/timetables/:id/publish` | Publish a draft timetable |
 | GET | `/timetables/:id/conflicts` | Get conflicts for a timetable |
 | GET | `/timetables/teacher/:teacherId` | Get teacher's timetable view |
 
 ### 13.3 Tasks
 
 1. **Scaffold service** (`services/timetable/`).
-2. **Implement all 7 routes**.
+2. **Implement all 6 routes**.
 3. **Business logic**:
    - `POST /timetables/generate`: Create a `generation_jobs` record with status `PENDING`, then invoke Fargate task (in local dev, this will be mocked/stubbed — the actual Fargate integration happens in Phase 15).
    - `GET status`: Poll the `generation_jobs` table for status updates.
    - `GET division timetable`: Join `timetable_slots` → `assignments` → `subjects` → `teachers` → `slots` to build the full grid.
    - `PUT slot override`: Validate no hard-constraint violations (teacher double-booking, etc.) before allowing the override.
-   - `POST publish`: Change timetable status from `DRAFT` to `PUBLISHED`.
    - Conflict detection: Check all hard constraints (H1–H6) and soft constraints (S1–S4) on the current timetable state.
 4. **Mock the Fargate trigger** for local dev: Instead of launching ECS RunTask, create generation_jobs row with COMPLETED status and dummy timetable data, or use a local Python script.
 5. **Update Postman collection**: Add `Timetable` folder.
@@ -681,7 +685,6 @@ Implement timetable management — triggering generation, viewing/editing genera
 - Generation job created and status trackable.
 - Division timetable grid returns correctly structured data.
 - Manual slot override works with conflict validation.
-- Publish changes timetable status.
 
 ---
 
@@ -716,6 +719,46 @@ Implement the dashboard aggregation service that provides summary statistics for
 
 - Stats endpoint returns correct aggregates matching seeded data.
 - Recent activity returns meaningful entries.
+
+---
+
+## 14A. Phase 12A — Notification Service
+
+### 14A.1 Goal
+
+Implement the notification/invalidation service that flags timetables as outdated when upstream data changes.
+
+### 14A.2 Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/notifications` | List all active timetable notifications (paginated) |
+| PUT | `/notifications/:id/dismiss` | Dismiss a single notification |
+| PUT | `/notifications/dismiss-all` | Dismiss all notifications |
+| GET | `/notifications/count` | Get count of active notifications (for dashboard badge) |
+
+### 14A.3 Tasks
+
+1. **Scaffold service** (`services/notification/`).
+2. **Implement all 4 API routes** for notification listing and dismissal.
+3. **Implement the internal invalidation handler** — invoked synchronously by other services via Lambda invoke:
+   - Accepts payload: `{ action: 'FLAG_AFFECTED_TIMETABLES', entityType, entityId, schoolId, academicYearId }`.
+   - `entityType` can be: `TEACHER`, `SUBJECT`, `ASSIGNMENT`, `SLOT`, `STRUCTURE`, `ELECTIVE_GROUP`, `AVAILABILITY`.
+   - Queries `timetable_slots` and `division_assignments` to find all timetables referencing the changed entity.
+   - For each affected timetable, creates a `timetable_notifications` record with the conflict type and description.
+   - Updates timetable status to `OUTDATED`.
+4. **Business logic**:
+   - Dismissing a notification does NOT change the timetable back to `GENERATED` — the user must regenerate or manually fix.
+   - `GET /notifications/count` returns only non-dismissed notifications.
+   - Notifications are scoped to school_id and active academic year.
+5. **Update Postman collection**: Add `Notification` folder.
+
+### 14A.4 Verification
+
+- Other services (Teacher, Subject, Config, Assignment) can invoke the invalidation handler.
+- Affected timetables are correctly flagged as OUTDATED.
+- Notification list API returns correct data.
+- Dismiss and dismiss-all work.
 
 ---
 
@@ -1093,6 +1136,8 @@ Phase 9:  Class Service              ← Needs subjects for context, not hard de
 Phase 10: Assignment Service         ← Links divisions + subjects + teachers
               │
 Phase 11: Timetable Service          ← Reads assignments, slots, generates timetables
+              │
+Phase 12A: Notification Service      ← Invoked by Subject, Teacher, Config, Assignment services
               │
         ┌─────┼───────────┐
         │     │            │

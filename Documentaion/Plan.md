@@ -26,11 +26,11 @@
 
 ### BR-1 · Class Structure
 
-1. The system shall support classes from **Class I to Class XII**, displayed using Roman numerals.
-2. **Classes I–X**: Divisions are identified by an alphabet letter only.  
-   Example: `CLASS II B`, `CLASS X A`
-3. **Classes XI–XII**: Divisions are identified by a combination of an alphabet letter and a user-defined stream/group name.  
-   Example: `CLASS XI B SCIENCE`, `CLASS XII A COMMERCE`
+1. Classes are **user-defined** — the school can create any number of classes with any naming convention (e.g., "KG", "Nursery", "Class I", "Grade 10"). Classes are **not** limited to a fixed set.
+2. Each class has a user-defined **display order** (`sort_order`) that controls how classes are listed throughout the system. The order can be changed at any time via drag-and-drop reordering.
+3. Each class has an optional **`requires_stream`** flag. When enabled, divisions within that class must carry a stream/group label.
+   - Example without stream: `CLASS II B`, `CLASS X A`
+   - Example with stream: `CLASS XI B SCIENCE`, `CLASS XII A COMMERCE`
 4. Stream names (e.g., Science, Commerce, Humanities) shall be user-defined and not limited to a fixed set.
 
 ---
@@ -77,7 +77,8 @@
 
 1. Authorised users shall be able to **create, edit, and delete** subjects.
 2. Each subject shall have a unique name.
-3. Deletion of a subject that is actively assigned to one or more divisions shall trigger a warning. The user must confirm before proceeding.
+3. Deletion of a subject that is actively assigned to one or more divisions shall trigger a warning listing all affected divisions and timetables. The user must confirm before proceeding.
+4. Upon confirmed deletion, any timetable slots referencing the deleted subject shall become **empty slots**. Affected timetables shall be flagged as `OUTDATED` and a conflict notification of type `SUBJECT_DELETED` (with details of the missing slots) shall be created for each affected timetable.
 
 ---
 
@@ -99,9 +100,9 @@
 
 ### BR-8 · Class & Division Management
 
-1. Each class may have **one or more divisions** at any given time.
+1. Each class may have **zero or more divisions** at any given time. Divisions are optional.
 2. Divisions may be **created or removed at any time** by the user.
-3. A division may be created by **copying all subject–teacher–weightage assignments** from an existing division (from the same class or a different class). Copying does not pre-generate a timetable for the new division.
+3. A division may be created by **copying all subject–teacher–weightage assignments** (including scheduling preferences — see BR-17) from an existing division (from the same class or a different class). Copying does not pre-generate a timetable for the new division. The copied preferences can be edited independently after copying.
 
 ---
 
@@ -112,6 +113,7 @@
 3. Each subject–teacher assignment carries a **weightage**, defined as the number of periods per week that subject–teacher pair should be taught.
 4. Each subject–teacher assignment may optionally have an **assistant teacher** co-assigned (BR-16). The assistant teacher shares the same period slots as the primary teacher for that assignment and carries no independent weightage.
 5. The assistant teacher co-assignment may be added, changed, or removed independently at any time without altering the primary assignment or regenerating the timetable.
+6. Each assignment may optionally have **scheduling preferences** (BR-17) that influence when the subject is placed in the timetable.
 
 ---
 
@@ -186,6 +188,49 @@
 4. In all timetable views and exports, the assistant teacher's name shall appear alongside the primary teacher's name for the relevant period cells.
 5. Conflict detection (BR-10, BR-11, BR-12) shall apply to assistant teachers identically to primary teachers — an assistant teacher shall not be double-booked across divisions at the same period and day.
 6. The co-assignment is **optional**; most assignments will have only a primary teacher.
+
+---
+
+### BR-17 · Scheduling Preferences (per Assignment)
+
+1. Each subject–teacher–weightage assignment (BR-9) may optionally carry **scheduling preferences** that guide the timetable auto-generation engine on when to place the subject.
+2. The following preferences shall be supported:
+
+   | Preference | Description |
+   |-----------|-------------|
+   | **Preferred days** | A list of days of the week the subject should preferably be scheduled on. |
+   | **Excluded days** | A list of days the subject must/should not be scheduled on. |
+   | **Preferred period range** | A range of period slot numbers the subject should preferably be placed in (e.g., Period 1–3). |
+   | **Excluded period range** | A range of period slot numbers the subject must/should not be placed in (e.g., Period 7–8). |
+   | **Prefer adjacent periods** | When the subject has more than one period on the same day, prefer placing them in consecutive slots with no gap. |
+   | **Max periods per day** | The maximum number of periods of this subject that may appear on a single day. |
+   | **Min periods per day** | When the subject is scheduled on a day, it must appear at least this many times. |
+
+3. Each assignment's preferences shall have a **constraint type**: **Hard** or **Soft**.
+   - **Hard**: The timetable engine must respect the preference. Generation fails if the preference cannot be satisfied.
+   - **Soft**: The engine attempts to honour the preference but may relax it if necessary. Violations appear as warnings in the conflict panel.
+4. The constraint type is set once per assignment and applies to all preferences on that assignment.
+5. Preferences are optional — assignments without preferences are scheduled freely based on weightage alone.
+6. When an assignment belongs to an **elective group** (BR-18), scheduling preferences apply to the **entire elective group** as a unit (all subjects in the group share the same time slots, so the preference governs the group's placement).
+7. When a division is **copied** (BR-8), all scheduling preferences are copied to the new division's assignments and may be independently edited afterwards.
+
+---
+
+### BR-18 · Elective Groups
+
+1. An **elective group** is a named set of two or more subjects that are scheduled into the **same time slot(s)** for a division. Students in the division are split across the elective subjects, each taught by a different teacher in a parallel concurrent session.
+2. Elective groups are school-level entities scoped to the active academic year. An elective group has a **name** and **two or more member subjects**.
+3. A single subject may belong to **multiple** elective groups (e.g., "Computer Science" can appear in both "Bio/CS" and "Maths/CS" groups).
+4. When an elective group is **assigned to a division** (via the Division Assignments Editor — Screen 10):
+   - One division assignment row is created **per subject** in the group, all sharing the same elective group link and the same weightage.
+   - Each assignment within the group must have a **different teacher** (students split into parallel sessions).
+   - A single weightage value is entered and applied identically to all subjects in the group.
+5. During **timetable generation** (BR-10), all assignments in an elective group are co-scheduled into the **exact same** `(day, slot)` combinations. The engine shall additionally ensure that none of the group's teachers are double-booked.
+6. In the **timetable grid** (Screen 12), an elective group slot is displayed as a **stacked/split cell** showing all subjects and their respective teachers.
+7. During **drag-and-drop editing** (BR-11), all subjects in an elective group **move together** as a single unit. Individual subjects cannot be dragged out of the group.
+8. **Editing an elective group definition** (adding/removing subjects) after it has been assigned to divisions triggers a warning. Removing a subject deletes the corresponding assignment rows and flags affected timetables as `OUTDATED`.
+9. **Deleting an elective group** that is assigned to divisions requires confirmation. On deletion, linked assignments become standalone (no longer co-scheduled) and affected timetables are flagged as `OUTDATED`.
+10. Conflict detection (BR-10, BR-11, BR-12) shall apply to all teachers within an elective group — none of the group's teachers may be double-booked at the group's scheduled slots.
 
 ---
 
@@ -340,17 +385,33 @@
 
 ### Screen 10 — Division Assignments Editor
 
-**Purpose**: Manage subject–teacher–weightage assignments for a specific division.
+**Purpose**: Manage subject–teacher–weightage assignments for a specific division, including scheduling preferences and elective group assignments.
 
 **Contents**:
 - Breadcrumb: Class → Division.
-- Assignments table: Subject · Teacher · Assistant Teacher · Periods/Week (Weightage) · Actions (Edit · Remove).
+- Assignments table: Subject · Teacher · Assistant Teacher · Periods/Week (Weightage) · Preferences (icon/summary) · Actions (Edit · Remove).
+- Elective group assignments displayed as **grouped rows** — a group header with shared weightage, and indented subject rows beneath.
 - A visual indicator when the same subject appears more than once (permitted, different teachers).
 - **"Add Assignment"** button opens a modal:
   - Select Subject (dropdown).
   - Select Teacher (filtered to those qualified for the selected subject).
   - Select Assistant Teacher — *optional* (dropdown filtered to teachers qualified for the selected subject, excluding the primary teacher already selected).
   - Enter Weightage (number of periods per week).
+  - **Scheduling Preferences** section (collapsible, optional):
+    - Constraint Type: **Hard** / **Soft** toggle.
+    - Preferred Days: multi-select checkboxes (Mon–Sun, filtered to working days).
+    - Excluded Days: multi-select checkboxes.
+    - Preferred Period Range: start/end period number inputs.
+    - Excluded Period Range: start/end period number inputs.
+    - Prefer Adjacent Periods: toggle switch.
+    - Max Periods Per Day: number input.
+    - Min Periods Per Day: number input.
+  - Save / Cancel.
+- **"Add Elective Assignment"** button opens a modal:
+  - Select Elective Group (dropdown of groups defined for this school/year).
+  - For each subject in the group: select a Teacher (qualified, no duplicates across subjects in the group).
+  - Enter Weightage (single value applied to all subjects in the group).
+  - **Scheduling Preferences** section (same as above — applies to the entire group).
   - Save / Cancel.
 - Total weekly periods summary (sum of all weightages vs. total available periods).
 - Navigation to **Timetable Generator** (Screen 11) for this division.
@@ -420,20 +481,41 @@
 
 ---
 
+### Screen 15 — Elective Groups Management
+
+**Purpose**: Define and manage elective groups (sets of mutually parallel subjects).
+
+**Contents**:
+- Searchable, paginated table: Group Name · Member Subjects · Divisions Using This Group · Actions (Edit · Delete).
+- **"Add Elective Group"** button opens a modal:
+  - Group Name (required, unique per school/year).
+  - Select Subjects: multi-select (minimum 2 subjects required).
+  - Save / Cancel.
+- **Edit** pre-populates the modal. If the group is assigned to divisions, a warning is shown about cascade effects.
+- **Delete**: if the group is assigned to divisions, a confirmation dialog lists affected divisions and warns that linked assignments will become standalone. Affected timetables are flagged as `OUTDATED`.
+
+---
+
 ## Appendix — Constraints & Scope Boundaries
 
 | Topic | Decision |
 |-------|----------|
 | Authentication | JWT session — one school account per login (BR-15) |
+| Class structure | User-defined classes with custom naming and sort order; not limited to a fixed set (BR-1) |
+| Division optionality | Zero or more divisions per class (BR-8) |
 | Timetable scope | Per division (not per class) |
 | Period Structures | Multiple user-defined; each linked to a set of classes; per-day slot sequences; configurable working days (BR-2) |
 | Break slots | Configurable per Period Structure per working day; drag-and-drop reorder supported (BR-3) |
-| Adjacency constraint | Optional toggle per timetable generation run; off by default (Screen 11) |
+| Adjacency constraint | Optional toggle per timetable generation run; off by default (Screen 11). Also available per-assignment via scheduling preferences (BR-17). |
+| Scheduling preferences | Optional per assignment — preferred/excluded days, preferred/excluded period ranges, adjacent preference, min/max per day. Hard or Soft constraint type (BR-17). |
+| Elective groups | Named groups of 2+ subjects co-scheduled in parallel. School-level entities assigned to divisions. (BR-18) |
 | Teacher deletion | Warns if actively assigned; user confirms |
-| Subject deletion | Warns if actively assigned; user confirms |
-| Copy Division | Copies assignments only; no timetable auto-generated |
+| Subject deletion | Warns if actively assigned; user confirms. Timetable slots become empty; affected timetables flagged OUTDATED with conflict notifications (BR-5) |
+| Copy Division | Copies assignments and scheduling preferences; no timetable auto-generated (BR-8) |
 | Timing uniformity | Fully configurable per working day within each Period Structure (BR-2, BR-3) |
 | Timetable invalidation | Passive notification — keep, flag as outdated, user fixes |
+| Timetable editing | Generated timetables are editable via drag-and-drop. No publish/draft workflow. |
 | Export formats | PDF and Excel for division and teacher timetables |
 | Multi-tenancy | One school account per login; data is fully isolated between schools (BR-15) |
 | Assistant teacher | Optional co-teacher per division assignment; uses standard teacher record; no extra record type (BR-16) |
+| i18n | English only initially. Frontend uses react-i18next infrastructure for future translation support. |

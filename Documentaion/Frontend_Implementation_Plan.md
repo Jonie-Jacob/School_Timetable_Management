@@ -1816,20 +1816,20 @@ Split into 2 sub-parts.
 │                                                                      │
 │  [ + Add Assignment ]  [ + Add Elective Assignment ]                 │
 │                                                                      │
-│  ┌──────────┬───────────┬────────────────┬──────┬──────────────────┐│
-│  │ Subject  │ Teacher   │ Asst. Teacher  │ Wt.  │ Actions          ││
-│  ├──────────┼───────────┼────────────────┼──────┼──────────────────┤│
-│  │ English  │ Soumya    │ —              │  5   │ ✎  🗑            ││
-│  │ Physics  │ Divya     │ —              │  7   │ ✎  🗑            ││
-│  │ Chemistry│ Lin Maria │ —              │  7   │ ✎  🗑            ││
-│  ├──────────┴───────────┴────────────────┴──────┴──────────────────┤│
+│  ┌──────────┬───────────┬────────────────┬──────┬───────┬──────────┐│
+│  │ Subject  │ Teacher   │ Asst. Teacher  │ Wt.  │ Prefs │ Actions  ││
+│  ├──────────┼───────────┼────────────────┼──────┼───────┼──────────┤│
+│  │ English  │ Soumya    │ —              │  5   │ —     │ ✎  🗑    ││
+│  │ Physics  │ Divya     │ —              │  7   │ ⚙    │ ✎  🗑    ││
+│  │ Chemistry│ Lin Maria │ —              │  7   │ —     │ ✎  🗑    ││
+│  ├──────────┴───────────┴────────────────┴──────┴───────┴──────────┤│
 │  │ ⟐ Elective: Biology / Computer Science              Wt: 9      ││
 │  │  ├─ Biology          │ Anu S Nair    │ —              │         ││
 │  │  └─ Computer Science │ Swetha        │ —              │  ✎  🗑  ││
-│  ├──────────┬───────────┬────────────────┬──────┬──────────────────┤│
-│  │ Hindi    │ Lalitha   │ —              │  4   │ ✎  🗑            ││
-│  │ PE       │ Shijo     │ —              │  4   │ ✎  🗑            ││
-│  └──────────┴───────────┴────────────────┴──────┴──────────────────┘│
+│  ├──────────┬───────────┬────────────────┬──────┬───────┬──────────┤│
+│  │ Hindi    │ Lalitha   │ —              │  4   │ —     │ ✎  🗑    ││
+│  │ PE       │ Shijo     │ —              │  4   │ —     │ ✎  🗑    ││
+│  └──────────┴───────────┴────────────────┴──────┴───────┴──────────┘│
 │                                                                      │
 │  Total: 45 / 45 periods                                 Balanced ✓  │
 │                                                                      │
@@ -1878,6 +1878,7 @@ Split into 2 sub-parts.
 | `ElectiveGroupRow` | `features/assignments/ElectiveGroupRow.tsx` | Grouped row for elective assignments. |
 | `TotalBar` | `features/assignments/TotalBar.tsx` | Bottom bar: "Total: X / Y periods. Balanced ✓ / Unbalanced ⚠" |
 | `assignmentApi` | `features/assignments/assignmentApi.ts` | RTK Query: CRUD for assignments + elective assignments. Tags: `Assignment`. |
+| `PreferencesSection` | `features/assignments/PreferencesSection.tsx` | Collapsible scheduling preferences form section. Used in both regular and elective assignment modals. |
 
 ---
 
@@ -1892,6 +1893,19 @@ Split into 2 sub-parts.
 | Assistant Teacher | Searchable dropdown (optional) | Filtered: qualified for the subject, excludes selected primary teacher |
 | Weightage | Number input | Min 1. Represents periods per week. |
 
+**Scheduling Preferences** (collapsible section, all fields optional):
+
+| Field | Type | Behavior |
+|-------|------|----------|
+| Constraint Type | Toggle: Hard / Soft | Determines whether preferences are enforced strictly or best-effort. Default: Soft. |
+| Preferred Days | Multi-checkbox (Mon–Sun) | Only working days from the period structure are shown. |
+| Excluded Days | Multi-checkbox (Mon–Sun) | Cannot overlap with Preferred Days. Validated inline. |
+| Preferred Period Range | Two number inputs (min–max) | Period numbers within the structure's range. |
+| Excluded Period Range | Two number inputs (min–max) | Cannot overlap with Preferred Period Range. |
+| Prefer Adjacent Periods | Toggle switch | When on, the engine groups this subject's periods together on the same day. |
+| Max Periods Per Day | Number input | Must be ≥ 1 and ≤ weightage. |
+| Min Periods Per Day | Number input | Must be ≥ 1 and ≤ Max Periods Per Day. |
+
 On mobile: full-screen form instead of modal.
 
 #### Add Elective Assignment Modal:
@@ -1902,6 +1916,10 @@ On mobile: full-screen form instead of modal.
 | For each subject in group: Teacher | Searchable dropdown | Qualified teachers, no duplicate across subjects in the group |
 | Weightage | Number input | Single value applied to all subjects in the group |
 
+**Scheduling Preferences** (same as regular assignment — applies to the entire elective group):
+
+Same fields as above. Preferences govern the time slots assigned to the entire elective group. All subjects in the group are co-scheduled, so the preference applies to the group as a whole.
+
 #### Verification:
 
 - Adding/editing/deleting regular and elective assignments works
@@ -1910,6 +1928,7 @@ On mobile: full-screen form instead of modal.
 - Balanced/Unbalanced status correct
 - Generate shortcut navigates correctly
 - Mobile uses full-screen forms
+- Scheduling preferences section shows/hides in add/edit modal and persists correctly
 
 ---
 
@@ -2187,8 +2206,11 @@ function getSubjectColor(subjectName: string): string {
 │  🟡 Adjacency warning: English has non-consecutive periods on Wed   │
 │     → Click to highlight affected cells                             │
 │                                                                      │
+│  🟡 Preference warning: Physics prefers periods 1-3, placed in P6   │
+│     → Click to highlight affected cell                              │
+│                                                                      │
 │  ────────────────────────────────────────────────────────────────── │
-│  2 conflicts (1 error, 1 warning)                                    │
+│  3 conflicts (1 error, 2 warnings)                                   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
