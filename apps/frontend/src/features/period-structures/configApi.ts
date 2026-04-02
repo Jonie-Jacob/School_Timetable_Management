@@ -126,7 +126,7 @@ export const configApi = createApi({
 
     setWorkingDays: builder.mutation<WorkingDay[], { periodStructureId: string; days: string[] }>({
       query: ({ periodStructureId, days }) => ({
-        url: `/config/working-days?periodStructureId=${periodStructureId}`,
+        url: `/config/period-structures/${periodStructureId}/working-days`,
         method: 'PUT',
         body: { days },
       }),

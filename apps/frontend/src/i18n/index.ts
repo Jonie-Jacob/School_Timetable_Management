@@ -6,6 +6,7 @@ import enAuth from './locales/en/auth.json';
 import enDashboard from './locales/en/dashboard.json';
 import enAcademicYears from './locales/en/academic-years.json';
 import enPeriodStructures from './locales/en/period-structures.json';
+import enSubjects from './locales/en/subjects.json';
 
 i18n
   .use(LanguageDetector)
@@ -18,6 +19,7 @@ i18n
         dashboard: enDashboard,
         'academic-years': enAcademicYears,
         'period-structures': enPeriodStructures,
+        subjects: enSubjects,
       },
     },
     defaultNS: 'common',

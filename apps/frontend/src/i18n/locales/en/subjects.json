@@ -1,0 +1,39 @@
+{
+  "title": "Subjects",
+  "description": "Manage subjects and curriculum.",
+  "addSubject": "Add Subject",
+  "searchPlaceholder": "Search subjects...",
+  "edit": "Edit",
+  "delete": "Delete",
+  "createSuccess": "Subject created successfully.",
+  "createError": "Failed to create subject.",
+  "updateSuccess": "Subject updated successfully.",
+  "updateError": "Failed to update subject.",
+  "deleteSuccess": "Subject deleted successfully.",
+  "deleteError": "Failed to delete subject.",
+  "deleteWarning": "This subject is assigned in {{divisions}} division(s). Deleting will remove those assignments and flag {{timetables}} timetable(s) as outdated. Affected timetable slots will become empty.",
+  "deleteWarningGeneric": "This subject has active assignments. Deleting will remove those assignments and flag affected timetables as outdated.",
+  "table": {
+    "name": "Subject Name",
+    "actions": "Actions"
+  },
+  "form": {
+    "createTitle": "Add Subject",
+    "editTitle": "Edit Subject",
+    "name": "Subject Name",
+    "namePlaceholder": "Enter subject name",
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel"
+  },
+  "deleteConfirm": {
+    "title": "Delete Subject",
+    "description": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "confirm": "Delete",
+    "confirmCascade": "Delete and Remove Assignments"
+  },
+  "empty": {
+    "title": "No subjects yet",
+    "description": "Create your first subject to get started with timetable management."
+  }
+}
