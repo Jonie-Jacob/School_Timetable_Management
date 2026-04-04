@@ -15,7 +15,7 @@ export function BottomTabItem({ to, icon: Icon, label, badge, onClick }: BottomT
   const content = (isActive = false) => (
     <div className="flex flex-col items-center gap-0.5 relative">
       <div className="relative">
-        <Icon className={cn('size-5', isActive ? 'text-primary' : 'text-muted-foreground')} />
+        <Icon className={cn('size-5', isActive ? 'text-amber-500' : 'text-muted-foreground')} />
         {badge != null && badge > 0 && (
           <Badge
             variant="destructive"
@@ -25,10 +25,13 @@ export function BottomTabItem({ to, icon: Icon, label, badge, onClick }: BottomT
           </Badge>
         )}
       </div>
+      {isActive && (
+        <div className="size-1 rounded-full bg-amber-500" />
+      )}
       <span
         className={cn(
           'text-[10px] leading-tight',
-          isActive ? 'text-primary font-medium' : 'text-muted-foreground'
+          isActive ? 'text-amber-500 font-medium' : 'text-muted-foreground'
         )}
       >
         {label}

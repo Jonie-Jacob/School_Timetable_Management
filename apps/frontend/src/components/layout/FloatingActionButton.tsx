@@ -50,7 +50,7 @@ function SetupProgressRing({ progress, total }: { progress: number; total: numbe
         fill="none"
         stroke="currentColor"
         strokeWidth="3"
-        className="text-white/25"
+        className="text-amber-900/30"
       />
       <circle
         cx="22"
@@ -62,7 +62,7 @@ function SetupProgressRing({ progress, total }: { progress: number; total: numbe
         strokeDasharray={circumference}
         strokeDashoffset={offset}
         strokeLinecap="round"
-        className="text-white transition-all duration-500"
+        className="text-amber-950 transition-all duration-500"
       />
     </svg>
   );
@@ -77,7 +77,7 @@ export function FloatingActionButton() {
   if (mode === 'hidden') {
     return (
       <div className="fixed bottom-6 right-6 z-50 lg:bottom-8 lg:right-8 max-lg:bottom-20">
-        <div className="flex size-10 items-center justify-center rounded-full bg-success/90 text-white shadow-lg">
+        <div className="flex size-10 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
           <CheckCircle2 className="size-5" />
         </div>
       </div>
@@ -87,11 +87,11 @@ export function FloatingActionButton() {
   const triggerButton = (
     <button
       className={cn(
-        'flex items-center justify-center rounded-full shadow-lg transition-all',
+        'flex items-center justify-center rounded-full transition-all duration-200',
         'hover:scale-105 active:scale-95',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
-        mode === 'setup' && 'size-14 bg-primary text-white',
-        mode === 'conflict' && 'size-12 bg-warning text-white',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2',
+        mode === 'setup' && 'size-14 bg-amber-500 text-amber-950 shadow-lg shadow-amber-500/30 glow-amber',
+        mode === 'conflict' && 'size-12 bg-orange-500 text-white shadow-lg shadow-orange-500/30',
       )}
       aria-label={mode === 'setup' ? t('fab.setupLabel') : t('fab.conflictLabel')}
     >
@@ -115,7 +115,7 @@ export function FloatingActionButton() {
       <div className="fixed bottom-8 right-8 z-50">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
-          <PopoverContent side="top" align="end" className="p-4">
+          <PopoverContent side="top" align="end" className="p-4 backdrop-blur-xl">
             {mode === 'setup' ? <SetupPopoverPanel /> : <ConflictPopoverPanel />}
           </PopoverContent>
         </Popover>

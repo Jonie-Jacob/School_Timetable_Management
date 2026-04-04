@@ -27,13 +27,12 @@ export function MobileHeader() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const activeAYId = useAppSelector((s) => s.auth.activeAcademicYearId);
 
-  // Derive page title from first pathname segment
   const firstSegment = location.pathname.split('/').filter(Boolean)[0] ?? '';
   const pageTitle = SEGMENT_LABELS[firstSegment] ?? t('appName');
 
   return (
     <>
-      <header className="flex lg:hidden items-center h-12 shrink-0 border-b border-border bg-background px-3 gap-2">
+      <header className="flex lg:hidden items-center h-12 shrink-0 border-b border-border/50 backdrop-blur-xl bg-background/80 px-3 gap-2">
         <Button
           variant="ghost"
           size="icon"

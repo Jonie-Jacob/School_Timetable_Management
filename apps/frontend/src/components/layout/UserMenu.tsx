@@ -30,7 +30,7 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-2">
           <Avatar className="size-7">
-            <AvatarFallback className="bg-primary/10 text-xs text-primary">
+            <AvatarFallback className="bg-amber-500/15 text-xs text-amber-700 dark:text-amber-400">
               {(schoolName?.[0] ?? 'S').toUpperCase()}
             </AvatarFallback>
           </Avatar>

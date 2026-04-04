@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CalendarRange } from 'lucide-react';
+import { CalendarRange, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export function WelcomeState() {
@@ -8,20 +8,21 @@ export function WelcomeState() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/30 p-12 text-center">
-      <div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-6">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
+      <div className="flex size-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 mb-6">
         <CalendarRange className="size-8" />
       </div>
       <h2 className="text-xl font-bold">{t('welcome.title')}</h2>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+      <p className="mt-2 max-w-md text-sm text-muted-foreground leading-relaxed">
         {t('welcome.description')}
       </p>
       <Button
         variant="gradient"
-        className="mt-6"
+        className="mt-6 gap-2"
         onClick={() => navigate('/academic-years')}
       >
         {t('welcome.cta')}
+        <ArrowRight className="size-4" />
       </Button>
     </div>
   );

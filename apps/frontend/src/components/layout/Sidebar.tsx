@@ -20,16 +20,16 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { key: 'dashboard', to: '/', icon: LayoutDashboard },
-  { key: 'academicYears', to: '/academic-years', icon: CalendarRange },
-  { key: 'classes', to: '/classes', icon: School },
-  { key: 'periodStructures', to: '/period-structures', icon: Clock },
-  { key: 'subjects', to: '/subjects', icon: BookOpen },
-  { key: 'teachers', to: '/teachers', icon: Users },
-  { key: 'electiveGroups', to: '/elective-groups', icon: Link2 },
-  { key: 'notifications', to: '/notifications', icon: Bell },
-  { key: 'teacherTimetable', to: '/teacher-timetable', icon: Eye },
-  { key: 'settings', to: '/settings', icon: Settings },
+  { key: 'dashboard', to: '/', icon: LayoutDashboard, color: 'text-amber-400' },
+  { key: 'academicYears', to: '/academic-years', icon: CalendarRange, color: 'text-sky-400' },
+  { key: 'classes', to: '/classes', icon: School, color: 'text-violet-400' },
+  { key: 'periodStructures', to: '/period-structures', icon: Clock, color: 'text-teal-400' },
+  { key: 'subjects', to: '/subjects', icon: BookOpen, color: 'text-rose-400' },
+  { key: 'teachers', to: '/teachers', icon: Users, color: 'text-emerald-400' },
+  { key: 'electiveGroups', to: '/elective-groups', icon: Link2, color: 'text-orange-400' },
+  { key: 'notifications', to: '/notifications', icon: Bell, color: 'text-yellow-400' },
+  { key: 'teacherTimetable', to: '/teacher-timetable', icon: Eye, color: 'text-cyan-400' },
+  { key: 'settings', to: '/settings', icon: Settings, color: 'text-stone-400' },
 ] as const;
 
 export function Sidebar({ className }: SidebarProps) {
@@ -42,7 +42,7 @@ export function Sidebar({ className }: SidebarProps) {
     <aside
       className={cn(
         'hidden lg:flex flex-col shrink-0 h-full overflow-y-auto',
-        'bg-gradient-to-b from-primary to-secondary dark:from-background-deep dark:to-background-deep dark:border-r dark:border-border',
+        'bg-sidebar border-r border-sidebar-border',
         collapsed ? 'w-16' : 'w-60',
         'transition-[width] duration-200',
         className
@@ -52,26 +52,30 @@ export function Sidebar({ className }: SidebarProps) {
       <div
         className={cn(
           'flex items-center h-14 shrink-0 px-3',
-          collapsed ? 'justify-center' : 'gap-2'
+          collapsed ? 'justify-center' : 'gap-3'
         )}
       >
-        <div className="flex size-8 items-center justify-center rounded-lg bg-white/20 font-bold text-white text-sm">
+        <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500 font-bold text-amber-950 text-sm shadow-sm">
           ST
         </div>
         {!collapsed && (
-          <span className="text-sm font-semibold text-white truncate">
+          <span className="text-sm font-semibold text-sidebar-foreground truncate">
             {t('appName')}
           </span>
         )}
       </div>
 
+      {/* Divider */}
+      <div className="mx-3 border-t border-white/8" />
+
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-2 py-4">
+      <nav className="flex-1 space-y-0.5 px-2 py-3">
         {NAV_ITEMS.map((item) => (
           <SidebarLink
             key={item.key}
             to={item.to}
             icon={item.icon}
+            iconColor={item.color}
             label={t(`nav.${item.key}`)}
             collapsed={collapsed}
           />

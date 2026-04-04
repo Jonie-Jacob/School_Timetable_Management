@@ -10,7 +10,7 @@ export function BottomTabBar() {
 
   return (
     <>
-      <nav className="fixed bottom-0 inset-x-0 z-50 flex lg:hidden items-center border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 safe-bottom">
+      <nav className="fixed bottom-0 inset-x-0 z-50 flex lg:hidden items-center border-t border-border/50 backdrop-blur-xl bg-background/80 safe-bottom">
         <BottomTabItem
           to="/"
           icon={LayoutDashboard}

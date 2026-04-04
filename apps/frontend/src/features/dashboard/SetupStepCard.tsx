@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, Lock } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Check, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import type { SetupStep } from './dashboardApi';
@@ -29,73 +28,79 @@ export function SetupStepCard({ step, isLocked }: SetupStepCardProps) {
   const title = t(`setupWizard.stepCard.${stepKey}.title`);
   const description = t(`setupWizard.stepCard.${stepKey}.description`);
 
+  const isCurrent = !step.complete && !isLocked;
+
   return (
-    <Card
+    <div
       className={cn(
-        'transition-all',
-        step.complete && 'border-success/30 bg-success/5',
-        isLocked && 'opacity-60',
+        'rounded-xl border border-border/50 bg-card backdrop-blur-sm p-4 space-y-3 transition-all duration-300',
+        step.complete && 'border-emerald-500/20 bg-emerald-500/5',
+        isCurrent && 'border-amber-500/30 shadow-sm shadow-amber-500/5',
+        isLocked && 'opacity-50',
       )}
     >
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold bg-primary/10 text-primary">
-              {step.complete ? (
-                <Check className="size-4 text-success" />
-              ) : isLocked ? (
-                <Lock className="size-3.5 text-muted-foreground" />
-              ) : (
-                step.step
-              )}
-            </span>
-            <h3 className="text-sm font-semibold">{title}</h3>
-          </div>
-        </div>
+      <div className="flex items-center gap-3">
+        <span
+          className={cn(
+            'flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+            step.complete
+              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              : isCurrent
+                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                : 'bg-muted text-muted-foreground',
+          )}
+        >
+          {step.complete ? (
+            <Check className="size-4" />
+          ) : isLocked ? (
+            <Lock className="size-3.5" />
+          ) : (
+            step.step
+          )}
+        </span>
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
 
-        <p className="text-xs text-muted-foreground">{description}</p>
+      <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
 
-        {step.detail && (
-          <p className="text-xs text-muted-foreground italic">{step.detail}</p>
-        )}
+      {step.detail && (
+        <p className="text-xs text-muted-foreground italic">{step.detail}</p>
+      )}
 
-        {!isLocked && !step.complete && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full"
-            onClick={() => navigate(STEP_ROUTES[step.step])}
-          >
-            {t('setupWizard.continue')}
-          </Button>
-        )}
+      {isCurrent && (
+        <Button
+          size="sm"
+          className="w-full gap-2"
+          onClick={() => navigate(STEP_ROUTES[step.step])}
+        >
+          {t('setupWizard.continue')}
+          <ArrowRight className="size-3.5" />
+        </Button>
+      )}
 
-        {step.complete && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="w-full text-muted-foreground"
-            onClick={() => navigate(STEP_ROUTES[step.step])}
-          >
-            Review
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      {step.complete && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="w-full text-muted-foreground"
+          onClick={() => navigate(STEP_ROUTES[step.step])}
+        >
+          Review
+        </Button>
+      )}
+    </div>
   );
 }
 
 export function SetupStepCardSkeleton() {
   return (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="size-7 rounded-full bg-muted animate-pulse" />
-          <div className="h-4 w-32 bg-muted animate-pulse rounded" />
-        </div>
-        <div className="h-3 w-full bg-muted animate-pulse rounded" />
-        <div className="h-8 w-full bg-muted animate-pulse rounded" />
-      </CardContent>
-    </Card>
+    <div className="rounded-xl border border-border/50 bg-card backdrop-blur-sm p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="size-8 rounded-full bg-muted animate-pulse" />
+        <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+      </div>
+      <div className="h-3 w-full bg-muted animate-pulse rounded" />
+      <div className="h-8 w-full bg-muted animate-pulse rounded-lg" />
+    </div>
   );
 }

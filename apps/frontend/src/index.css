@@ -1,49 +1,49 @@
 @import "tailwindcss";
 
 @theme {
-  /* Brand Colors */
-  --color-primary: #6A0DAD;
-  --color-primary-foreground: #FFFFFF;
-  --color-secondary: #0047AB;
-  --color-secondary-foreground: #FFFFFF;
-  --color-accent: #F7E7CE;
-  --color-accent-foreground: #1A1A2E;
+  /* Brand — Warm Amber */
+  --color-primary: #F59E0B;
+  --color-primary-foreground: #451A03;
+  --color-secondary: #FB923C;
+  --color-secondary-foreground: #431407;
+  --color-accent: #FEF3C7;
+  --color-accent-foreground: #78350F;
 
   /* Semantic */
   --color-success: #16A34A;
   --color-success-foreground: #FFFFFF;
-  --color-warning: #D97706;
+  --color-warning: #EA580C;
   --color-warning-foreground: #FFFFFF;
   --color-destructive: #DC2626;
   --color-destructive-foreground: #FFFFFF;
-  --color-info: #0047AB;
+  --color-info: #0EA5E9;
   --color-info-foreground: #FFFFFF;
 
-  /* Surfaces — Light defaults */
-  --color-background: #FFFFFF;
-  --color-background-deep: #F1F5F9;
-  --color-surface: #F8F9FA;
-  --color-foreground: #1A1A2E;
-  --color-muted: #F1F5F9;
-  --color-muted-foreground: #6B7280;
-  --color-border: #E5E7EB;
-  --color-input: #E5E7EB;
-  --color-ring: #6A0DAD;
+  /* Surfaces — Light (Stone palette) */
+  --color-background: #FAFAF9;
+  --color-background-deep: #F5F5F4;
+  --color-surface: #F5F5F4;
+  --color-foreground: #1C1917;
+  --color-muted: #F5F5F4;
+  --color-muted-foreground: #78716C;
+  --color-border: #E7E5E4;
+  --color-input: #E7E5E4;
+  --color-ring: #F59E0B;
 
-  /* Card */
-  --color-card: #FFFFFF;
-  --color-card-foreground: #1A1A2E;
+  /* Card — Glass */
+  --color-card: rgba(255, 255, 255, 0.75);
+  --color-card-foreground: #1C1917;
 
   /* Popover */
   --color-popover: #FFFFFF;
-  --color-popover-foreground: #1A1A2E;
+  --color-popover-foreground: #1C1917;
 
-  /* Sidebar */
-  --color-sidebar: #6A0DAD;
-  --color-sidebar-foreground: #FFFFFF;
-  --color-sidebar-accent: #0047AB;
-  --color-sidebar-accent-foreground: #FFFFFF;
-  --color-sidebar-border: rgba(255, 255, 255, 0.15);
+  /* Sidebar — Dark warm */
+  --color-sidebar: #1C1917;
+  --color-sidebar-foreground: #FAFAF9;
+  --color-sidebar-accent: #F59E0B;
+  --color-sidebar-accent-foreground: #451A03;
+  --color-sidebar-border: rgba(255, 255, 255, 0.08);
 
   /* Radius */
   --radius-sm: 0.375rem;
@@ -60,32 +60,39 @@
 
 /* Dark mode overrides */
 .dark {
-  --color-background: #1A1A2E;
-  --color-background-deep: #0F0F1A;
-  --color-surface: #16213E;
-  --color-foreground: #F8F9FA;
-  --color-muted: #1E293B;
-  --color-muted-foreground: #9CA3AF;
-  --color-border: #374151;
-  --color-input: #374151;
-  --color-ring: #8B5CF6;
+  --color-primary: #FBBF24;
+  --color-primary-foreground: #451A03;
+  --color-secondary: #F97316;
+  --color-secondary-foreground: #FFF7ED;
+  --color-accent: #292524;
+  --color-accent-foreground: #FEFCE8;
 
-  --color-card: #16213E;
-  --color-card-foreground: #F8F9FA;
+  --color-background: #0C0A09;
+  --color-background-deep: #0A0908;
+  --color-surface: #1C1917;
+  --color-foreground: #FAFAF9;
+  --color-muted: #1C1917;
+  --color-muted-foreground: #A8A29E;
+  --color-border: #292524;
+  --color-input: #292524;
+  --color-ring: #FBBF24;
 
-  --color-popover: #16213E;
-  --color-popover-foreground: #F8F9FA;
+  --color-card: rgba(28, 25, 23, 0.6);
+  --color-card-foreground: #FAFAF9;
 
-  --color-sidebar: #0F0F1A;
-  --color-sidebar-foreground: #F8F9FA;
-  --color-sidebar-accent: #1A1A2E;
-  --color-sidebar-accent-foreground: #F8F9FA;
-  --color-sidebar-border: #374151;
+  --color-popover: #1C1917;
+  --color-popover-foreground: #FAFAF9;
+
+  --color-sidebar: #0C0A09;
+  --color-sidebar-foreground: #FAFAF9;
+  --color-sidebar-accent: #FBBF24;
+  --color-sidebar-accent-foreground: #451A03;
+  --color-sidebar-border: rgba(255, 255, 255, 0.06);
 
   --color-success: #22C55E;
-  --color-warning: #F59E0B;
+  --color-warning: #FB923C;
   --color-destructive: #EF4444;
-  --color-info: #3B82F6;
+  --color-info: #38BDF8;
 }
 
 /* Base styles */
@@ -102,10 +109,42 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Glass morphism utilities */
+.glass {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass {
+  background: rgba(28, 25, 23, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-subtle {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.dark .glass-subtle {
+  background: rgba(28, 25, 23, 0.4);
+}
+
+/* Glow effects */
+.glow-amber {
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.25);
+}
+
+.glow-amber-sm {
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -114,7 +153,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
