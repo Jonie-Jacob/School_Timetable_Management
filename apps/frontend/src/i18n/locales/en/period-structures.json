@@ -5,6 +5,7 @@
     "name": "Name",
     "workingDays": "Working Days",
     "classes": "Classes",
+    "divisions": "Divisions",
     "actions": "Actions"
   },
   "edit": "Edit",

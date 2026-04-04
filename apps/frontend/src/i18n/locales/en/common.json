@@ -31,6 +31,8 @@
   "pagination": {
     "previous": "Previous",
     "next": "Next",
+    "page": "Page",
+    "of": "of",
     "showing": "Showing {{from}} to {{to}} of {{total}}"
   },
   "errors": {

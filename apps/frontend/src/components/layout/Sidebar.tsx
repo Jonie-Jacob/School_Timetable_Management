@@ -22,8 +22,8 @@ interface SidebarProps {
 const NAV_ITEMS = [
   { key: 'dashboard', to: '/', icon: LayoutDashboard },
   { key: 'academicYears', to: '/academic-years', icon: CalendarRange },
-  { key: 'periodStructures', to: '/period-structures', icon: Clock },
   { key: 'classes', to: '/classes', icon: School },
+  { key: 'periodStructures', to: '/period-structures', icon: Clock },
   { key: 'subjects', to: '/subjects', icon: BookOpen },
   { key: 'teachers', to: '/teachers', icon: Users },
   { key: 'electiveGroups', to: '/elective-groups', icon: Link2 },
