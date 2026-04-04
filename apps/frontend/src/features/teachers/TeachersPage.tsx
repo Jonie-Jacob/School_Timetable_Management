@@ -20,8 +20,8 @@ export function Component() {
   const isReadOnly = useReadOnly();
 
   const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
-  const pageSize = 10;
 
   const { data, isLoading } = useGetTeachersQuery({ page: pageIndex + 1, pageSize, search: search || undefined });
   const [deleteTeacher, { isLoading: isDeleting }] = useDeleteTeacherMutation();
@@ -213,7 +213,7 @@ export function Component() {
             : undefined
         }
         pageCount={meta?.totalPages}
-        onPaginationChange={(p) => setPageIndex(p.pageIndex)}
+        onPaginationChange={(p) => { setPageIndex(p.pageIndex); setPageSize(p.pageSize); }}
       />
 
       {/* Delete Confirmation */}

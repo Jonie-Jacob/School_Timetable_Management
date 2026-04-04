@@ -10,7 +10,7 @@ import {
 import { PageHeader } from '@/components/shared';
 import { useGetDashboardStatsQuery, useGetSetupWizardQuery } from './dashboardApi';
 import { SummaryCard, SummaryCardSkeleton } from './SummaryCard';
-import { SetupStepCard, SetupStepCardSkeleton } from './SetupStepCard';
+import { SetupStepper, SetupStepperSkeleton } from './SetupStepper';
 import { ConflictBanner } from './ConflictBanner';
 import { QuickLinks } from './QuickLinks';
 import { WelcomeState } from './WelcomeState';
@@ -38,13 +38,13 @@ export function Component() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader title={t('title')} />
 
       {/* Loading state */}
       {isLoading && (
         <>
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {Array.from({ length: 6 }).map((_, i) => (
               <SummaryCardSkeleton key={i} />
             ))}
@@ -68,22 +68,16 @@ export function Component() {
 
           <ConflictBanner count={data.unresolvedConflicts} />
 
-          {/* Setup wizard step cards */}
-          {wizardLoading && (
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <SetupStepCardSkeleton key={i} />
-              ))}
-            </div>
-          )}
+          {/* Setup wizard — compact horizontal stepper */}
+          {wizardLoading && <SetupStepperSkeleton />}
 
           {showSetupWizard && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <h2 className="text-base font-semibold">{t('setupWizard.title')}</h2>
-                <div className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1">
-                  <div className="size-2 rounded-full bg-amber-500" />
-                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                <h2 className="text-sm font-semibold">{t('setupWizard.title')}</h2>
+                <div className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5">
+                  <div className="size-1.5 rounded-full bg-amber-500" />
+                  <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
                     {t('setupWizard.stepsComplete', {
                       count: wizard.totalComplete,
                       total: wizard.totalSteps,
@@ -91,19 +85,7 @@ export function Component() {
                   </span>
                 </div>
               </div>
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {wizard.steps.map((step) => {
-                  const isLocked =
-                    step.step > 1 && !wizard.steps[step.step - 2].complete;
-                  return (
-                    <SetupStepCard
-                      key={step.step}
-                      step={step}
-                      isLocked={isLocked}
-                    />
-                  );
-                })}
-              </div>
+              <SetupStepper steps={wizard.steps} />
             </div>
           )}
         </>

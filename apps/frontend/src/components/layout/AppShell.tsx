@@ -14,24 +14,35 @@ export function AppShell() {
       {/* Desktop Sidebar — hidden at sm/md */}
       <Sidebar />
 
-      {/* Main column */}
-      <div className="flex flex-1 flex-col min-w-0">
+      {/* Main column with warm gradient background */}
+      <div className="flex flex-1 flex-col min-w-0 warm-gradient-bg overflow-hidden">
+        {/* Animated background orbs */}
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+
         {/* Desktop TopBar — hidden at sm/md */}
-        <TopBar />
+        <div className="relative z-10">
+          <TopBar />
+        </div>
 
         {/* Mobile Header — visible at sm/md */}
-        <MobileHeader />
+        <div className="relative z-10">
+          <MobileHeader />
+        </div>
 
         {/* Read-only banner */}
-        <ReadOnlyBanner />
+        <div className="relative z-10">
+          <ReadOnlyBanner />
+        </div>
 
         {/* Breadcrumb — desktop only */}
-        <div className="hidden lg:block">
+        <div className="hidden lg:block relative z-10">
           <Breadcrumb />
         </div>
 
         {/* Content area */}
-        <main className="flex-1 overflow-auto p-4 lg:p-6 pb-20 lg:pb-6">
+        <main className="relative z-10 flex-1 overflow-auto p-4 lg:p-6 pb-20 lg:pb-6">
           <FeatureErrorBoundary>
             <Outlet />
           </FeatureErrorBoundary>

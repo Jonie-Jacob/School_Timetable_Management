@@ -9,7 +9,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   Table,
@@ -21,6 +21,13 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { DataTableCardView } from './DataTableCardView';
@@ -38,6 +45,8 @@ interface DataTableProps<TData, TValue> {
   onPaginationChange?: (pagination: PaginationState) => void;
   renderCard?: (item: TData, index: number) => ReactNode;
 }
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 export function DataTable<TData, TValue>({
   columns,
@@ -75,6 +84,8 @@ export function DataTable<TData, TValue>({
           pageCount: pageCount ?? -1,
         }
       : {}),
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
@@ -82,11 +93,13 @@ export function DataTable<TData, TValue>({
   // Loading state — skeleton rows
   if (isLoading) {
     return (
-      <div className="space-y-2">
-        <Skeleton className="h-10 w-full" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
+      <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden">
+        <div className="space-y-0">
+          <Skeleton className="h-10 w-full rounded-none" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full rounded-none" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -110,7 +123,7 @@ export function DataTable<TData, TValue>({
       <div className="space-y-4">
         <DataTableCardView data={data} renderCard={renderCard} />
         {pagination && onPaginationChange && (
-          <PaginationControls table={table} pagination={pagination} />
+          <PaginationControls table={table} pagination={pagination} onPaginationChange={onPaginationChange} />
         )}
       </div>
     );
@@ -118,38 +131,58 @@ export function DataTable<TData, TValue>({
 
   // Desktop table view
   return (
-    <div className="space-y-4">
-      <div className="rounded-md border">
+    <div className="space-y-3">
+      <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden shadow-sm">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
+              <TableRow key={headerGroup.id} className="hover:bg-transparent border-border/40">
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="-ml-3 h-8"
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                        {header.column.getIsSorted() === 'asc' ? (
-                          <ArrowUp className="ml-1 size-3.5" />
-                        ) : header.column.getIsSorted() === 'desc' ? (
-                          <ArrowDown className="ml-1 size-3.5" />
-                        ) : (
-                          <ArrowUpDown className="ml-1 size-3.5 opacity-50" />
-                        )}
-                      </Button>
-                    ) : (
-                      flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )
+                  <TableHead
+                    key={header.id}
+                    style={{ width: header.getSize() }}
+                    className="relative group"
+                  >
+                    <div className="flex items-center">
+                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="-ml-2 h-7 text-xs uppercase tracking-wider font-semibold"
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                          {header.column.getIsSorted() === 'asc' ? (
+                            <ArrowUp className="ml-1 size-3" />
+                          ) : header.column.getIsSorted() === 'desc' ? (
+                            <ArrowDown className="ml-1 size-3" />
+                          ) : (
+                            <ArrowUpDown className="ml-1 size-3 opacity-40" />
+                          )}
+                        </Button>
+                      ) : (
+                        <span className="text-xs uppercase tracking-wider font-semibold">
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    {/* Column resize handle */}
+                    {header.column.getCanResize() && (
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none transition-colors ${
+                          header.column.getIsResizing()
+                            ? 'bg-amber-500'
+                            : 'bg-transparent group-hover:bg-border'
+                        }`}
+                      />
                     )}
                   </TableHead>
                 ))}
@@ -160,7 +193,7 @@ export function DataTable<TData, TValue>({
             {table.getRowModel().rows.map((row) => (
               <TableRow key={row.id}>
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
+                  <TableCell key={cell.id} style={{ width: cell.column.getSize() }}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}
@@ -171,7 +204,7 @@ export function DataTable<TData, TValue>({
       </div>
 
       {pagination && onPaginationChange && (
-        <PaginationControls table={table} pagination={pagination} />
+        <PaginationControls table={table} pagination={pagination} onPaginationChange={onPaginationChange} />
       )}
     </div>
   );
@@ -180,34 +213,61 @@ export function DataTable<TData, TValue>({
 function PaginationControls<TData>({
   table,
   pagination,
+  onPaginationChange,
 }: {
   table: TanstackTable<TData>;
   pagination: PaginationState;
+  onPaginationChange: (pagination: PaginationState) => void;
 }) {
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center justify-between px-2">
-      <p className="text-sm text-muted-foreground">
+    <div className="flex items-center justify-between rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm px-4 py-2.5">
+      {/* Page size selector */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">Rows per page</span>
+        <Select
+          value={String(pagination.pageSize)}
+          onValueChange={(val) => {
+            onPaginationChange({ pageIndex: 0, pageSize: Number(val) });
+          }}
+        >
+          <SelectTrigger className="h-7 w-16 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <SelectItem key={size} value={String(size)} className="text-xs">
+                {size}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Page indicator */}
+      <p className="text-xs text-muted-foreground tabular-nums">
         {t('pagination.page')} {pagination.pageIndex + 1}
         {table.getPageCount() > 0 && ` ${t('pagination.of')} ${table.getPageCount()}`}
       </p>
-      <div className="flex items-center gap-2">
+
+      {/* Navigation buttons */}
+      <div className="flex items-center gap-1">
         <Button
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon-xs"
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
-          {t('pagination.previous')}
+          <ChevronLeft className="size-4" />
         </Button>
         <Button
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon-xs"
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
         >
-          {t('pagination.next')}
+          <ChevronRight className="size-4" />
         </Button>
       </div>
     </div>
