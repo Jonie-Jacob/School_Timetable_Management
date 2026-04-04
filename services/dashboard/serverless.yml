@@ -45,4 +45,14 @@ functions:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
+          path: /dashboard/setup-wizard
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: PUT
+          path: /dashboard/setup-wizard/dismiss
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
           path: /dashboard/health

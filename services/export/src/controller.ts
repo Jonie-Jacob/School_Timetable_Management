@@ -7,8 +7,16 @@ const divisionExportSchema = z.object({
   divisionId: z.string().uuid(),
 });
 
+const classExportSchema = z.object({
+  classId: z.string().uuid(),
+});
+
 const teacherExportSchema = z.object({
   teacherId: z.string().uuid(),
+});
+
+const teachersExportSchema = z.object({
+  teacherIds: z.array(z.string().uuid()).default([]),
 });
 
 const service = new ExportService();
@@ -48,6 +56,42 @@ export class ExportController {
     const { academicYearId } = await academicYearMiddleware(event, { schoolId: auth.schoolId! });
     const dto = parseBody(event, teacherExportSchema);
     const result = await service.exportTeacherExcel(auth.schoolId!, academicYearId, dto.teacherId);
+    return success(result);
+  }
+
+  // Class-level exports (all divisions in a class)
+
+  async exportClassPdf(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = authMiddleware(event);
+    const { academicYearId } = await academicYearMiddleware(event, { schoolId: auth.schoolId! });
+    const dto = parseBody(event, classExportSchema);
+    const result = await service.exportClassPdf(auth.schoolId!, academicYearId, dto.classId);
+    return success(result);
+  }
+
+  async exportClassExcel(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = authMiddleware(event);
+    const { academicYearId } = await academicYearMiddleware(event, { schoolId: auth.schoolId! });
+    const dto = parseBody(event, classExportSchema);
+    const result = await service.exportClassExcel(auth.schoolId!, academicYearId, dto.classId);
+    return success(result);
+  }
+
+  // Multi-teacher exports (selected teachers or all)
+
+  async exportTeachersPdf(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = authMiddleware(event);
+    const { academicYearId } = await academicYearMiddleware(event, { schoolId: auth.schoolId! });
+    const dto = parseBody(event, teachersExportSchema);
+    const result = await service.exportTeachersPdf(auth.schoolId!, academicYearId, dto.teacherIds ?? []);
+    return success(result);
+  }
+
+  async exportTeachersExcel(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = authMiddleware(event);
+    const { academicYearId } = await academicYearMiddleware(event, { schoolId: auth.schoolId! });
+    const dto = parseBody(event, teachersExportSchema);
+    const result = await service.exportTeachersExcel(auth.schoolId!, academicYearId, dto.teacherIds ?? []);
     return success(result);
   }
 }

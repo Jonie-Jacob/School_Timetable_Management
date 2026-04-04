@@ -383,7 +383,196 @@ export class ExportService {
     };
   }
 
-  // ── Excel Export ──
+  // ── Class-level Export (all divisions in a class) ──
+
+  async exportClassPdf(schoolId: string, academicYearId: string, classId: string) {
+    const divisions = await this.getClassDivisions(schoolId, academicYearId, classId);
+    const grids: TimetableGrid[] = [];
+    for (const div of divisions) {
+      grids.push(await this.getDivisionGrid(schoolId, academicYearId, div.id));
+    }
+
+    const htmlPages = grids.map(g => this.renderHtml(g)).join('<div style="page-break-after: always;"></div>\n');
+    ensureExportsDir();
+    const filename = `class_${classId}_${Date.now()}.html`;
+    const filePath = path.join(EXPORTS_DIR, filename);
+    fs.writeFileSync(filePath, htmlPages, 'utf-8');
+
+    return {
+      format: 'pdf',
+      message: 'In local dev, an HTML preview is generated. In production, Chromium renders PDF and uploads to S3.',
+      filePath,
+      filename,
+      divisionsIncluded: divisions.length,
+    };
+  }
+
+  async exportClassExcel(schoolId: string, academicYearId: string, classId: string) {
+    const divisions = await this.getClassDivisions(schoolId, academicYearId, classId);
+    const grids: TimetableGrid[] = [];
+    for (const div of divisions) {
+      grids.push(await this.getDivisionGrid(schoolId, academicYearId, div.id));
+    }
+    return this.generateMultiSheetExcel(grids, `class_${classId}`);
+  }
+
+  // ── Multi-teacher Export ──
+
+  async exportTeachersPdf(schoolId: string, academicYearId: string, teacherIds: string[]) {
+    const teachers = await this.resolveTeachers(schoolId, academicYearId, teacherIds);
+    const grids: TimetableGrid[] = [];
+    for (const t of teachers) {
+      try {
+        grids.push(await this.getTeacherGrid(schoolId, academicYearId, t.id));
+      } catch {
+        // Skip teachers with no timetable data
+      }
+    }
+    if (grids.length === 0) throw new AppError('No timetable data found for the selected teachers', 404, 'NO_TIMETABLE');
+
+    const htmlPages = grids.map(g => this.renderHtml(g)).join('<div style="page-break-after: always;"></div>\n');
+    ensureExportsDir();
+    const filename = `teachers_${Date.now()}.html`;
+    const filePath = path.join(EXPORTS_DIR, filename);
+    fs.writeFileSync(filePath, htmlPages, 'utf-8');
+
+    return {
+      format: 'pdf',
+      message: 'In local dev, an HTML preview is generated. In production, Chromium renders PDF and uploads to S3.',
+      filePath,
+      filename,
+      teachersIncluded: grids.length,
+    };
+  }
+
+  async exportTeachersExcel(schoolId: string, academicYearId: string, teacherIds: string[]) {
+    const teachers = await this.resolveTeachers(schoolId, academicYearId, teacherIds);
+    const grids: TimetableGrid[] = [];
+    for (const t of teachers) {
+      try {
+        grids.push(await this.getTeacherGrid(schoolId, academicYearId, t.id));
+      } catch {
+        // Skip teachers with no timetable data
+      }
+    }
+    if (grids.length === 0) throw new AppError('No timetable data found for the selected teachers', 404, 'NO_TIMETABLE');
+    return this.generateMultiSheetExcel(grids, `teachers`);
+  }
+
+  // ── Helpers for new exports ──
+
+  private async getClassDivisions(schoolId: string, academicYearId: string, classId: string) {
+    const cls = await prisma.class.findFirst({
+      where: { id: classId, schoolId, academicYearId, deletedAt: null },
+    });
+    if (!cls) throw new NotFoundError('Class', classId);
+
+    const divisions = await prisma.division.findMany({
+      where: { classId, schoolId, academicYearId, deletedAt: null, timetables: { some: {} } },
+      orderBy: { label: 'asc' },
+    });
+    if (divisions.length === 0) throw new AppError('No generated timetables found for divisions in this class', 404, 'NO_TIMETABLE');
+    return divisions;
+  }
+
+  private async resolveTeachers(schoolId: string, academicYearId: string, teacherIds: string[]) {
+    if (teacherIds.length === 0) {
+      // Empty array = all teachers
+      return prisma.teacher.findMany({
+        where: { schoolId, academicYearId, deletedAt: null },
+        orderBy: { name: 'asc' },
+      });
+    }
+    return prisma.teacher.findMany({
+      where: { id: { in: teacherIds }, schoolId, academicYearId, deletedAt: null },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  private async generateMultiSheetExcel(grids: TimetableGrid[], prefix: string) {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'School Timetable Management';
+    workbook.created = new Date();
+
+    for (const grid of grids) {
+      const sheetName = grid.title.substring(0, 31); // Excel sheet name max 31 chars
+      const sheet = workbook.addWorksheet(sheetName);
+
+      // Title
+      const titleRow = sheet.addRow([grid.title]);
+      titleRow.font = { size: 16, bold: true };
+      sheet.mergeCells(1, 1, 1, grid.days.length + 2);
+      titleRow.alignment = { horizontal: 'center' };
+
+      const subtitleRow = sheet.addRow([grid.subtitle]);
+      subtitleRow.font = { size: 12, color: { argb: 'FF666666' } };
+      sheet.mergeCells(2, 1, 2, grid.days.length + 2);
+      subtitleRow.alignment = { horizontal: 'center' };
+
+      sheet.addRow([]);
+
+      // Headers
+      const headers = ['Period', 'Time', ...grid.days.map(d => d.label)];
+      const headerRow = sheet.addRow(headers);
+      headerRow.eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      });
+
+      sheet.getColumn(1).width = 10;
+      sheet.getColumn(2).width = 16;
+      for (let i = 3; i <= grid.days.length + 2; i++) sheet.getColumn(i).width = 20;
+
+      // Data
+      let rowIdx = 0;
+      for (const slot of grid.slots) {
+        const isBreak = slot.slotType !== SlotType.PERIOD;
+        const label = isBreak ? (slot.slotType === SlotType.LUNCH_BREAK ? 'Lunch Break' : 'Break') : `P${slot.slotNumber}`;
+        const time = `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`;
+
+        if (isBreak) {
+          const row = sheet.addRow([label, time, 'Break']);
+          const lastRow = sheet.rowCount;
+          if (grid.days.length > 1) sheet.mergeCells(lastRow, 3, lastRow, grid.days.length + 2);
+          row.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEAA7' } };
+            cell.font = { italic: true, color: { argb: 'FF636E72' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+          });
+        } else {
+          const dayCells = grid.days.map(day => {
+            const period = day.periods.get(slot.sortOrder);
+            if (!period) return '-';
+            return `${period.subject}\n${period.teacher}`;
+          });
+          const row = sheet.addRow([label, time, ...dayCells]);
+          row.height = 32;
+          row.eachCell((cell, colNumber) => {
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+            if (rowIdx % 2 === 0 && colNumber >= 3) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+            if (colNumber <= 2) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECF0F1' } };
+              cell.font = { bold: colNumber === 1, size: colNumber === 2 ? 9 : 11 };
+            }
+          });
+          rowIdx++;
+        }
+      }
+    }
+
+    ensureExportsDir();
+    const filename = `${prefix}_${Date.now()}.xlsx`;
+    const filePath = path.join(EXPORTS_DIR, filename);
+    await workbook.xlsx.writeFile(filePath);
+
+    return { format: 'excel', filePath, filename, sheetsIncluded: grids.length };
+  }
+
+  // ─��� Excel Export ──
 
   async exportDivisionExcel(schoolId: string, academicYearId: string, divisionId: string) {
     const grid = await this.getDivisionGrid(schoolId, academicYearId, divisionId);

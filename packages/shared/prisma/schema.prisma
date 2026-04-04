@@ -75,6 +75,7 @@ model School {
   timetableSlots         TimetableSlot[]
   generationJobs         GenerationJob[]
   timetableNotifications TimetableNotification[]
+  setupWizardStates      SetupWizardState[]
 
   @@map("schools")
 }
@@ -105,6 +106,7 @@ model AcademicYear {
   divisionAssignments DivisionAssignment[]
   timetables          Timetable[]
   generationJobs      GenerationJob[]
+  setupWizardStates   SetupWizardState[]
 
   @@index([schoolId, status])
   @@map("academic_years")
@@ -494,4 +496,24 @@ model TimetableNotification {
 
   @@index([schoolId, dismissed])
   @@map("timetable_notifications")
+}
+
+// ──────────────────────────────────────────────
+// Table 20: setup_wizard_state
+// ──────────────────────────────────────────────
+
+model SetupWizardState {
+  id             String    @id @default(uuid())
+  schoolId       String    @map("school_id")
+  academicYearId String    @map("academic_year_id")
+  dismissed      Boolean   @default(false)
+  dismissedAt    DateTime? @map("dismissed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  school       School       @relation(fields: [schoolId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@unique([schoolId, academicYearId])
+  @@map("setup_wizard_state")
 }

@@ -46,12 +46,32 @@ functions:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
+          path: /export/class/pdf
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /export/class/excel
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
           path: /export/teacher/pdf
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
           path: /export/teacher/excel
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /export/teachers/pdf
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /export/teachers/excel
           authorizer:
             name: cognitoAuthorizer
       - httpApi:

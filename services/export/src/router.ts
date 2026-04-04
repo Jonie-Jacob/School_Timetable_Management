@@ -20,12 +20,28 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.exportDivisionExcel(event);
   }
 
-  // Teacher exports
+  // Class exports (all divisions in a class)
+  if (method === 'POST' && path === '/export/class/pdf') {
+    return controller.exportClassPdf(event);
+  }
+  if (method === 'POST' && path === '/export/class/excel') {
+    return controller.exportClassExcel(event);
+  }
+
+  // Teacher exports (single)
   if (method === 'POST' && path === '/export/teacher/pdf') {
     return controller.exportTeacherPdf(event);
   }
   if (method === 'POST' && path === '/export/teacher/excel') {
     return controller.exportTeacherExcel(event);
+  }
+
+  // Multi-teacher exports (selected or all)
+  if (method === 'POST' && path === '/export/teachers/pdf') {
+    return controller.exportTeachersPdf(event);
+  }
+  if (method === 'POST' && path === '/export/teachers/excel') {
+    return controller.exportTeachersExcel(event);
   }
 
   return {
