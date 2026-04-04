@@ -1,18 +1,107 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Plus, Users, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Users, Pencil, Trash2, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader, DataTable, SearchInput, ConfirmDialog } from '@/components/shared';
 import { useReadOnly } from '@/hooks/useReadOnly';
 import {
   useGetTeachersQuery,
+  useUpdateTeacherMutation,
   useDeleteTeacherMutation,
   type Teacher,
 } from './teacherApi';
+
+function InlineEditName({
+  teacher,
+  isReadOnly,
+}: {
+  teacher: Teacher;
+  isReadOnly: boolean;
+}) {
+  const { t } = useTranslation('teachers');
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(teacher.name);
+  const [updateTeacher, { isLoading }] = useUpdateTeacherMutation();
+
+  const handleSave = useCallback(async () => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === teacher.name) {
+      setEditing(false);
+      setValue(teacher.name);
+      return;
+    }
+    try {
+      await updateTeacher({ id: teacher.id, name: trimmed }).unwrap();
+      toast.success(t('updateSuccess'));
+      setEditing(false);
+    } catch {
+      toast.error(t('updateError'));
+    }
+  }, [value, teacher.id, teacher.name, updateTeacher, t]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') handleSave();
+      if (e.key === 'Escape') {
+        setEditing(false);
+        setValue(teacher.name);
+      }
+    },
+    [handleSave, teacher.name],
+  );
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="h-7 text-sm"
+          autoFocus
+          disabled={isLoading}
+        />
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={handleSave}
+          disabled={isLoading}
+          className="text-emerald-600 hover:text-emerald-700 shrink-0"
+        >
+          <Check className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => { setEditing(false); setValue(teacher.name); }}
+          disabled={isLoading}
+          className="text-muted-foreground shrink-0"
+        >
+          <X className="size-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <span
+      className={
+        isReadOnly
+          ? ''
+          : 'cursor-pointer hover:text-primary border-b border-transparent hover:border-primary/30 transition-colors'
+      }
+      onClick={() => !isReadOnly && setEditing(true)}
+      title={isReadOnly ? undefined : 'Click to edit'}
+    >
+      {teacher.name}
+    </span>
+  );
+}
 
 export function Component() {
   const { t } = useTranslation('teachers');
@@ -65,6 +154,9 @@ export function Component() {
       {
         accessorKey: 'name',
         header: t('table.name'),
+        cell: ({ row }) => (
+          <InlineEditName teacher={row.original} isReadOnly={isReadOnly} />
+        ),
       },
       {
         id: 'subjects',
@@ -86,22 +178,24 @@ export function Component() {
       {
         id: 'actions',
         header: t('table.actions'),
+        enableResizing: false,
+        size: 100,
         cell: ({ row }) => {
           const teacher = row.original;
           return (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-sm"
                 onClick={() => navigate(`/teachers/${teacher.id}/edit`)}
                 disabled={isReadOnly}
                 title={t('edit')}
               >
-                <Pencil className="size-4" />
+                <Pencil className="size-3.5" />
               </Button>
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-sm"
                 onClick={() => {
                   setDeleteError(null);
                   setDeleteTarget(teacher);
@@ -109,7 +203,7 @@ export function Component() {
                 disabled={isReadOnly}
                 title={t('delete')}
               >
-                <Trash2 className="size-4 text-destructive" />
+                <Trash2 className="size-3.5 text-destructive" />
               </Button>
             </div>
           );
@@ -192,6 +286,7 @@ export function Component() {
         columns={columns}
         data={teachers}
         isLoading={isLoading}
+        storageKey="teachers"
         emptyIcon={Users}
         emptyTitle={t('empty.title')}
         emptyDescription={t('empty.description')}
@@ -213,7 +308,6 @@ export function Component() {
         onPaginationChange={(p) => { setPageIndex(p.pageIndex); setPageSize(p.pageSize); }}
       />
 
-      {/* Delete Confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
         title={t('deleteConfirm.title')}

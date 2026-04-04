@@ -1,6 +1,7 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useState, useEffect, useCallback } from 'react';
 import {
   type ColumnDef,
+  type ColumnSizingState,
   type PaginationState,
   type SortingState,
   type Table as TanstackTable,
@@ -44,9 +45,28 @@ interface DataTableProps<TData, TValue> {
   pageCount?: number;
   onPaginationChange?: (pagination: PaginationState) => void;
   renderCard?: (item: TData, index: number) => ReactNode;
+  /** Unique key for persisting column sizes in localStorage */
+  storageKey?: string;
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
+
+function loadColumnSizing(key: string): ColumnSizingState {
+  try {
+    const stored = localStorage.getItem(`dt-cols-${key}`);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveColumnSizing(key: string, sizing: ColumnSizingState) {
+  try {
+    localStorage.setItem(`dt-cols-${key}`, JSON.stringify(sizing));
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export function DataTable<TData, TValue>({
   columns,
@@ -60,19 +80,37 @@ export function DataTable<TData, TValue>({
   pageCount,
   onPaginationChange,
   renderCard,
+  storageKey,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation();
   const isDesktop = useBreakpoint('lg');
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(
+    storageKey ? loadColumnSizing(storageKey) : {},
+  );
+
+  // Persist column sizes on change
+  const handleColumnSizingChange = useCallback(
+    (updater: ColumnSizingState | ((old: ColumnSizingState) => ColumnSizingState)) => {
+      setColumnSizing((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        if (storageKey) saveColumnSizing(storageKey, next);
+        return next;
+      });
+    },
+    [storageKey],
+  );
 
   const table = useReactTable({
     data,
     columns,
     state: {
       sorting,
+      columnSizing,
       ...(pagination ? { pagination } : {}),
     },
     onSortingChange: setSorting,
+    onColumnSizingChange: handleColumnSizingChange,
     ...(pagination && onPaginationChange
       ? {
           onPaginationChange: (updater) => {
@@ -90,7 +128,6 @@ export function DataTable<TData, TValue>({
     getSortedRowModel: getSortedRowModel(),
   });
 
-  // Loading state — skeleton rows
   if (isLoading) {
     return (
       <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden">
@@ -104,7 +141,6 @@ export function DataTable<TData, TValue>({
     );
   }
 
-  // Empty state
   if (!data.length) {
     return (
       <EmptyState
@@ -117,7 +153,6 @@ export function DataTable<TData, TValue>({
     );
   }
 
-  // Mobile card view
   if (!isDesktop && renderCard) {
     return (
       <div className="space-y-4">
@@ -129,7 +164,6 @@ export function DataTable<TData, TValue>({
     );
   }
 
-  // Desktop table view
   return (
     <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden shadow-sm">
       <Table>
@@ -171,7 +205,6 @@ export function DataTable<TData, TValue>({
                       </span>
                     )}
                   </div>
-                  {/* Column resize handle */}
                   {header.column.getCanResize() && (
                     <div
                       onMouseDown={header.getResizeHandler()}
@@ -220,17 +253,16 @@ function PaginationControls<TData>({
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center justify-between border-t border-border/40 bg-muted/30 px-4 py-2.5">
-      {/* Page size selector */}
+    <div className="flex items-center justify-between bg-sidebar text-sidebar-foreground px-4 py-2.5">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground whitespace-nowrap">Rows per page</span>
+        <span className="text-xs text-white/60 whitespace-nowrap">Rows per page</span>
         <Select
           value={String(pagination.pageSize)}
           onValueChange={(val) => {
             onPaginationChange({ pageIndex: 0, pageSize: Number(val) });
           }}
         >
-          <SelectTrigger className="h-7 w-16 text-xs">
+          <SelectTrigger className="h-7 w-16 text-xs border-white/20 bg-white/10 text-white">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -243,17 +275,16 @@ function PaginationControls<TData>({
         </Select>
       </div>
 
-      {/* Page indicator */}
-      <p className="text-xs text-muted-foreground tabular-nums">
+      <p className="text-xs text-white/60 tabular-nums">
         {t('pagination.page')} {pagination.pageIndex + 1}
         {table.getPageCount() > 0 && ` ${t('pagination.of')} ${table.getPageCount()}`}
       </p>
 
-      {/* Navigation buttons */}
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon-xs"
+          className="text-white/60 hover:text-white hover:bg-white/10"
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
@@ -262,6 +293,7 @@ function PaginationControls<TData>({
         <Button
           variant="ghost"
           size="icon-xs"
+          className="text-white/60 hover:text-white hover:bg-white/10"
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
         >

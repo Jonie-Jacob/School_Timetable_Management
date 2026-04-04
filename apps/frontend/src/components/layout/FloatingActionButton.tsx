@@ -115,7 +115,7 @@ export function FloatingActionButton() {
       <div className="fixed bottom-8 right-8 z-50">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
-          <PopoverContent side="top" align="end" className="p-4 backdrop-blur-xl">
+          <PopoverContent side="top" align="end" className="p-4 bg-sidebar text-sidebar-foreground border-white/10">
             {mode === 'setup' ? <SetupPopoverPanel /> : <ConflictPopoverPanel />}
           </PopoverContent>
         </Popover>
@@ -127,7 +127,7 @@ export function FloatingActionButton() {
     <div className="fixed bottom-20 right-4 z-50">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>{triggerButton}</SheetTrigger>
-        <SheetContent side="bottom" className="p-4 pb-8">
+        <SheetContent side="bottom" className="p-4 pb-8 bg-sidebar text-sidebar-foreground border-white/10">
           {mode === 'setup' ? <SetupPopoverPanel /> : <ConflictPopoverPanel />}
         </SheetContent>
       </Sheet>

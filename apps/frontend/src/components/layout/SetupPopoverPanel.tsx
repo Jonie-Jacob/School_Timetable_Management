@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, Circle, Lock } from 'lucide-react';
+import { Check, Circle, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   useGetSetupWizardQuery,
@@ -21,7 +21,7 @@ const STEP_ROUTES: Record<number, string> = {
 function StepIcon({ step, steps }: { step: SetupStep; steps: SetupStep[] }) {
   if (step.complete) {
     return (
-      <div className="flex size-6 items-center justify-center rounded-full bg-success text-white">
+      <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
         <Check className="size-3.5" />
       </div>
     );
@@ -30,14 +30,14 @@ function StepIcon({ step, steps }: { step: SetupStep; steps: SetupStep[] }) {
   const prevComplete = step.step === 1 || steps[step.step - 2].complete;
   if (!prevComplete) {
     return (
-      <div className="flex size-6 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Lock className="size-3.5" />
+      <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/30">
+        <Lock className="size-3" />
       </div>
     );
   }
 
   return (
-    <div className="flex size-6 items-center justify-center rounded-full border-2 border-primary text-primary">
+    <div className="flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-amber-400 text-amber-400">
       <Circle className="size-2.5 fill-current" />
     </div>
   );
@@ -52,19 +52,23 @@ export function SetupPopoverPanel() {
   if (!data) return null;
 
   const { steps, totalComplete, totalSteps } = data;
-
   const currentStep = steps.find((s) => !s.complete);
 
   return (
-    <div className="w-72 space-y-3">
+    <div className="w-80 space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm">{t('setupWizard.title')}</h3>
-        <span className="text-xs text-muted-foreground">
-          {totalComplete}/{totalSteps}
-        </span>
+        <div className="flex items-center gap-1.5 rounded-full bg-amber-500/20 px-2.5 py-0.5">
+          <div className="size-1.5 rounded-full bg-amber-400" />
+          <span className="text-[10px] font-medium text-amber-400">
+            {totalComplete}/{totalSteps}
+          </span>
+        </div>
       </div>
 
-      <div className="space-y-1">
+      {/* Steps list */}
+      <div className="space-y-0.5">
         {steps.map((step) => {
           const prevComplete = step.step === 1 || steps[step.step - 2].complete;
           const isLocked = !step.complete && !prevComplete;
@@ -73,7 +77,7 @@ export function SetupPopoverPanel() {
           return (
             <button
               key={step.step}
-              className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
               disabled={isLocked}
               onClick={() => {
                 if (!isLocked) navigate(STEP_ROUTES[step.step]);
@@ -81,25 +85,29 @@ export function SetupPopoverPanel() {
             >
               <StepIcon step={step} steps={steps} />
               <div className="flex-1 min-w-0">
-                <span className={step.complete ? 'text-muted-foreground line-through' : ''}>
+                <span className={step.complete ? 'text-white/50 line-through' : 'text-white/90'}>
                   {step.name}
                 </span>
                 {step.detail && (
-                  <p className="text-xs text-muted-foreground truncate">{step.detail}</p>
+                  <p className="text-[10px] text-white/40 truncate">{step.detail}</p>
                 )}
               </div>
               {isCurrent && (
-                <span className="text-xs font-medium text-primary">{t('setupWizard.continue')}</span>
+                <span className="flex items-center gap-1 text-[10px] font-medium text-amber-400 shrink-0">
+                  {t('setupWizard.continue')}
+                  <ArrowRight className="size-3" />
+                </span>
               )}
             </button>
           );
         })}
       </div>
 
+      {/* Dismiss */}
       <Button
         variant="ghost"
         size="sm"
-        className="w-full text-muted-foreground text-xs"
+        className="w-full text-white/40 hover:text-white/60 hover:bg-white/5 text-xs"
         onClick={() => dismiss()}
         disabled={isDismissing}
       >
