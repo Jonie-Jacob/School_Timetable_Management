@@ -179,7 +179,8 @@ export function Component() {
         id: 'actions',
         header: t('table.actions'),
         enableResizing: false,
-        size: 100,
+        size: 80,
+        maxSize: 100,
         cell: ({ row }) => {
           const teacher = row.original;
           return (
@@ -271,6 +272,7 @@ export function Component() {
               onChange={setSearch}
               placeholder={t('searchPlaceholder')}
               className="w-64"
+              variant="dark"
             />
             {!isReadOnly && (
               <Button onClick={() => navigate('/teachers/new')}>
@@ -305,6 +307,7 @@ export function Component() {
             : undefined
         }
         pageCount={meta?.totalPages}
+        totalCount={meta?.totalCount}
         onPaginationChange={(p) => { setPageIndex(p.pageIndex); setPageSize(p.pageSize); }}
       />
 

@@ -10,6 +10,8 @@ interface SearchInputProps {
   placeholder?: string;
   debounceMs?: number;
   className?: string;
+  /** Use 'dark' when placed inside a dark container like PageHeader */
+  variant?: 'default' | 'dark';
 }
 
 export function SearchInput({
@@ -18,6 +20,7 @@ export function SearchInput({
   placeholder = 'Search...',
   debounceMs = 300,
   className,
+  variant = 'default',
 }: SearchInputProps) {
   const [localValue, setLocalValue] = useState(value);
 
@@ -39,20 +42,31 @@ export function SearchInput({
     onChange('');
   }, [onChange]);
 
+  const isDark = variant === 'dark';
+
   return (
     <div className={cn('relative', className)}>
-      <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Search className={cn(
+        'absolute left-2.5 top-1/2 size-4 -translate-y-1/2',
+        isDark ? 'text-white/40' : 'text-muted-foreground',
+      )} />
       <Input
         value={localValue}
         onChange={(e) => setLocalValue(e.target.value)}
         placeholder={placeholder}
-        className="pl-9 pr-8"
+        className={cn(
+          'pl-9 pr-8',
+          isDark && 'bg-white/10 border-white/20 text-white placeholder:text-white/40 focus-visible:border-amber-500/50 focus-visible:ring-amber-500/20',
+        )}
       />
       {localValue && (
         <Button
           variant="ghost"
           size="icon-xs"
-          className="absolute right-1.5 top-1/2 -translate-y-1/2"
+          className={cn(
+            'absolute right-1.5 top-1/2 -translate-y-1/2',
+            isDark && 'text-white/40 hover:text-white hover:bg-white/10',
+          )}
           onClick={handleClear}
         >
           <X className="size-3.5" />

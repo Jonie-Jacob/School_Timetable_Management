@@ -43,6 +43,7 @@ interface DataTableProps<TData, TValue> {
   emptyAction?: ReactNode;
   pagination?: PaginationState;
   pageCount?: number;
+  totalCount?: number;
   onPaginationChange?: (pagination: PaginationState) => void;
   renderCard?: (item: TData, index: number) => ReactNode;
   /** Unique key for persisting column sizes in localStorage */
@@ -78,6 +79,7 @@ export function DataTable<TData, TValue>({
   emptyAction,
   pagination,
   pageCount,
+  totalCount,
   onPaginationChange,
   renderCard,
   storageKey,
@@ -158,7 +160,7 @@ export function DataTable<TData, TValue>({
       <div className="space-y-4">
         <DataTableCardView data={data} renderCard={renderCard} />
         {pagination && onPaginationChange && (
-          <PaginationControls table={table} pagination={pagination} onPaginationChange={onPaginationChange} />
+          <PaginationControls table={table} pagination={pagination} onPaginationChange={onPaginationChange} totalCount={totalCount} currentCount={data.length} />
         )}
       </div>
     );
@@ -235,7 +237,7 @@ export function DataTable<TData, TValue>({
       </Table>
 
       {pagination && onPaginationChange && (
-        <PaginationControls table={table} pagination={pagination} onPaginationChange={onPaginationChange} />
+        <PaginationControls table={table} pagination={pagination} onPaginationChange={onPaginationChange} totalCount={totalCount} currentCount={data.length} />
       )}
     </div>
   );
@@ -245,42 +247,57 @@ function PaginationControls<TData>({
   table,
   pagination,
   onPaginationChange,
+  totalCount,
+  currentCount,
 }: {
   table: TanstackTable<TData>;
   pagination: PaginationState;
   onPaginationChange: (pagination: PaginationState) => void;
+  totalCount?: number;
+  currentCount: number;
 }) {
   const { t } = useTranslation();
 
+  const from = pagination.pageIndex * pagination.pageSize + 1;
+  const to = from + currentCount - 1;
+
   return (
     <div className="flex items-center justify-between bg-sidebar text-sidebar-foreground px-4 py-2.5">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-white/60 whitespace-nowrap">Rows per page</span>
-        <Select
-          value={String(pagination.pageSize)}
-          onValueChange={(val) => {
-            onPaginationChange({ pageIndex: 0, pageSize: Number(val) });
-          }}
-        >
-          <SelectTrigger className="h-7 w-16 text-xs border-white/20 bg-white/10 text-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PAGE_SIZE_OPTIONS.map((size) => (
-              <SelectItem key={size} value={String(size)} className="text-xs">
-                {size}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Left: entries info + page size */}
+      <div className="flex items-center gap-3">
+        {totalCount != null && (
+          <span className="text-xs text-white/50 tabular-nums whitespace-nowrap">
+            {from}–{to} of {totalCount}
+          </span>
+        )}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-white/40 whitespace-nowrap">Rows</span>
+          <Select
+            value={String(pagination.pageSize)}
+            onValueChange={(val) => {
+              onPaginationChange({ pageIndex: 0, pageSize: Number(val) });
+            }}
+          >
+            <SelectTrigger className="h-6 w-[60px] text-xs border-white/20 bg-white/10 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <SelectItem key={size} value={String(size)} className="text-xs">
+                  {size}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <p className="text-xs text-white/60 tabular-nums">
-        {t('pagination.page')} {pagination.pageIndex + 1}
-        {table.getPageCount() > 0 && ` ${t('pagination.of')} ${table.getPageCount()}`}
-      </p>
-
-      <div className="flex items-center gap-1">
+      {/* Right: page count + nav buttons */}
+      <div className="flex items-center gap-2">
+        <p className="text-xs text-white/50 tabular-nums">
+          {t('pagination.page')} {pagination.pageIndex + 1}
+          {table.getPageCount() > 0 && ` ${t('pagination.of')} ${table.getPageCount()}`}
+        </p>
         <Button
           variant="ghost"
           size="icon-xs"

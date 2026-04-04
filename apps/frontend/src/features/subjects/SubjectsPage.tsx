@@ -167,6 +167,9 @@ export function Component() {
       {
         id: 'actions',
         header: t('table.actions'),
+        enableResizing: false,
+        size: 80,
+        maxSize: 100,
         cell: ({ row }) => {
           const subject = row.original;
           return (
@@ -243,6 +246,7 @@ export function Component() {
               onChange={setSearch}
               placeholder={t('searchPlaceholder')}
               className="w-64"
+              variant="dark"
             />
             {!isReadOnly && (
               <Button onClick={() => setFormOpen(true)}>
@@ -277,6 +281,7 @@ export function Component() {
             : undefined
         }
         pageCount={meta?.totalPages}
+        totalCount={meta?.totalCount}
         onPaginationChange={(p) => { setPageIndex(p.pageIndex); setPageSize(p.pageSize); }}
       />
 
