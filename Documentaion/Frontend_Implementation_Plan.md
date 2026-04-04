@@ -208,9 +208,9 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 |-------|------|-----------|------------|----------------|--------|
 | 0 | Project Scaffolding | — | Low | 1 | ✅ Complete |
 | 1 | Design System & Shared Components | — | Medium | 3 (A, B, C) | ✅ Complete |
-| 2 | App Shell & Layout | Global Shell | Medium | 3 (A, B, C) | 🟡 Partial |
+| 2 | App Shell & Layout | Global Shell | Medium | 3 (A, B, C) | ✅ Complete |
 | 3 | Auth Pages | Screen 0 | Medium | 2 (A, B) | ✅ Complete |
-| 4 | Dashboard | Screen 1 | Low–Medium | 1 | 🟡 Partial |
+| 4 | Dashboard | Screen 1 | Low–Medium | 1 | ✅ Complete |
 | 5 | Academic Year Management | Screen 2 | Low | 1 | ✅ Complete |
 | 6 | Period Structures | Screens 3 & 3A | High | 3 (A, B, C) | ✅ Complete |
 | 7 | Subjects | Screens 4 & 5 | Low | 1 | ✅ Complete |
@@ -222,12 +222,12 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 13 | Timetable Editor (DnD) | Screen 12 | Very High | 3 (A, B, C) | ⬜ Not Started |
 | 14 | Notifications | Screen 13 | Low–Medium | 1 | ⬜ Not Started |
 | 15 | Teacher Timetable View | Screen 14 | Medium | 1 | ⬜ Not Started |
-| 16 | WebSocket Integration | — | Medium | 1 | 🟡 Partial |
+| 16 | WebSocket Integration | — | Medium | 1 | ✅ Complete |
 | 17 | i18n Setup | — | Low | 1 | ✅ Complete |
 | 18 | Final Responsive Polish & QA | All | Medium | 1 | ⬜ Not Started |
 
 **Total Phases**: 19 (with sub-parts: ~29 deliverables)
-**Completed**: 7/19 | **Partially Complete**: 3/19 | **Not Started**: 9/19
+**Completed**: 10/19 | **Partially Complete**: 0/19 | **Not Started**: 9/19
 
 ### Detailed Phase Completion Notes
 
@@ -239,22 +239,22 @@ All tasks complete: Vite + React 19, TypeScript strict, Tailwind CSS v4, shadcn/
 - **1B Composite Components** ✅ — DataTable, DataTableCardView, PageHeader, SearchInput, EmptyState, ConfirmDialog, StatusBadge, PageSkeleton, GlobalErrorBoundary, FeatureErrorBoundary all implemented
 - **1C Form Components** ✅ — DatePicker, TimePicker, MultiSelect, PasswordInput, PasswordStrength all implemented
 
-#### 🟡 Phase 2 — App Shell & Layout
+#### ✅ Phase 2 — App Shell & Layout
 - **2A Desktop Layout** ✅ — AppShell, Sidebar (collapsible), TopBar, AcademicYearSelector, ThemeToggle, UserMenu, Breadcrumb, ReadOnlyBanner, SidebarLink all implemented
 - **2B Mobile Layout** ✅ — BottomTabBar, MobileHeader, MobileDrawer, MoreSheet all implemented
 - **2C Auth Guard & Error Boundaries** ✅ — AuthenticatedLayout (auth guard), GlobalErrorBoundary, FeatureErrorBoundary, mock-auth all implemented
-- **Missing**: FloatingActionButton (FAB) not implemented — the setup wizard FAB with progress ring, setup popover panel, and conflict popover panel are all absent. This is a key gap.
+- **FAB** ✅ — FloatingActionButton with dual mode (setup progress ring / conflict badge), SetupPopoverPanel (desktop popover / mobile bottom sheet with 7-step list), ConflictPopoverPanel (notification count with link). Integrated into AppShell.
 
 #### ✅ Phase 3 — Auth Pages
 - **3A Login Page** ✅ — LoginPage with split layout (desktop) / single-column (mobile), LoginForm with email/password/remember-me, AuthLayout, authSlice with full state management
 - **3B Registration & Forgot Password** ✅ — RegisterForm with password strength, ForgotPasswordForm, ResetPasswordForm with verification code flow
 
-#### 🟡 Phase 4 — Dashboard
+#### ✅ Phase 4 — Dashboard
 - **Summary Cards** ✅ — 6 SummaryCard components (classes, divisions, teachers, subjects, generated, pending) with RTK Query API
 - **Conflict Banner** ✅ — ConflictBanner with link to notifications
 - **Quick Links** ✅ — QuickLinks component for navigation
 - **Welcome/Empty State** ✅ — WelcomeState component
-- **Missing**: SetupStepCards (setup wizard dashboard cards showing 7-step progress) not implemented. Setup wizard API integration (`useGetSetupWizardQuery`, `useDismissSetupWizardMutation`) exists in dashboardApi but the UI cards are not built. FAB integration not present on dashboard.
+- **Setup Wizard Cards** ✅ — SetupStepCard component with step number, title, description, completion status, locked state for unmet prerequisites, and action buttons (Continue/Review). Integrated into DashboardPage above summary cards when wizard is active. dashboardApi extended with `useGetSetupWizardQuery` and `useDismissSetupWizardMutation`. i18n strings added for all 7 step cards.
 
 #### ✅ Phase 5 — Academic Year Management
 All tasks complete: AcademicYearsPage with DataTable (table + card views), AcademicYearForm dialog with date validation, academicYearApi with list/create/activate endpoints, status badges, pagination, i18n strings.
@@ -295,9 +295,10 @@ NotificationsPage is placeholder only. No notification list, no notificationApi 
 #### ⬜ Phase 15 — Teacher Timetable View
 TeacherTimetablePage is placeholder only. No grid, no teacherTimetableApi.
 
-#### 🟡 Phase 16 — WebSocket Integration
-- **Redux Slice** ✅ — wsSlice exists with `connected` state and `setWsConnected` action
-- **Missing**: useWebSocket hook not implemented, no actual WebSocket client connection, no reconnection logic, no message handling, no fallback polling integration
+#### ✅ Phase 16 — WebSocket Integration
+- **Redux Slice** ✅ — wsSlice with `connected` state and `setWsConnected` action
+- **useWebSocket Hook** ✅ — Full WebSocket client with token-based authentication, exponential backoff reconnection (max 5 retries, up to 30s delay), message handling for GENERATION_COMPLETE/GENERATION_FAILED/TIMETABLE_OUTDATED events, RTK Query cache invalidation on events, toast notifications
+- **Integration** ✅ — Hook initialized in AuthenticatedLayout (runs once per authenticated session), notificationApi registered in Redux store with 60s polling for notification count as fallback
 
 #### ✅ Phase 17 — i18n Setup
 All tasks complete: i18next configured with LanguageDetector, 6 namespace files (common, auth, dashboard, academic-years, period-structures, subjects), `useTranslation()` used throughout implemented features.
