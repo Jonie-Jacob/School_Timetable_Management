@@ -42,6 +42,14 @@ export const router = createBrowserRouter([
         lazy: () => import('@/features/teachers/TeachersPage'),
       },
       {
+        path: 'teachers/new',
+        lazy: () => import('@/features/teachers/TeacherFormPage'),
+      },
+      {
+        path: 'teachers/:id/edit',
+        lazy: () => import('@/features/teachers/TeacherFormPage'),
+      },
+      {
         path: 'elective-groups',
         lazy: () => import('@/features/elective-groups/ElectiveGroupsPage'),
       },

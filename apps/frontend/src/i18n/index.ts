@@ -7,6 +7,7 @@ import enDashboard from './locales/en/dashboard.json';
 import enAcademicYears from './locales/en/academic-years.json';
 import enPeriodStructures from './locales/en/period-structures.json';
 import enSubjects from './locales/en/subjects.json';
+import enTeachers from './locales/en/teachers.json';
 
 i18n
   .use(LanguageDetector)
@@ -20,6 +21,7 @@ i18n
         'academic-years': enAcademicYears,
         'period-structures': enPeriodStructures,
         subjects: enSubjects,
+        teachers: enTeachers,
       },
     },
     defaultNS: 'common',

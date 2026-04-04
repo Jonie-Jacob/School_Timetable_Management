@@ -7,6 +7,7 @@ import { academicYearApi } from '@/features/academic-years/academicYearApi';
 import { configApi } from '@/features/period-structures/configApi';
 import { subjectApi } from '@/features/subjects/subjectApi';
 import { notificationApi } from '@/features/notifications/notificationApi';
+import { teacherApi } from '@/features/teachers/teacherApi';
 
 export const store = configureStore({
   reducer: {
@@ -17,6 +18,7 @@ export const store = configureStore({
     [configApi.reducerPath]: configApi.reducer,
     [subjectApi.reducerPath]: subjectApi.reducer,
     [notificationApi.reducerPath]: notificationApi.reducer,
+    [teacherApi.reducerPath]: teacherApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
@@ -24,7 +26,8 @@ export const store = configureStore({
       .concat(academicYearApi.middleware)
       .concat(configApi.middleware)
       .concat(subjectApi.middleware)
-      .concat(notificationApi.middleware),
+      .concat(notificationApi.middleware)
+      .concat(teacherApi.middleware),
 });
 
 setupListeners(store.dispatch);

@@ -1,0 +1,54 @@
+{
+  "title": "Teachers",
+  "description": "Manage teachers, their qualified subjects, and availability.",
+  "addTeacher": "Add Teacher",
+  "edit": "Edit",
+  "delete": "Delete",
+  "searchPlaceholder": "Search teachers...",
+  "createSuccess": "Teacher created successfully.",
+  "updateSuccess": "Teacher updated successfully.",
+  "deleteSuccess": "Teacher deleted successfully.",
+  "createError": "Failed to create teacher.",
+  "updateError": "Failed to update teacher.",
+  "deleteError": "Failed to delete teacher.",
+  "table": {
+    "name": "Name",
+    "subjects": "Subjects",
+    "contact": "Contact",
+    "maxPeriods": "Max Periods/Week",
+    "actions": "Actions"
+  },
+  "form": {
+    "createTitle": "Add Teacher",
+    "editTitle": "Edit Teacher",
+    "name": "Name",
+    "namePlaceholder": "Enter teacher name",
+    "contact": "Contact Details",
+    "contactPlaceholder": "Phone number or email (optional)",
+    "maxPeriodsPerWeek": "Max Periods Per Week",
+    "maxPeriodsPlaceholder": "Leave empty for no limit",
+    "subjects": "Qualified Subjects",
+    "subjectsPlaceholder": "Select subjects...",
+    "subjectsSearch": "Search subjects...",
+    "subjectsEmpty": "No subjects found.",
+    "availability": "Availability",
+    "availabilityHint": "Click periods to mark as unavailable. Red cells indicate unavailable slots.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "available": "Available",
+    "unavailable": "Unavailable"
+  },
+  "deleteConfirm": {
+    "title": "Delete Teacher",
+    "description": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "confirm": "Delete",
+    "confirmCascade": "Delete Anyway"
+  },
+  "deleteWarning": "This teacher has {{assignments}} active assignment(s) across {{timetables}} timetable(s). Deleting will remove these assignments and flag affected timetables as outdated.",
+  "deleteWarningGeneric": "This teacher has active assignments. Deleting will remove them and flag affected timetables as outdated.",
+  "empty": {
+    "title": "No teachers yet",
+    "description": "Add your first teacher to get started with timetable generation."
+  }
+}

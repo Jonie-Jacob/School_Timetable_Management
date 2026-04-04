@@ -214,7 +214,7 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 5 | Academic Year Management | Screen 2 | Low | 1 | ✅ Complete |
 | 6 | Period Structures | Screens 3 & 3A | High | 3 (A, B, C) | ✅ Complete |
 | 7 | Subjects | Screens 4 & 5 | Low | 1 | ✅ Complete |
-| 8 | Teachers | Screens 6 & 7 | High | 2 (A, B) | ⬜ Not Started |
+| 8 | Teachers | Screens 6 & 7 | High | 2 (A, B) | ✅ Complete |
 | 9 | Classes & Divisions | Screens 8 & 9 | Medium | 2 (A, B) | ⬜ Not Started |
 | 10 | Division Assignments Editor | Screen 10 | High | 2 (A, B) | ⬜ Not Started |
 | 11 | Elective Groups | Elective Screen | Medium | 1 | ⬜ Not Started |
@@ -227,7 +227,7 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 18 | Final Responsive Polish & QA | All | Medium | 1 | ⬜ Not Started |
 
 **Total Phases**: 19 (with sub-parts: ~29 deliverables)
-**Completed**: 10/19 | **Partially Complete**: 0/19 | **Not Started**: 9/19
+**Completed**: 11/19 | **Partially Complete**: 0/19 | **Not Started**: 8/19
 
 ### Detailed Phase Completion Notes
 
@@ -267,9 +267,9 @@ All tasks complete: AcademicYearsPage with DataTable (table + card views), Acade
 #### ✅ Phase 7 — Subjects
 All tasks complete: SubjectsPage with DataTable + search + pagination, SubjectForm (create/edit), subjectApi with full CRUD + cascade delete check, read-only mode support, i18n strings.
 
-#### ⬜ Phase 8 — Teachers
-- **8A Teachers List** ⬜ — TeachersPage is placeholder only (heading + description, no table, no API)
-- **8B Teacher Form + Availability** ⬜ — No TeacherForm, no AvailabilityGrid, no teacherApi
+#### ✅ Phase 8 — Teachers
+- **8A Teachers List** ✅ — TeachersPage with DataTable (table + card views), search, pagination, subject badges per teacher, edit navigates to form page, delete with cascade confirmation
+- **8B Teacher Form + Availability** ✅ — TeacherFormPage (full page at `/teachers/new` and `/teachers/:id/edit`) with name, contact, maxPeriodsPerWeek, qualified subjects MultiSelect, and AvailabilityGrid. AvailabilityGrid fetches individual period structure details to get working days with slots, renders desktop 2D click-toggle grid and mobile day-by-day accordion with switches. teacherApi RTK Query slice with full CRUD + setSubjects + setAvailability endpoints. i18n strings added. Vite proxy fixed with bypass for HTML requests to prevent route conflicts.
 
 #### ⬜ Phase 9 — Classes & Divisions
 - **9A Classes List** ⬜ — ClassesPage is placeholder only (heading + description, no table, no API)
