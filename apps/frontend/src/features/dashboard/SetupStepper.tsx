@@ -26,7 +26,7 @@ export function SetupStepper({ steps }: SetupStepperProps) {
   const currentStep = steps.find((s) => !s.complete);
 
   return (
-    <div className="rounded-xl bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-white p-4 overflow-x-auto shadow-lg border border-white/10 backdrop-blur-sm">
+    <div className="rounded-xl bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white p-4 overflow-x-auto shadow-lg border border-white/10 backdrop-blur-sm">
       <div className="flex items-start min-w-max gap-0">
         {steps.map((step, idx) => {
           const isLast = idx === steps.length - 1;
@@ -103,7 +103,7 @@ export function SetupStepper({ steps }: SetupStepperProps) {
 
 export function SetupStepperSkeleton() {
   return (
-    <div className="rounded-xl bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 p-4 shadow-lg border border-white/10">
+    <div className="rounded-xl bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 p-4 shadow-lg border border-white/10">
       <div className="flex items-center gap-2">
         {Array.from({ length: 7 }).map((_, i) => (
           <div key={i} className="flex items-center flex-1">

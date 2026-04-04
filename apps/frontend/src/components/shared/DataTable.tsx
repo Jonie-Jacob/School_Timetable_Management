@@ -262,7 +262,7 @@ function PaginationControls<TData>({
   const to = from + currentCount - 1;
 
   return (
-    <div className="flex items-center justify-between bg-sidebar text-sidebar-foreground px-4 py-2.5">
+    <div className="flex items-center justify-between bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white px-4 py-2.5">
       {/* Left: entries info + page size */}
       <div className="flex items-center gap-3">
         {totalCount != null && (
@@ -278,7 +278,7 @@ function PaginationControls<TData>({
               onPaginationChange({ pageIndex: 0, pageSize: Number(val) });
             }}
           >
-            <SelectTrigger className="h-6 w-[60px] text-xs border-white/20 bg-white/10 text-white">
+            <SelectTrigger className="h-7 w-[72px] text-xs border-white/20 bg-white/10 text-white">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

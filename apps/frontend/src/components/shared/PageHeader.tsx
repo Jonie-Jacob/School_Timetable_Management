@@ -8,7 +8,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl bg-sidebar text-sidebar-foreground px-5 py-4 shadow-sm">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white px-5 py-4 shadow-sm">
       <div>
         <h1 className="text-xl font-bold tracking-tight text-white">
           {title}
