@@ -3,7 +3,8 @@
     "allow": [
       "Bash(xargs basename:*)",
       "Bash(npx prisma:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
