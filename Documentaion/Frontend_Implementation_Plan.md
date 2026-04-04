@@ -200,29 +200,110 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 
 ## 6. Phase Overview
 
-| Phase | Name | Screen(s) | Complexity | Est. Sub-parts |
-|-------|------|-----------|------------|----------------|
-| 0 | Project Scaffolding | — | Low | 1 |
-| 1 | Design System & Shared Components | — | Medium | 3 (A, B, C) |
-| 2 | App Shell & Layout | Global Shell | Medium | 3 (A, B, C) |
-| 3 | Auth Pages | Screen 0 | Medium | 2 (A, B) |
-| 4 | Dashboard | Screen 1 | Low–Medium | 1 |
-| 5 | Academic Year Management | Screen 2 | Low | 1 |
-| 6 | Period Structures | Screens 3 & 3A | High | 3 (A, B, C) |
-| 7 | Subjects | Screens 4 & 5 | Low | 1 |
-| 8 | Teachers | Screens 6 & 7 | High | 2 (A, B) |
-| 9 | Classes & Divisions | Screens 8 & 9 | Medium | 2 (A, B) |
-| 10 | Division Assignments Editor | Screen 10 | High | 2 (A, B) |
-| 11 | Elective Groups | Elective Screen | Medium | 1 |
-| 12 | Timetable Generator | Screen 11 | Medium | 1 |
-| 13 | Timetable Editor (DnD) | Screen 12 | Very High | 3 (A, B, C) |
-| 14 | Notifications | Screen 13 | Low–Medium | 1 |
-| 15 | Teacher Timetable View | Screen 14 | Medium | 1 |
-| 16 | WebSocket Integration | — | Medium | 1 |
-| 17 | i18n Setup | — | Low | 1 |
-| 18 | Final Responsive Polish & QA | All | Medium | 1 |
+> **Progress Legend**: ✅ = Fully Complete | 🟡 = Partially Complete | ⬜ = Not Started
+>
+> **Last Updated**: April 4, 2026
+
+| Phase | Name | Screen(s) | Complexity | Est. Sub-parts | Status |
+|-------|------|-----------|------------|----------------|--------|
+| 0 | Project Scaffolding | — | Low | 1 | ✅ Complete |
+| 1 | Design System & Shared Components | — | Medium | 3 (A, B, C) | ✅ Complete |
+| 2 | App Shell & Layout | Global Shell | Medium | 3 (A, B, C) | 🟡 Partial |
+| 3 | Auth Pages | Screen 0 | Medium | 2 (A, B) | ✅ Complete |
+| 4 | Dashboard | Screen 1 | Low–Medium | 1 | 🟡 Partial |
+| 5 | Academic Year Management | Screen 2 | Low | 1 | ✅ Complete |
+| 6 | Period Structures | Screens 3 & 3A | High | 3 (A, B, C) | ✅ Complete |
+| 7 | Subjects | Screens 4 & 5 | Low | 1 | ✅ Complete |
+| 8 | Teachers | Screens 6 & 7 | High | 2 (A, B) | ⬜ Not Started |
+| 9 | Classes & Divisions | Screens 8 & 9 | Medium | 2 (A, B) | ⬜ Not Started |
+| 10 | Division Assignments Editor | Screen 10 | High | 2 (A, B) | ⬜ Not Started |
+| 11 | Elective Groups | Elective Screen | Medium | 1 | ⬜ Not Started |
+| 12 | Timetable Generator | Screen 11 | Medium | 1 | ⬜ Not Started |
+| 13 | Timetable Editor (DnD) | Screen 12 | Very High | 3 (A, B, C) | ⬜ Not Started |
+| 14 | Notifications | Screen 13 | Low–Medium | 1 | ⬜ Not Started |
+| 15 | Teacher Timetable View | Screen 14 | Medium | 1 | ⬜ Not Started |
+| 16 | WebSocket Integration | — | Medium | 1 | 🟡 Partial |
+| 17 | i18n Setup | — | Low | 1 | ✅ Complete |
+| 18 | Final Responsive Polish & QA | All | Medium | 1 | ⬜ Not Started |
 
 **Total Phases**: 19 (with sub-parts: ~29 deliverables)
+**Completed**: 7/19 | **Partially Complete**: 3/19 | **Not Started**: 9/19
+
+### Detailed Phase Completion Notes
+
+#### ✅ Phase 0 — Project Scaffolding
+All tasks complete: Vite + React 19, TypeScript strict, Tailwind CSS v4, shadcn/ui, Redux Toolkit, React Router v7, i18n skeleton, custom color palette, directory structure, Redux store, RTK Query base config, router skeleton.
+
+#### ✅ Phase 1 — Design System & Shared Components
+- **1A Core Primitives** ✅ — 28+ shadcn/ui components installed (button, input, dialog, form, card, tabs, etc.)
+- **1B Composite Components** ✅ — DataTable, DataTableCardView, PageHeader, SearchInput, EmptyState, ConfirmDialog, StatusBadge, PageSkeleton, GlobalErrorBoundary, FeatureErrorBoundary all implemented
+- **1C Form Components** ✅ — DatePicker, TimePicker, MultiSelect, PasswordInput, PasswordStrength all implemented
+
+#### 🟡 Phase 2 — App Shell & Layout
+- **2A Desktop Layout** ✅ — AppShell, Sidebar (collapsible), TopBar, AcademicYearSelector, ThemeToggle, UserMenu, Breadcrumb, ReadOnlyBanner, SidebarLink all implemented
+- **2B Mobile Layout** ✅ — BottomTabBar, MobileHeader, MobileDrawer, MoreSheet all implemented
+- **2C Auth Guard & Error Boundaries** ✅ — AuthenticatedLayout (auth guard), GlobalErrorBoundary, FeatureErrorBoundary, mock-auth all implemented
+- **Missing**: FloatingActionButton (FAB) not implemented — the setup wizard FAB with progress ring, setup popover panel, and conflict popover panel are all absent. This is a key gap.
+
+#### ✅ Phase 3 — Auth Pages
+- **3A Login Page** ✅ — LoginPage with split layout (desktop) / single-column (mobile), LoginForm with email/password/remember-me, AuthLayout, authSlice with full state management
+- **3B Registration & Forgot Password** ✅ — RegisterForm with password strength, ForgotPasswordForm, ResetPasswordForm with verification code flow
+
+#### 🟡 Phase 4 — Dashboard
+- **Summary Cards** ✅ — 6 SummaryCard components (classes, divisions, teachers, subjects, generated, pending) with RTK Query API
+- **Conflict Banner** ✅ — ConflictBanner with link to notifications
+- **Quick Links** ✅ — QuickLinks component for navigation
+- **Welcome/Empty State** ✅ — WelcomeState component
+- **Missing**: SetupStepCards (setup wizard dashboard cards showing 7-step progress) not implemented. Setup wizard API integration (`useGetSetupWizardQuery`, `useDismissSetupWizardMutation`) exists in dashboardApi but the UI cards are not built. FAB integration not present on dashboard.
+
+#### ✅ Phase 5 — Academic Year Management
+All tasks complete: AcademicYearsPage with DataTable (table + card views), AcademicYearForm dialog with date validation, academicYearApi with list/create/activate endpoints, status badges, pagination, i18n strings.
+
+#### ✅ Phase 6 — Period Structures
+- **6A List Page** ✅ — PeriodStructuresPage with DataTable, configApi with full CRUD
+- **6B Editor** ✅ — PeriodStructureEditor with name, working days, division assignment (MultiSelect), day tabs (desktop) / dropdown (mobile), slot management
+- **6C DnD & Interactions** ✅ — DaySlotList with @dnd-kit sortable, SlotRow (desktop), SlotCard (mobile), add/remove/reorder slots, copy between days, reset to defaults, all slot types (Period/Interval/Lunch Break)
+
+#### ✅ Phase 7 — Subjects
+All tasks complete: SubjectsPage with DataTable + search + pagination, SubjectForm (create/edit), subjectApi with full CRUD + cascade delete check, read-only mode support, i18n strings.
+
+#### ⬜ Phase 8 — Teachers
+- **8A Teachers List** ⬜ — TeachersPage is placeholder only (heading + description, no table, no API)
+- **8B Teacher Form + Availability** ⬜ — No TeacherForm, no AvailabilityGrid, no teacherApi
+
+#### ⬜ Phase 9 — Classes & Divisions
+- **9A Classes List** ⬜ — ClassesPage is placeholder only (heading + description, no table, no API)
+- **9B Class Detail + Divisions** ⬜ — No ClassDetailPage, no DivisionCard, no classApi
+
+#### ⬜ Phase 10 — Division Assignments Editor
+Not started. No AssignmentEditorPage, no assignmentApi.
+
+#### ⬜ Phase 11 — Elective Groups
+ElectiveGroupsPage is placeholder only. No CRUD, no API.
+
+#### ⬜ Phase 12 — Timetable Generator
+Not started. No GeneratorPage, no timetableApi.
+
+#### ⬜ Phase 13 — Timetable Editor (DnD)
+- **13A Grid Layout** ⬜ — Not started
+- **13B Drag-and-Drop & Conflicts** ⬜ — Not started
+- **13C Export Integration** ⬜ — Not started
+
+#### ⬜ Phase 14 — Notifications
+NotificationsPage is placeholder only. No notification list, no notificationApi (beyond conflict banner in dashboard).
+
+#### ⬜ Phase 15 — Teacher Timetable View
+TeacherTimetablePage is placeholder only. No grid, no teacherTimetableApi.
+
+#### 🟡 Phase 16 — WebSocket Integration
+- **Redux Slice** ✅ — wsSlice exists with `connected` state and `setWsConnected` action
+- **Missing**: useWebSocket hook not implemented, no actual WebSocket client connection, no reconnection logic, no message handling, no fallback polling integration
+
+#### ✅ Phase 17 — i18n Setup
+All tasks complete: i18next configured with LanguageDetector, 6 namespace files (common, auth, dashboard, academic-years, period-structures, subjects), `useTranslation()` used throughout implemented features.
+
+#### ⬜ Phase 18 — Final Responsive Polish & QA
+Not started. Depends on all other phases being complete first.
 
 ---
 

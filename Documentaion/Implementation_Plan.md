@@ -1,10 +1,39 @@
 # School Timetable Management System
 ## Backend Implementation Plan
 
-**Version**: 1.0  
-**Date**: March 13, 2026  
+**Version**: 1.1  
+**Date**: March 13, 2026 (Updated: April 4, 2026)  
 **Scope**: Backend only (frontend plan will be a separate document)  
 **Strategy**: Service-by-service implementation following the dependency chain
+
+---
+
+## Implementation Progress Tracker
+
+> Last updated: **April 4, 2026**
+
+| Phase | Name | Routes | Status | Notes |
+|-------|------|--------|--------|-------|
+| 0 | Local Dev Environment | — | ✅ COMPLETE | Docker Compose (PG + DynamoDB), npm scripts |
+| 1 | Monorepo Scaffolding | — | ✅ COMPLETE | npm workspaces, directory structure |
+| 2 | Shared Package | — | ✅ COMPLETE | Errors, middleware, helpers, Prisma client, Zod schemas |
+| 3 | Database Schema & Seed | 20 tables | ✅ COMPLETE | 4 migrations applied, setup_wizard_state added |
+| 4 | Auth Service (Mock) | 4/4 | ✅ COMPLETE | Mock JWT for local dev, Cognito ready for prod |
+| 5 | Academic Year Service | 6/6 | ✅ COMPLETE | CRUD + activate, soft delete, validation |
+| 6 | School Config Service | 14/14 | ✅ COMPLETE | Period structures, working days, slots, division assignment |
+| 7 | Subject Service | 5/5 | ✅ COMPLETE | CRUD + cascade invalidation |
+| 8 | Teacher Service | 7/7 | ✅ COMPLETE | CRUD + subjects + availability + maxPeriodsPerWeek |
+| 9 | Class Service | 8/8 | ✅ COMPLETE | User-defined classes, divisions, stream support, sort order |
+| 10 | Assignment Service | 12/12 | ✅ COMPLETE | Regular + elective assignments, scheduling preferences |
+| 11 | Timetable Service | 6/6 | ✅ COMPLETE | Generate (mock), status, grid, override, conflicts, teacher view |
+| 12 | Dashboard Service | 4/4 | ✅ COMPLETE | Stats, activity, setup wizard (auto-detect + dismiss) |
+| 12A | Notification Service | 4/4 | ✅ COMPLETE | List, count, dismiss, internal invalidation handler |
+| 13 | Export Service | 8/8 | ✅ COMPLETE | Division, class, teacher, multi-teacher × PDF/Excel |
+| 14 | WebSocket Service | 5/3 | ✅ COMPLETE | Connect, disconnect, broadcast, connections list |
+| 15 | Timetable Engine (Python) | — | ✅ COMPLETE | GA with H1–H10 hard + S1–S9 soft constraints |
+| 16 | Infrastructure (Terraform) | — | ⬜ NOT DEPLOYED | Terraform modules scaffolded, awaiting `terraform apply` |
+
+**Summary**: 101 API routes implemented across 12 services. All business logic coded and TypeScript-clean. Python GA engine complete with Dockerfile. Only remaining work is AWS deployment (Phase 16).
 
 ---
 
