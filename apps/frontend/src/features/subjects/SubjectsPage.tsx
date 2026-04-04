@@ -165,19 +165,21 @@ export function Component() {
         title={t('title')}
         description={t('description')}
         actions={
-          !isReadOnly && (
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="size-4" />
-              {t('addSubject')}
-            </Button>
-          )
+          <div className="flex items-center gap-2">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder={t('searchPlaceholder')}
+              className="w-64"
+            />
+            {!isReadOnly && (
+              <Button onClick={() => setFormOpen(true)}>
+                <Plus className="size-4" />
+                {t('addSubject')}
+              </Button>
+            )}
+          </div>
         }
-      />
-
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder={t('searchPlaceholder')}
       />
 
       <DataTable

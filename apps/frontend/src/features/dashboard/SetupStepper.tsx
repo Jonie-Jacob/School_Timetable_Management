@@ -26,7 +26,7 @@ export function SetupStepper({ steps }: SetupStepperProps) {
   const currentStep = steps.find((s) => !s.complete);
 
   return (
-    <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4 overflow-x-auto">
+    <div className="rounded-xl bg-sidebar text-sidebar-foreground p-4 overflow-x-auto shadow-lg">
       <div className="flex items-start min-w-max gap-0">
         {steps.map((step, idx) => {
           const isLast = idx === steps.length - 1;
@@ -49,8 +49,8 @@ export function SetupStepper({ steps }: SetupStepperProps) {
                     'flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all duration-300',
                     step.complete && 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/25',
                     isCurrent && 'bg-amber-500 text-amber-950 shadow-sm shadow-amber-500/25 ring-4 ring-amber-500/20 animate-pulse',
-                    isLocked && 'bg-muted text-muted-foreground cursor-not-allowed',
-                    !step.complete && !isCurrent && !isLocked && 'bg-muted text-muted-foreground border border-border',
+                    isLocked && 'bg-white/10 text-white/30 cursor-not-allowed',
+                    !step.complete && !isCurrent && !isLocked && 'bg-white/10 text-white/50 border border-white/20',
                   )}
                 >
                   {step.complete ? (
@@ -63,7 +63,7 @@ export function SetupStepper({ steps }: SetupStepperProps) {
                 </button>
                 <span className={cn(
                   'text-[10px] font-medium text-center leading-tight max-w-[72px]',
-                  step.complete ? 'text-emerald-600 dark:text-emerald-400' : isCurrent ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+                  step.complete ? 'text-emerald-400' : isCurrent ? 'text-amber-400' : 'text-white/40',
                 )}>
                   {label}
                 </span>
@@ -71,7 +71,7 @@ export function SetupStepper({ steps }: SetupStepperProps) {
                   <button
                     type="button"
                     onClick={() => navigate(STEP_ROUTES[step.step])}
-                    className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 hover:underline"
+                    className="text-[10px] font-semibold text-amber-400 hover:underline"
                   >
                     Continue
                   </button>
@@ -88,7 +88,7 @@ export function SetupStepper({ steps }: SetupStepperProps) {
                         ? 'bg-emerald-500/50'
                         : step.complete
                           ? 'bg-gradient-to-r from-emerald-500/50 to-border'
-                          : 'bg-border',
+                          : 'bg-white/15',
                     )}
                   />
                 </div>
@@ -103,7 +103,7 @@ export function SetupStepper({ steps }: SetupStepperProps) {
 
 export function SetupStepperSkeleton() {
   return (
-    <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4">
+    <div className="rounded-xl bg-sidebar p-4 shadow-lg">
       <div className="flex items-center gap-2">
         {Array.from({ length: 7 }).map((_, i) => (
           <div key={i} className="flex items-center flex-1">

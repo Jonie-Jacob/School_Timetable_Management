@@ -74,16 +74,11 @@ export function Component() {
           if (subjects.length === 0) return <span className="text-muted-foreground">—</span>;
           return (
             <div className="flex flex-wrap gap-1">
-              {subjects.slice(0, 3).map((ts) => (
+              {subjects.map((ts) => (
                 <Badge key={ts.subjectId} variant="secondary" className="text-xs">
                   {ts.subject.name}
                 </Badge>
               ))}
-              {subjects.length > 3 && (
-                <Badge variant="outline" className="text-xs">
-                  +{subjects.length - 3}
-                </Badge>
-              )}
             </div>
           );
         },
@@ -176,19 +171,21 @@ export function Component() {
         title={t('title')}
         description={t('description')}
         actions={
-          !isReadOnly && (
-            <Button onClick={() => navigate('/teachers/new')}>
-              <Plus className="size-4" />
-              {t('addTeacher')}
-            </Button>
-          )
+          <div className="flex items-center gap-2">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder={t('searchPlaceholder')}
+              className="w-64"
+            />
+            {!isReadOnly && (
+              <Button onClick={() => navigate('/teachers/new')}>
+                <Plus className="size-4" />
+                {t('addTeacher')}
+              </Button>
+            )}
+          </div>
         }
-      />
-
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder={t('searchPlaceholder')}
       />
 
       <DataTable

@@ -10,18 +10,18 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-sm hover:bg-amber-600 dark:hover:bg-amber-300 active:scale-[0.98]",
+        default: "bg-gradient-to-b from-amber-400 via-primary to-amber-600 text-primary-foreground shadow-sm hover:scale-[1.02] hover:shadow-md active:scale-[0.98]",
         destructive:
-          "bg-destructive text-white shadow-sm hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/80 dark:focus-visible:ring-destructive/40 active:scale-[0.98]",
+          "bg-gradient-to-b from-red-500 to-red-700 text-white shadow-sm hover:scale-[1.02] focus-visible:ring-destructive/20 dark:from-red-600 dark:to-red-800 dark:focus-visible:ring-destructive/40 active:scale-[0.98]",
         outline:
-          "border border-border/60 bg-white/60 dark:bg-white/5 backdrop-blur-sm shadow-xs hover:bg-accent hover:text-accent-foreground hover:border-amber-500/30 dark:border-input dark:hover:bg-input/50",
+          "border border-border/60 bg-white/60 dark:bg-white/5 backdrop-blur-[10px] shadow-xs hover:bg-accent hover:text-accent-foreground hover:border-amber-500/30 hover:scale-[1.02] dark:border-input dark:hover:bg-input/50",
         secondary:
-          "bg-stone-100 text-stone-900 shadow-xs hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700",
+          "bg-gradient-to-b from-stone-50 to-stone-200 text-stone-900 shadow-xs hover:scale-[1.02] dark:from-stone-700 dark:to-stone-800 dark:text-stone-100",
         ghost:
           "hover:bg-amber-500/10 hover:backdrop-blur-sm hover:text-accent-foreground dark:hover:bg-amber-500/10",
         link: "text-primary underline-offset-4 hover:underline",
         gradient:
-          "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25 hover:from-amber-600 hover:to-orange-600 active:scale-[0.98]",
+          "bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25 hover:scale-[1.02] hover:shadow-xl active:scale-[0.98]",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

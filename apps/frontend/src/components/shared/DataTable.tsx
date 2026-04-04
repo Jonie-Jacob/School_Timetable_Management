@@ -131,77 +131,75 @@ export function DataTable<TData, TValue>({
 
   // Desktop table view
   return (
-    <div className="space-y-3">
-      <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden shadow-sm">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent border-border/40">
-                {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    style={{ width: header.getSize() }}
-                    className="relative group"
-                  >
-                    <div className="flex items-center">
-                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="-ml-2 h-7 text-xs uppercase tracking-wider font-semibold"
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                          {header.column.getIsSorted() === 'asc' ? (
-                            <ArrowUp className="ml-1 size-3" />
-                          ) : header.column.getIsSorted() === 'desc' ? (
-                            <ArrowDown className="ml-1 size-3" />
-                          ) : (
-                            <ArrowUpDown className="ml-1 size-3 opacity-40" />
-                          )}
-                        </Button>
-                      ) : (
-                        <span className="text-xs uppercase tracking-wider font-semibold">
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    {/* Column resize handle */}
-                    {header.column.getCanResize() && (
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none transition-colors ${
-                          header.column.getIsResizing()
-                            ? 'bg-amber-500'
-                            : 'bg-transparent group-hover:bg-border'
-                        }`}
-                      />
+    <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden shadow-sm">
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id} className="hover:bg-transparent border-border/40">
+              {headerGroup.headers.map((header) => (
+                <TableHead
+                  key={header.id}
+                  style={{ width: header.getSize() }}
+                  className="relative group"
+                >
+                  <div className="flex items-center">
+                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-2 h-7 text-xs uppercase tracking-wider font-semibold text-white/80 hover:text-white hover:bg-white/10"
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        {flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                        {header.column.getIsSorted() === 'asc' ? (
+                          <ArrowUp className="ml-1 size-3" />
+                        ) : header.column.getIsSorted() === 'desc' ? (
+                          <ArrowDown className="ml-1 size-3" />
+                        ) : (
+                          <ArrowUpDown className="ml-1 size-3 opacity-40" />
+                        )}
+                      </Button>
+                    ) : (
+                      <span className="text-xs uppercase tracking-wider font-semibold text-white/80">
+                        {flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                      </span>
                     )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} style={{ width: cell.column.getSize() }}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+                  </div>
+                  {/* Column resize handle */}
+                  {header.column.getCanResize() && (
+                    <div
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none transition-colors ${
+                        header.column.getIsResizing()
+                          ? 'bg-amber-500'
+                          : 'bg-transparent group-hover:bg-white/20'
+                      }`}
+                    />
+                  )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <TableCell key={cell.id} style={{ width: cell.column.getSize() }}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
       {pagination && onPaginationChange && (
         <PaginationControls table={table} pagination={pagination} onPaginationChange={onPaginationChange} />
@@ -222,7 +220,7 @@ function PaginationControls<TData>({
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm px-4 py-2.5">
+    <div className="flex items-center justify-between border-t border-border/40 bg-muted/30 px-4 py-2.5">
       {/* Page size selector */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground whitespace-nowrap">Rows per page</span>
