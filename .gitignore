@@ -51,3 +51,7 @@ __pycache__/
 
 # tsx temp cache
 **/undefined/temp/
+.claude/MEMORY.md
+.claude/project_architecture_decisions.md
+.claude/memory/MEMORY.md
+.claude/memory/project_architecture_decisions.md

@@ -23,7 +23,7 @@
 11. [Phase 9 — Class Service](#11-phase-9--class-service)
 12. [Phase 10 — Assignment Service (Division Assignment)](#12-phase-10--assignment-service-division-assignment)
 13. [Phase 11 — Timetable Service](#13-phase-11--timetable-service)
-14. [Phase 12 — Dashboard Service](#14-phase-12--dashboard-service)
+14. [Phase 12 — Dashboard Service (+ Setup Wizard API)](#14-phase-12--dashboard-service)
 15. [Phase 13 — Export Service](#15-phase-13--export-service)
 16. [Phase 14 — WebSocket Service](#16-phase-14--websocket-service)
 17. [Phase 15 — Timetable Generation Engine (Python / Fargate)](#17-phase-15--timetable-generation-engine-python--fargate)
@@ -312,7 +312,7 @@ Build the shared package that all Lambda services will import: Prisma client, Zo
 
 ### 5.1 Goal
 
-Define all 19 PostgreSQL tables in a single Prisma schema, run the initial migration, and populate the database with sample data from DataCollection.md.
+Define all 19 PostgreSQL tables (plus `setup_wizard_state`) in a single Prisma schema, run the initial migration, and populate the database with sample data from DataCollection.md.
 
 ### 5.2 Tasks
 
@@ -326,8 +326,7 @@ Define all 19 PostgreSQL tables in a single Prisma schema, run the initial migra
    - `teacher_subjects`
    - `teacher_availability`
    - `period_structures`
-   - `period_structure_classes`
-   - `working_days`
+   - `working_days` (period structure assignment is via `divisions.period_structure_id`, no separate junction table)
    - `slots`
    - `elective_groups`
    - `elective_group_subjects`
@@ -337,7 +336,11 @@ Define all 19 PostgreSQL tables in a single Prisma schema, run the initial migra
    - `generation_jobs`
    - `timetable_notifications`
 
+   - `setup_wizard_state` (school_id, academic_year_id, dismissed, dismissed_at)
+
    Include all indexes, unique constraints, foreign keys, soft-delete columns (`deleted_at`), and `school_id` on every table as specified in SRS Section 6.
+
+   **Note**: Period structure assignment is at the **division level** — the `divisions` table has a `period_structure_id` FK. There is no `period_structure_classes` junction table.
 
 2. **Generate Prisma Client**: `npx prisma generate`.
 
@@ -350,7 +353,7 @@ Define all 19 PostgreSQL tables in a single Prisma schema, run the initial migra
    - Insert a sample school
    - Insert an academic year (`2026-27`, May 2026 – March 2027)
    - Insert the bell schedule from DataCollection.md (9 periods + breaks)
-   - Insert all classes I–XII with their divisions
+   - Insert sample user-defined classes (e.g., Nursery, Class I–XII) with their divisions
    - Insert all 35+ subjects from DataCollection.md
    - Insert all 57 teachers with their subject mappings from DataCollection.md
    - Insert sample division assignments for a few divisions (Class I-A, X-A, etc.) to enable testing of downstream services
@@ -461,8 +464,8 @@ Implement the School Config Service, responsible for period structures (bell sch
 |--------|------|-------------|
 | POST | `/config/period-structures` | Create period structure |
 | GET | `/config/period-structures` | List period structures |
-| GET | `/config/period-structures/:id` | Get period structure with working days, slots, and assigned classes |
-| PUT | `/config/period-structures/:id` | Update period structure (name, working days, assigned classes) |
+| GET | `/config/period-structures/:id` | Get period structure with working days, slots, and assigned divisions |
+| PUT | `/config/period-structures/:id` | Update period structure (name, working days, assigned divisions) |
 | DELETE | `/config/period-structures/:id` | Soft-delete period structure |
 | POST | `/config/period-structures/:id/reset` | Reset to default (Mon–Fri, 8 periods, standard breaks) |
 | GET | `/config/period-structures/:id/days/:dayId/slots` | Get slot sequence for a specific day |
@@ -471,14 +474,14 @@ Implement the School Config Service, responsible for period structures (bell sch
 | DELETE | `/config/period-structures/:id/days/:dayId/slots/:slotId` | Delete a slot |
 | PUT | `/config/period-structures/:id/days/:dayId/slots/reorder` | Batch reorder slots within a day |
 | POST | `/config/period-structures/:id/days/:dayId/copy-from/:sourceDayId` | Copy slots from another day |
-| POST | `/config/period-structures/:id/assign` | Assign period structure to classes |
+| POST | `/config/period-structures/:id/assign` | Assign period structure to divisions |
 
 ### 8.3 Tasks
 
 1. **Scaffold service** (`services/school-config/`).
 2. **Implement period structure CRUD** — a period structure has a name, a set of working days (any combination of Mon–Sun), and per-day slot sequences.
 3. **Implement per-day slot management** — each working day within a structure has its own independent ordered sequence of slots (periods, intervals, lunch breaks).
-4. **Implement class assignment** — assign classes to period structures. A class can only belong to one structure per academic year.
+4. **Implement division assignment** — assign divisions to period structures via `divisions.period_structure_id`. Each division can belong to only one structure. Different divisions within the same class may use different structures.
 5. **Business logic**:
    - Working days are defined per period structure (not global). Each structure may have a different set of working days.
    - Slot numbers for PERIOD-type slots auto-recalculate after reorder/deletion.
@@ -490,9 +493,10 @@ Implement the School Config Service, responsible for period structures (bell sch
 ### 8.4 Verification
 
 - Period structures created with correct period/break configuration.
-- Classes assigned to period structures.
+- Divisions assigned to period structures (via `divisions.period_structure_id`).
 - Working days set.
 - Slots generated and queryable.
+- Division detail pages show the assigned period structure and allow reassignment.
 
 ---
 
@@ -592,14 +596,16 @@ Implement CRUD for classes and divisions. Classes have a 1-to-many relationship 
    - Class name is unique per school within an academic year (case-insensitive). Classes are user-defined — not limited to a fixed set.
    - Division name is unique within a class (e.g., only one "A" in Class X).
    - Listing returns classes ordered by `sort_order`, each with nested divisions.
-   - Classes XI–XII may have a `stream` field (Science, Commerce, Humanities).
+   - Classes with `requires_stream` enabled may have a `stream` field (e.g., Science, Commerce, Humanities).
+   - Division detail includes `period_structure_id` — allows reassigning period structures from the class/division edit page.
    - Cannot delete a class/division that has active assignments or timetable data.
 4. **Update Postman collection**: Add `Class` folder.
 
 ### 11.4 Verification
 
-- Classes I–XII created with divisions A, B, C, etc.
-- Stream field works for XI–XII.
+- User-defined classes created with divisions A, B, C, etc.
+- Stream field works for classes with `requires_stream` enabled.
+- Period structure assignment shown in division detail and editable.
 - Nested response structure correct.
 
 ---
@@ -701,6 +707,8 @@ Implement the dashboard aggregation service that provides summary statistics for
 |--------|------|-------------|
 | GET | `/dashboard/stats` | Get aggregate statistics |
 | GET | `/dashboard/recent-activity` | Get recent activity log |
+| GET | `/dashboard/setup-wizard` | Get setup wizard state (auto-detected step completion) |
+| PUT | `/dashboard/setup-wizard/dismiss` | Dismiss the setup wizard |
 
 ### 14.3 Tasks
 
@@ -710,16 +718,29 @@ Implement the dashboard aggregation service that provides summary statistics for
    - `GET /dashboard/stats`: Run aggregate queries to return:
      - Total classes, divisions, teachers, subjects
      - Active academic year info
-     - Timetable generation status (how many divisions have published timetables)
+     - Timetable generation status (how many divisions have generated timetables)
      - Unresolved conflict count
    - `GET /dashboard/recent-activity`: Query recent `timetable_notifications` or audit log entries.
    - All queries are read-only. Uses direct Prisma queries (no inter-service Lambda calls for performance).
-4. **Update Postman collection**: Add `Dashboard` folder.
+4. **Implement setup wizard endpoints**:
+   - `GET /dashboard/setup-wizard`: Auto-detect completion of each setup step by querying existing data:
+     - Step 1 (Academic Year): `academic_years` with `status = ACTIVE` exists
+     - Step 2 (Classes & Divisions): At least one class with at least one division
+     - Step 3 (Period Structures): All divisions have `period_structure_id IS NOT NULL`
+     - Step 4 (Subjects): At least one subject exists
+     - Step 5 (Teachers): At least one teacher with at least one `teacher_subjects` entry
+     - Step 6 (Assignments): At least one `division_assignments` entry
+     - Step 7 (Generate): At least one `timetables` entry with `status = GENERATED`
+   - Returns: `{ steps: [{ step: 1, name: "Academic Year", complete: true }, ...], dismissed: false, totalComplete: 4, totalSteps: 7 }`
+   - `PUT /dashboard/setup-wizard/dismiss`: Set `dismissed = true` in `setup_wizard_state` table. Wizard can be re-enabled by setting `dismissed = false`.
+5. **Update Postman collection**: Add `Dashboard` folder.
 
 ### 14.4 Verification
 
 - Stats endpoint returns correct aggregates matching seeded data.
 - Recent activity returns meaningful entries.
+- Setup wizard returns correct step completion based on seeded data.
+- Dismiss/re-enable wizard works correctly.
 
 ---
 
@@ -767,16 +788,20 @@ Implement the notification/invalidation service that flags timetables as outdate
 
 ### 15.1 Goal
 
-Implement PDF and Excel export generation for division and teacher timetables.
+Implement PDF and Excel export generation for all timetable scopes: per division, per class, per teacher, all teachers, and custom teacher groups.
 
 ### 15.2 Routes
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/export/division/pdf` | Export division timetable as PDF |
-| POST | `/export/division/excel` | Export division timetable as Excel |
-| POST | `/export/teacher/pdf` | Export teacher timetable as PDF |
-| POST | `/export/teacher/excel` | Export teacher timetable as Excel |
+| POST | `/export/division/pdf` | Export single division timetable as PDF |
+| POST | `/export/division/excel` | Export single division timetable as Excel |
+| POST | `/export/class/pdf` | Export all divisions of a class as PDF (one page per division) |
+| POST | `/export/class/excel` | Export all divisions of a class as Excel (one sheet per division) |
+| POST | `/export/teacher/pdf` | Export single teacher timetable as PDF |
+| POST | `/export/teacher/excel` | Export single teacher timetable as Excel |
+| POST | `/export/teachers/pdf` | Export multiple/all teachers as PDF. Body: `{ teacherIds: [...] }` (empty = all) |
+| POST | `/export/teachers/excel` | Export multiple/all teachers as Excel. Body: `{ teacherIds: [...] }` (empty = all) |
 
 ### 15.3 Tasks
 
@@ -793,15 +818,19 @@ Implement PDF and Excel export generation for division and teacher timetables.
    - Same data query.
    - Build ExcelJS workbook with styled headers, merged break cells, alternating row colors.
    - Upload to S3 / return URL.
-5. **Local dev S3 alternative**: For local development, either:
+5. **Implement class-level export**: Query all divisions for the class, render each division's timetable on a separate PDF page or Excel sheet.
+6. **Implement multi-teacher export**: Accept an array of teacher IDs (or empty for all). Query each teacher's consolidated timetable and render each on a separate page/sheet. The combined document includes a cover page/index listing all teachers.
+7. **Local dev S3 alternative**: For local development, either:
    - Write files to a local `exports/` directory and return the file path.
    - Use MinIO (S3-compatible) in Docker Compose.
-6. **Update Postman collection**: Add `Export` folder.
+8. **Update Postman collection**: Add `Export` folder with requests for all 8 export routes.
 
 ### 15.4 Verification
 
 - PDF generated with correct timetable grid, readable in a PDF viewer.
 - Excel generated with correct data and styling.
+- Class-level export contains all divisions on separate pages/sheets.
+- Multi-teacher export works with specific teacher IDs and with empty array (all teachers).
 - Pre-signed URLs (or local paths) work for download.
 
 ---
@@ -1145,6 +1174,7 @@ Phase 12A: Notification Service      ← Invoked by Subject, Teacher, Config, As
         ┌─────┼───────────┐
         │     │            │
 Phase 12: Dashboard  Phase 13: Export  Phase 14: WebSocket  ← Read-only consumers
+  (+ Setup Wizard)   (+ Class/Multi-Teacher exports)
               │
 Phase 15: Timetable Engine (Python)  ← Writes timetable_slots, pushes via WebSocket
               │

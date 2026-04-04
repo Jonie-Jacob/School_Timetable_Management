@@ -21,7 +21,7 @@
 8. [Phase 1 — Design System & Shared UI Components](#8-phase-1--design-system--shared-ui-components)
 9. [Phase 2 — App Shell & Layout](#9-phase-2--app-shell--layout)
 10. [Phase 3 — Auth Pages (Screen 0)](#10-phase-3--auth-pages-screen-0)
-11. [Phase 4 — Dashboard (Screen 1)](#11-phase-4--dashboard-screen-1)
+11. [Phase 4 — Dashboard + Setup Wizard + FAB (Screen 1)](#11-phase-4--dashboard-screen-1)
 12. [Phase 5 — Academic Year Management (Screen 2)](#12-phase-5--academic-year-management-screen-2)
 13. [Phase 6 — Period Structures (Screens 3 & 3A)](#13-phase-6--period-structures-screens-3--3a)
 14. [Phase 7 — Subjects (Screens 4 & 5)](#14-phase-7--subjects-screens-4--5)
@@ -764,9 +764,12 @@ The global application shell that wraps all authenticated pages. Split into 3 su
 
 | Component | File | Description |
 |-----------|------|-------------|
-| `AppShell` | `layout/AppShell.tsx` | Root layout wrapper. Renders Sidebar + TopBar + content area. Provides theme and academic year context. |
+| `AppShell` | `layout/AppShell.tsx` | Root layout wrapper. Renders Sidebar + TopBar + content area + FAB. Provides theme and academic year context. |
 | `Sidebar` | `layout/Sidebar.tsx` | Left sidebar. Full (240px) at xl, icon-only (64px) at lg with hover expand. Hidden at md/sm. |
 | `SidebarLink` | `layout/SidebarLink.tsx` | Individual nav link. Active route highlighted with primary color. Badge support for notifications count. |
+| `FloatingActionButton` | `layout/FloatingActionButton.tsx` | Persistent FAB fixed to bottom-right corner (24px from edges). Dual-purpose: setup progress ring ("4/7") during setup, amber conflict badge after setup. Hidden on Login/Register. Smaller circular variant on mobile. Pulse animation on state change. |
+| `SetupPopoverPanel` | `layout/SetupPopoverPanel.tsx` | Popover (desktop) or bottom sheet (mobile) opened by FAB during setup. Shows 7 steps with status icons (✓/●/○/🔒), clickable step names with "Continue" on current step, and "Dismiss Guide" link. |
+| `ConflictPopoverPanel` | `layout/ConflictPopoverPanel.tsx` | Popover (desktop) or bottom sheet (mobile) opened by FAB after setup when conflicts exist. Shows summary of up to 5 recent conflicts with "Edit TT →" links, plus "View All" and "Dismiss All" buttons. |
 | `TopBar` | `layout/TopBar.tsx` | Fixed top bar. Shows: App logo/name (left), Academic Year selector (center-right), Theme toggle (right), User menu (far right). |
 | `AcademicYearSelector` | `layout/AcademicYearSelector.tsx` | Dropdown showing all academic years. Active year has a green badge. Archived years have a grey badge. Changing year reloads all data and sets read-only mode if archived. |
 | `ThemeToggle` | `layout/ThemeToggle.tsx` | Sun/moon icon button. Toggles `dark` class on `<html>`. Saves to localStorage. System preference as default. |
@@ -793,10 +796,10 @@ The global application shell that wraps all authenticated pages. Split into 3 su
 │ Notifi-  │                                                           │
 │  cations │                                                           │
 │ Teacher  │                                                           │
-│  View    │                                                           │
-│ Settings │                                                           │
-│          │                                                           │
-└──────────┴───────────────────────────────────────────────────────────┘
+│  View    │                                            ┌─────────┐   │
+│ Settings │                                            │  ◔ 4/7  │   │
+│          │                                            └─────────┘   │
+└──────────┴─────────────────────────────────── FAB (bottom-right) ───┘
 ```
 
 #### Desktop Layout (lg — collapsed sidebar):
@@ -815,10 +818,10 @@ The global application shell that wraps all authenticated pages. Split into 3 su
 │ 👩‍🏫 │                                                                 │
 │ 🔗 │                                                                 │
 │ 🔔 │                                                                 │
-│ 👀 │                                                                 │
-│ ⚙  │                                                                 │
-│    │                                                                 │
-└────┴─────────────────────────────────────────────────────────────────┘
+│ 👀 │                                            ┌─────────┐         │
+│ ⚙  │                                            │  ◔ 4/7  │         │
+│    │                                            └─────────┘         │
+└────┴─────────────────────────────────── FAB (bottom-right) ─────────┘
 ```
 
 #### Sidebar — Gradient Background:
@@ -835,6 +838,12 @@ When an archived academic year is selected:
 #### Verification:
 
 - Sidebar expands/collapses correctly at xl vs lg breakpoints
+- **FAB** appears in bottom-right on all pages except Login/Register
+- FAB shows setup progress ring during setup, conflict badge after setup
+- Clicking FAB opens popover panel (desktop) or bottom sheet (mobile)
+- Setup steps in panel are clickable and navigate to correct screens
+- FAB auto-opens on first login to introduce setup flow
+- FAB hides or shows green checkmark when setup complete and no conflicts
 - Theme toggle persists across page reloads
 - Academic Year selector changes the header and triggers data reload
 - Selecting an archived year shows read-only banner and disables mutation buttons
@@ -1171,27 +1180,47 @@ Summary cards in a 4-column grid at xl, 3-column at lg. Clickable — navigate t
 
 | Component | File | Description |
 |-----------|------|-------------|
-| `DashboardPage` | `features/dashboard/DashboardPage.tsx` | Main page. Fetches summary data. Shows skeleton on load. Shows empty state for first-time users. |
+| `DashboardPage` | `features/dashboard/DashboardPage.tsx` | Main page. Fetches summary data + setup wizard state. Shows skeleton on load. Shows setup wizard when incomplete. |
 | `SummaryCard` | `features/dashboard/SummaryCard.tsx` | Card with icon, label, count, subtle gradient border. Clickable → navigates. |
 | `ConflictBanner` | `features/dashboard/ConflictBanner.tsx` | Amber/warning banner. "X timetables have conflicts. View Notifications →" link. Only shown if `outdatedTimetableCount > 0`. |
 | `QuickLinks` | `features/dashboard/QuickLinks.tsx` | Grid of shortcut cards/buttons to key pages. |
-| `WelcomeState` | `features/dashboard/WelcomeState.tsx` | First-time user experience: "Welcome! Start by creating your academic year →" with a guided setup message. |
-| `dashboardApi` | `features/dashboard/dashboardApi.ts` | RTK Query: `useGetDashboardSummaryQuery()`. Endpoint: `GET /dashboard/summary`. Tag: `DashboardSummary`. |
+| `SetupStepCard` | `features/dashboard/SetupStepCard.tsx` | Card per setup step: step number, title, description, current status summary (e.g., "3 classes, 5 divisions"), action button ("Continue" / "Review"). Locked if prerequisites unmet. |
+| `dashboardApi` | `features/dashboard/dashboardApi.ts` | RTK Query: `useGetDashboardSummaryQuery()`, `useGetSetupWizardQuery()`, `useDismissSetupWizardMutation()`. Endpoints: `GET /dashboard/summary`, `GET /dashboard/setup-wizard`, `PUT /dashboard/setup-wizard/dismiss`. Tags: `DashboardSummary`, `SetupWizard`. |
+
+### Setup Wizard on Dashboard:
+
+When `setupWizard.dismissed === false` and `setupWizard.totalComplete < 7`:
+1. **SetupStepCards** are shown above the summary cards in a responsive grid (4 cols xl, 3 cols lg, 2 cols md, 1 col sm).
+2. Each card shows live status pulled from `GET /dashboard/setup-wizard` response.
+3. After all 7 steps complete: the step cards are replaced by normal summary cards. The **FAB** briefly shows a "Setup Complete!" celebration, then transitions to conflict mode or hides.
+4. "Dismiss Guide" can be triggered from the FAB popover panel → `PUT /dashboard/setup-wizard/dismiss` → hides both dashboard cards and FAB setup mode permanently.
+
+### FAB Integration (rendered in AppShell, visible on all pages):
+
+The `FloatingActionButton` component is rendered in `AppShell.tsx` (not per-page). It:
+1. Fetches `GET /dashboard/setup-wizard` on mount and caches via RTK Query (`SetupWizard` tag).
+2. Fetches `GET /notifications/count` for conflict badge (reuses existing `NotificationCount` tag).
+3. Determines mode: **setup** (incomplete steps) → **conflict** (has notifications) → **hidden** (all clear).
+4. Renders the appropriate popover panel on click (`SetupPopoverPanel` or `ConflictPopoverPanel`).
 
 ### Loading State:
 
-All 6 summary cards show skeleton shimmer. Conflict banner area shows a thin skeleton bar.
+All 6 summary cards show skeleton shimmer. Conflict banner area shows a thin skeleton bar. Setup wizard shows skeleton cards during load.
 
 ### Empty State:
 
-When `totalClasses === 0` → `WelcomeState` component replaces the summary cards with setup guidance.
+When `totalClasses === 0` and wizard is not dismissed → Setup wizard is the primary content (summary cards still visible but show zeros). The wizard guides the user to create their first academic year.
 
 ### Verification:
 
 - Summary cards render correct counts from API
 - Clicking a card navigates to the correct list page
 - Conflict banner appears only when conflicts exist
-- First-time user sees welcome state
+- Setup step cards appear on dashboard for new users, show correct step completion
+- Clicking a step card navigates to the correct screen
+- FAB shows setup progress ring during setup, conflict badge after setup
+- FAB popover panel shows steps with correct status, clickable navigation
+- Dismiss wizard from FAB panel hides both dashboard cards and FAB setup mode
 - Responsive grid: 4 cols (xl) → 3 cols (lg) → 2 cols (sm/md)
 - Dark mode correct
 
@@ -1346,7 +1375,7 @@ Card layout. Classes shown as pills. Edit navigates to editor page. Delete opens
 │                                                                  │
 │  Working Days:  ☑ Mon  ☑ Tue  ☑ Wed  ☑ Thu  ☑ Fri  ☐ Sat ☐ Sun│
 │                                                                  │
-│  Assigned Classes: [Multi-select: I, II, III ... XII]            │
+│  Assigned Divisions: [Multi-select grouped by class]             │
 │                                                                  │
 │  ─── Day-wise Slot Configuration ─────────────────────────────── │
 │  ┌─────┬─────┬─────┬─────┬─────┐                                │
@@ -1734,12 +1763,14 @@ Cards. Timetable status uses StatusBadge. View navigates to class detail.
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  Division A — Science                                     │   │
+│  │  Period Structure: [Senior Block ▾]                        │   │
 │  │  Subjects: 9  │ Periods: 45/45 ✓ │ Status: Generated     │   │
 │  │  [ Assignments ] [ Generate ] [ View TT ] [ 🗑 ]          │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  Division B — Science                                     │   │
+│  │  Period Structure: [Senior Block ▾]                        │   │
 │  │  Subjects: 9  │ Periods: 45/45 ✓ │ Status: Pending       │   │
 │  │  [ Assignments ] [ Generate ] [ Copy ] [ 🗑 ]             │   │
 │  └──────────────────────────────────────────────────────────┘   │
@@ -1774,15 +1805,16 @@ Division cards stack vertically. On mobile, action buttons are replaced with a "
 | Component | File | Description |
 |-----------|------|-------------|
 | `ClassDetailPage` | `features/classes/ClassDetailPage.tsx` | Page showing all divisions for a class. |
-| `DivisionCard` | `features/classes/DivisionCard.tsx` | Card with division stats and actions. |
-| `AddDivisionModal` | `features/classes/AddDivisionModal.tsx` | Dialog: Division letter (auto-suggested), Stream name (XI/XII only), "Copy assignments from" dropdown. |
+| `DivisionCard` | `features/classes/DivisionCard.tsx` | Card with division stats, period structure dropdown (editable inline), and actions. |
+| `AddDivisionModal` | `features/classes/AddDivisionModal.tsx` | Dialog: Division letter (auto-suggested), Stream name (only if class has `requires_stream`), Period Structure dropdown (from available list), "Copy assignments from" dropdown. |
 | `DivisionActionSheet` | `features/classes/DivisionActionSheet.tsx` | Mobile bottom sheet with action list. |
 
 #### Interactions:
 
 | Action | Behavior |
 |--------|----------|
-| **Add Division** | Dialog. Auto-suggest next letter. Optional stream name for XI/XII. Optional "copy from" division. `POST /config/divisions`. |
+| **Add Division** | Dialog. Auto-suggest next letter. Optional stream name (if class has `requires_stream`). Period Structure dropdown (from available list). Optional "copy from" division. `POST /config/divisions`. |
+| **Change Period Structure** | Inline dropdown on DivisionCard. `PUT /config/divisions/:id` to update `period_structure_id`. Triggers timetable invalidation if changed. |
 | **Copy Division** | Same as Add but pre-selects current division as copy source. |
 | **Delete** | ConfirmDialog: warns about timetable and assignment deletion. `DELETE /config/divisions/:id`. |
 | **Assignments** | Navigate to `/classes/:classId/divisions/:divisionId/assignments` (Screen 10). |
@@ -2260,36 +2292,63 @@ function getSubjectColor(subjectName: string): string {
 
 ### Phase 13C — Export Integration
 
-**Goal**: Add Export dropdown to the timetable editor page.
+**Goal**: Add comprehensive export capabilities for all timetable scopes: per division, per class, per teacher, all teachers, and custom teacher groups.
 
-#### Export Dropdown:
+#### Export Dropdown (on Timetable Editor — Screen 12):
 
 ```
 [ Export ▾ ]
-┌──────────────┐
-│ 📄 PDF       │
-│ 📊 Excel     │
-└──────────────┘
+┌────────────────────────────┐
+│ 📄 Division PDF            │
+│ 📊 Division Excel          │
+│ ─────────────────────────  │
+│ 📄 Class PDF (all divs)   │
+│ 📊 Class Excel (all divs) │
+└────────────────────────────┘
 ```
 
-**Visible only when a timetable exists** (per user requirement).
+#### Export Dropdown (on Teacher Timetable — Screen 14):
+
+```
+[ Export ▾ ]
+┌────────────────────────────────┐
+│ 📄 This Teacher — PDF          │
+│ 📊 This Teacher — Excel        │
+│ ──────────────────────────────-│
+│ 📄 All Teachers — PDF          │
+│ 📊 All Teachers — Excel        │
+│ ──────────────────────────────-│
+│ 📄 Select Teachers — PDF...    │
+│ 📊 Select Teachers — Excel...  │
+└────────────────────────────────┘
+```
+
+"Select Teachers" opens a modal with a searchable multi-select of teachers, then exports the selected group.
+
+**Visible only when timetable data exists** (per user requirement).
 
 #### Export Flow:
 
-1. User clicks "PDF" or "Excel" from dropdown
-2. Button enters loading state (spinner + "Generating...")
-3. RTK Query mutation: `POST /export/division/pdf` or `POST /export/division/excel`
-4. On success: receive `{ url }` (pre-signed S3 URL)
-5. Trigger browser download: create `<a>` element, set href, click
-6. Button returns to idle state
-7. On error: toast with error message, button returns to idle
+1. User selects an export option from the dropdown
+2. For "Select Teachers" options: a modal opens with teacher multi-select, then user confirms
+3. Button enters loading state (spinner + "Generating...")
+4. RTK Query mutation to the appropriate endpoint:
+   - `POST /export/division/pdf` or `/export/division/excel` (body: `{ divisionId }`)
+   - `POST /export/class/pdf` or `/export/class/excel` (body: `{ classId }`)
+   - `POST /export/teacher/pdf` or `/export/teacher/excel` (body: `{ teacherId }`)
+   - `POST /export/teachers/pdf` or `/export/teachers/excel` (body: `{ teacherIds: [...] }`, empty = all)
+5. On success: receive `{ url }` (pre-signed S3 URL)
+6. Trigger browser download: create `<a>` element, set href, click
+7. Button returns to idle state
+8. On error: toast with error message, button returns to idle
 
 #### Components:
 
 | Component | File | Description |
 |-----------|------|-------------|
-| `ExportDropdown` | `features/export/ExportDropdown.tsx` | Dropdown with PDF/Excel options. Loading states per option. |
-| `exportApi` | `features/export/exportApi.ts` | RTK Query: `useExportDivisionPdfMutation`, `useExportDivisionExcelMutation`, `useExportTeacherPdfMutation`, `useExportTeacherExcelMutation`. |
+| `ExportDropdown` | `features/export/ExportDropdown.tsx` | Dropdown with scope-aware options (division/class on Screen 12, teacher options on Screen 14). Loading states per option. |
+| `TeacherSelectModal` | `features/export/TeacherSelectModal.tsx` | Modal with searchable multi-select for choosing a group of teachers to export. |
+| `exportApi` | `features/export/exportApi.ts` | RTK Query mutations: `useExportDivisionPdfMutation`, `useExportDivisionExcelMutation`, `useExportClassPdfMutation`, `useExportClassExcelMutation`, `useExportTeacherPdfMutation`, `useExportTeacherExcelMutation`, `useExportTeachersPdfMutation`, `useExportTeachersExcelMutation`. |
 
 #### Verification:
 
@@ -2297,6 +2356,9 @@ function getSubjectColor(subjectName: string): string {
 - Loading state during export generation
 - Download triggers automatically on success
 - Error toast on failure
+- Class-level export includes all divisions
+- All-teachers export includes every teacher
+- Custom group export opens teacher selection modal
 - Works on both desktop and mobile
 
 ---
@@ -2670,6 +2732,7 @@ function SaveButton() {
 | **Empty states** | EmptyState component shown when lists are empty |
 | **Error states** | Error boundaries catch errors, toast for API failures |
 | **Keyboard nav** | Tab order logical, Enter submits forms, Escape closes modals |
+| **Setup wizard** | FAB visible on all pages (except login), popover panel (desktop) / bottom sheet (mobile), dashboard cards, dismiss/resume all working across breakpoints |
 | **Touch targets** | All interactive elements ≥ 44px on mobile |
 | **Scroll behavior** | No horizontal scroll on mobile (except timetable grid intentionally) |
 | **Focus management** | Dialog opens → focus first input. Dialog closes → focus trigger. |
@@ -2701,7 +2764,7 @@ Each API slice connects to a backend microservice. Created incrementally as each
 | API Slice | File | Base URL | Tags | Phase |
 |-----------|------|----------|------|-------|
 | `authApi` | `features/auth/authApi.ts` | `/auth` | — | 3 |
-| `dashboardApi` | `features/dashboard/dashboardApi.ts` | `/dashboard` | `DashboardSummary` | 4 |
+| `dashboardApi` | `features/dashboard/dashboardApi.ts` | `/dashboard` | `DashboardSummary`, `SetupWizard` | 4 |
 | `academicYearApi` | `features/academic-years/academicYearApi.ts` | `/academic-years` | `AcademicYear` | 5 |
 | `configApi` | `features/period-structures/configApi.ts` | `/config` | `PeriodStructure`, `Class` | 6, 9 |
 | `subjectApi` | `features/subjects/subjectApi.ts` | `/subjects` | `Subject` | 7 |
@@ -2712,7 +2775,7 @@ Each API slice connects to a backend microservice. Created incrementally as each
 | `timetableApi` | `features/timetable/timetableApi.ts` | `/timetables` | `Timetable`, `GenerationJob` | 12, 13 |
 | `notificationApi` | `features/notifications/notificationApi.ts` | `/notifications` | `Notification`, `NotificationCount` | 14 |
 | `teacherTimetableApi` | `features/teacher-timetable/teacherTimetableApi.ts` | `/timetables` | `TeacherTimetable` | 15 |
-| `exportApi` | `features/export/exportApi.ts` | `/export` | — | 13C |
+| `exportApi` | `features/export/exportApi.ts` | `/export` | — | 13C (8 mutation endpoints: division/class/teacher/teachers × pdf/excel) |
 
 ### Cross-Slice Cache Invalidation:
 
@@ -2720,13 +2783,16 @@ When a mutation in one slice affects another, the mutation handler manually inva
 
 | Mutation | Invalidates |
 |----------|-------------|
-| Create/Update/Delete Subject | `Subject`, `DashboardSummary` |
-| Create/Update/Delete Teacher | `Teacher`, `DashboardSummary` |
-| Delete Subject/Teacher with assignments | `Subject`/`Teacher`, `Assignment`, `NotificationCount`, `DashboardSummary` |
-| Create/Update/Delete Assignment | `Assignment`, `DashboardSummary` |
-| Regenerate Timetable | `Timetable`, `GenerationJob`, `Notification`, `NotificationCount`, `DashboardSummary` |
+| Create/Update/Delete Subject | `Subject`, `DashboardSummary`, `SetupWizard` |
+| Create/Update/Delete Teacher | `Teacher`, `DashboardSummary`, `SetupWizard` |
+| Delete Subject/Teacher with assignments | `Subject`/`Teacher`, `Assignment`, `NotificationCount`, `DashboardSummary`, `SetupWizard` |
+| Create/Update/Delete Assignment | `Assignment`, `DashboardSummary`, `SetupWizard` |
+| Create/Update/Delete Class/Division | `Class`, `Division`, `DashboardSummary`, `SetupWizard` |
+| Assign Period Structure to Division | `Division`, `PeriodStructure`, `SetupWizard` |
+| Regenerate Timetable | `Timetable`, `GenerationJob`, `Notification`, `NotificationCount`, `DashboardSummary`, `SetupWizard` |
 | Dismiss Notification | `Notification`, `NotificationCount` |
-| Activate Academic Year | `AcademicYear`, all data tags (full refetch) |
+| Dismiss Setup Wizard | `SetupWizard` |
+| Activate Academic Year | `AcademicYear`, `SetupWizard`, all data tags (full refetch) |
 
 ---
 

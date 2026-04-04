@@ -166,8 +166,18 @@
 
 ### BR-14 · Export
 
-1. Both **division timetables** and **teacher timetables** shall be exportable.
+1. Timetables shall be exportable in the following scopes:
+
+   | Export Scope | Description |
+   |-------------|-------------|
+   | **Per Division** | A single division's weekly timetable. |
+   | **Per Class** | All divisions of a class combined into one document, each division on a separate page/sheet. |
+   | **Per Teacher** | A single teacher's weekly schedule across all assigned divisions. |
+   | **All Teachers** | A combined document containing every teacher's weekly timetable, each on a separate page/sheet. |
+   | **Group of Teachers** | The user selects specific teachers; their timetables are combined into one document. |
+
 2. Supported export formats: **PDF** and **Excel (.xlsx)**.
+3. Export is available from the Timetable Editor (Screen 12), Teacher Timetable View (Screen 14), and a dedicated **Export Center** accessible from the sidebar.
 
 ---
 
@@ -233,6 +243,38 @@
 8. **Editing an elective group definition** (adding/removing subjects) after it has been assigned to divisions triggers a warning. Removing a subject deletes the corresponding assignment rows and flags affected timetables as `OUTDATED`.
 9. **Deleting an elective group** that is assigned to divisions requires confirmation. On deletion, linked assignments become standalone (no longer co-scheduled) and affected timetables are flagged as `OUTDATED`.
 10. Conflict detection (BR-10, BR-11, BR-12) shall apply to all teachers within an elective group — none of the group's teachers may be double-booked at the group's scheduled slots.
+
+---
+
+### BR-19 · Guided Setup Wizard
+
+1. The system shall provide a **guided setup wizard** that walks first-time users through the complete configuration flow in the correct order: Academic Year → Classes & Divisions → Period Structures → Subjects & Elective Groups → Teachers → Assignments → Timetable Generation.
+2. The wizard shall appear **automatically** on first login after account creation (when no data exists) and be **manually accessible** via a "Setup Guide" button on the Dashboard at any time.
+3. The wizard shall be **resumable** — it tracks progress per school per academic year and picks up where the user left off.
+4. **Floating Action Button (FAB)**: A persistent floating button shall be displayed in the bottom-right corner of every page (except Login/Register). The FAB serves dual purpose:
+   - **During setup**: Displays a progress ring with step count (e.g., "4/7"). Clicking opens a popover panel showing all 7 steps with status, clickable navigation, and a "Dismiss Guide" option.
+   - **After setup**: If outdated timetables or conflicts exist, displays an amber conflict badge with count. Clicking opens a popover panel showing a summary of conflicts with links to edit affected timetables.
+   - **All clear**: When setup is complete and no conflicts exist, the FAB hides or shrinks to a subtle green checkmark.
+   - On mobile, the FAB is a smaller circular button and the panel opens as a bottom sheet.
+   - The FAB auto-opens on first login to introduce the setup flow.
+5. **Dashboard setup cards**: The Dashboard shall display step cards when setup is incomplete. Each card shows the step title, current status summary, and an action button ("Continue" or "Review"). Cards are replaced by normal summary cards after setup completes.
+7. Step completion shall be **auto-detected** from existing data:
+
+   | Step | Complete When |
+   |------|--------------|
+   | 1. Academic Year | At least one active academic year exists |
+   | 2. Classes & Divisions | At least one class with at least one division exists |
+   | 3. Period Structures | All divisions have a period structure assigned |
+   | 4. Subjects & Electives | At least one subject exists |
+   | 5. Teachers | At least one teacher with at least one qualified subject exists |
+   | 6. Assignments | At least one division has at least one assignment |
+   | 7. Generate Timetable | At least one timetable has been generated |
+
+8. Steps with unmet prerequisites shall be **locked** with a tooltip explaining which step must be completed first.
+9. The user may **dismiss** the wizard permanently via "Don't show again". The wizard can be re-enabled from Dashboard settings.
+10. After all 7 steps complete, a **"Setup Complete!"** celebration is shown once, then the wizard auto-hides.
+
+---
 
 #### Cross-Division Elective Groups
 
@@ -309,7 +351,7 @@
 **Contents**:
 - **Structure Name** field (required, unique).
 - **Working Days** multi-checkbox: all seven days of the week (Mon–Sun). At least one day must be selected.
-- **Assigned Classes** multi-select: lists all Class I–XII entries. Each class may belong to only one structure; classes already linked to another structure display that structure's name as a hint.
+- **Assigned Divisions** multi-select: lists all divisions across all classes. Each division may belong to only one structure; divisions already linked to another structure display that structure's name as a hint. Divisions are grouped by class in the dropdown for clarity.
 - **Day-wise Slot Configuration**: a tab (or accordion section) per selected working day.
   - Each day tab/section contains a **Slot List (drag-and-drop)**:
     - Each row: Drag handle · Slot No. (auto-recalculated on reorder, Period type only) · Slot Type badge (Period / Interval / Lunch Break) · Start Time (editable time picker) · End Time (editable time picker) · Duration (auto-calculated, read-only) · **Delete** icon button.
@@ -368,11 +410,13 @@
 
 ### Screen 8 — Classes List
 
-**Purpose**: Overview of all 12 classes.
+**Purpose**: Overview of all classes defined by the school.
 
 **Contents**:
-- Table listing Class I through Class XII (Roman numeral order).
-- Columns: Class Name · Number of Divisions · Timetable Status summary.
+- Table listing all user-defined classes in display order (`sort_order`, drag-and-drop reorderable).
+- Columns: Class Name · Number of Divisions · Period Structure · Timetable Status summary.
+- **"Add Class"** button opens a form: Class Name (required) · Requires Stream toggle.
+- Action buttons per row: Edit · Delete (with active-division warning).
 - Click a class row to navigate to Screen 9 (Class Detail).
 
 ---
@@ -384,12 +428,14 @@
 **Contents**:
 - Class name heading.
 - Division cards, one per division:
-  - **Classes I–X**: alphabet label (e.g., "Division B").
-  - **Classes XI–XII**: alphabet + stream name (e.g., "B — SCIENCE").
+  - Division label (e.g., "Division B").
+  - If the class has `requires_stream` enabled: label + stream name (e.g., "B — SCIENCE").
+  - **Assigned Period Structure** dropdown — lists all available period structures; pre-populated with the currently assigned structure. User can change the assignment here at any time.
   - Card actions: **Edit Assignments** (→ Screen 10) · **Copy Division** · **Remove Division**.
 - **"Add Division"** button opens a modal:
-  - Alphabet input (required).
-  - Group/stream name input (required for Class XI–XII only).
+  - Division label input (required).
+  - Stream/group name input (required only if the class has `requires_stream` enabled).
+  - Period Structure dropdown (select from available structures).
   - Optional "Copy assignments from" dropdown — lists all existing divisions across all classes.
 
 ---
@@ -515,7 +561,7 @@
 | Class structure | User-defined classes with custom naming and sort order; not limited to a fixed set (BR-1) |
 | Division optionality | Zero or more divisions per class (BR-8) |
 | Timetable scope | Per division (not per class) |
-| Period Structures | Multiple user-defined; each linked to a set of divisions; different divisions in the same class may use different structures; per-day slot sequences; configurable working days (BR-2) |
+| Period Structures | Multiple user-defined; each linked to a set of **divisions** (not classes); different divisions in the same class may use different structures; per-day slot sequences; configurable working days (BR-2). Assignment editable from both Period Structure Editor and Division Detail page. |
 | Break slots | Configurable per Period Structure per working day; drag-and-drop reorder supported (BR-3) |
 | Adjacency constraint | Optional toggle per timetable generation run; off by default (Screen 11). Also available per-assignment via scheduling preferences (BR-17). |
 | Scheduling preferences | Optional per assignment — preferred/excluded days, preferred/excluded period ranges, adjacent preference, min/max per day. Hard or Soft constraint type (BR-17). |
@@ -526,7 +572,8 @@
 | Timing uniformity | Fully configurable per working day within each Period Structure (BR-2, BR-3) |
 | Timetable invalidation | Passive notification — keep, flag as outdated, user fixes |
 | Timetable editing | Generated timetables are editable via drag-and-drop. No publish/draft workflow. |
-| Export formats | PDF and Excel for division and teacher timetables |
+| Export formats | PDF and Excel — per division, per class, per teacher, all teachers, group of teachers |
+| Guided setup | 7-step wizard with FAB + popover panel (dual-purpose: setup progress and conflict notifications), dashboard cards (BR-19) |
 | Multi-tenancy | One school account per login; data is fully isolated between schools (BR-15) |
 | Assistant teacher | Optional co-teacher per division assignment; uses standard teacher record; no extra record type (BR-16) |
 | i18n | English only initially. Frontend uses react-i18next infrastructure for future translation support. |

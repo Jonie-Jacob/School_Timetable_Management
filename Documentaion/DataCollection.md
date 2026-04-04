@@ -30,7 +30,7 @@ Collect from: **Principal / Admin Office**
 | Field | Example | Notes |
 |-------|---------|-------|
 | Academic year label | 2026–27 | As used officially by the school |
-| Start date | 01 May 2026 | First working day of the year |
+| Start date | 01 June 2026 | First working day of the year |
 | End date | 31 March 2027 | Last working day of the year |
 
 ---
@@ -74,15 +74,15 @@ For each class from I to XII, list all active divisions. Delete rows for divisio
 |-------|-----------------------------|
 | KG | *(single class, no divisions)* |
 | Class I | A, B, C |
-| Class II | A, B |
-| Class III | A, B |
-| Class IV | A, B |
-| Class V | A, B, C |
-| Class VI | A, B |
-| Class VII | A, B, C |
+| Class II | A, B, C |
+| Class III | A, B, C |
+| Class IV | A, B, C |
+| Class V | A, B |
+| Class VI | A, B, C |
+| Class VII | A, B |
 | Class VIII | A, B, C |
 | Class IX | A, B, C |
-| Class X | A, B |
+| Class X | A, B, C |
 
 ---
 
@@ -92,8 +92,9 @@ For each class from I to XII, list all active divisions. Delete rows for divisio
 |-------|----------------|---------------------|
 | Class XI | A | Science |
 | Class XI | B | Science |
-| Class XI | C | Commerce |
-| Class XI | D | Humanities |
+| Class XI | C | Science |
+| Class XI | D | Commerce |
+| Class XI | E | Humanities |
 | Class XII | A | Science |
 | Class XII | B | Science |
 | Class XII | C | Commerce |
@@ -122,7 +123,7 @@ Collect from: **Academic Coordinator**
 | 11 | Computer Science | CS | ✓ |
 | 12 | Informatics Practices | IP | ✓ |
 | 13 | Information Technology | IT | ✓ |
-| 14 | Business Studies | BST | ✓ |
+| 14 | Business Studies | BS | ✓ |
 | 15 | Accountancy | ACC | ✓ |
 | 16 | Economics | ECO | ✓ |
 | 17 | History | HIST | ✓ |
@@ -140,7 +141,7 @@ Collect from: **Academic Coordinator**
 | 29 | Co-Curricular Activities | CCA | ✓ |
 | 30 | Maths/IP | MATHS/IP | ✓ | *Combined period for XI & XII* |
 | 31 | Maths/IP/PSY | MATHS/IP/PSY | ✓ | *Combined period for XI & XII* |
-| 32 | | | |
+| 32 | Artificial Inteligence | AI | ✓ |
 | 33 | | | |
 | 34 | | | |
 | 35 | | | |
@@ -155,19 +156,19 @@ Collect from: **HR / Academic Coordinator**
 
 | # | Full Name | Subjects Qualified to Teach *(verify & update)* | Contact *(optional)* |
 |---|-----------|------------------------------------------------|----------------------|
-| 1 | Ashamol | Science, Physics, Chemistry, Biology | |
-| 2 | Roshni | Science, Physics, Chemistry, Biology | |
-| 3 | Lin Maria | Science, Physics, Chemistry, Biology | |
-| 4 | Asha Susan Jacob | Science, Physics, Chemistry, Biology | |
-| 5 | Anu S Nair | Science, Physics, Chemistry, Biology | |
-| 6 | Manju | Science, Physics, Chemistry, Biology | |
-| 7 | Anu Mathew | Science, Physics, Chemistry, Biology | |
-| 8 | Renila Mary John | Science, Environmental Studies, Physical Training, Co-Curricular Activities | |
-| 9 | Dominic Saj Jose | English | |
-| 10 | Siya | English | |
-| 11 | Deepa | English | |
+| 1 | Ashamol P B | Science, Biology | |
+| 2 | Roshni Daniel | Science, Biology | |
+| 3 | Lin Maria | Science, Chemistry | |
+| 4 | Asha Susan Jacob | Science, Chemistry | |
+| 5 | Amalu Mathew | Science, Physics | |
+| 6 | Manju R | Science, Physics | |
+| 7 | Anu Mathew | Science, Physics | |
+| 8 | Bibitha A B | Science, Environmental Studies, Biology | |
+| 9 | Bini Treesa Antony | English, General Knowledge | |
+| 10 | Siya Thomas | English | |
+| 11 | Deepa G Nair | English | |
 | 12 | Siju Samuel | English | |
-| 13 | Anju Sebastian | English | |
+| 13 | Aleena Maria Kuriachen | English | |
 | 14 | Anju Maria Joseph | English | |
 | 15 | Aleena Josy | English | |
 | 16 | Ansu | English | |
@@ -177,23 +178,23 @@ Collect from: **HR / Academic Coordinator**
 | 20 | Albin Benny | Social Studies, History, Political Science, Economics | |
 | 21 | Athira | Social Studies, History, Political Science, Economics | |
 | 22 | Aleena Joseph | Social Studies, Environmental Studies, General Knowledge, Physical Training | |
-| 23 | Reshma P Nair | Social Studies, Political Science, Environmental Studies | |
+| 23 | Aleesha Varghese | Social Studies, Political Science, Environmental Studies | |
 | 24 | Niji Abraham | Malayalam | |
 | 25 | Ambily | Malayalam | |
 | 26 | Jayasree | Malayalam | |
 | 27 | Prabha | Malayalam | |
-| 28 | Julie | Mathematics | |
-| 29 | Amrutha | Mathematics | |
+| 28 | Julie Scaria | Mathematics | |
+| 29 | Amrutha Saji | Mathematics | |
 | 30 | Saritha K | Mathematics, STEAM | |
-| 31 | Rajani | Mathematics | |
-| 32 | Remya | Mathematics | |
-| 33 | Smitha | Mathematics | |
+| 31 | Rajani R | Mathematics | |
+| 32 | Remya Nair | Mathematics | |
+| 33 | Smitha K V | Mathematics | |
 | 34 | Sahana | Mathematics | |
 | 35 | Gopikadas | Psychology | |
-| 36 | Anumol | Psychology | |
-| 37 | Aneesha | Hindi | |
+| 36 | Gowri P G | Psychology, Counsellor | |
+| 37 | Shridevi | Mathematics, Hindi | |
 | 38 | Jaya | Hindi | |
-| 39 | Deepthi | Hindi | |
+| 39 | Anjumol Anil | Malayalam | |
 | 40 | Sreethu | Hindi | |
 | 41 | Fr. Josh Kanjooparambil | Life Skills | |
 | 42 | Fr. Antony | Life Skills | |
@@ -201,17 +202,18 @@ Collect from: **HR / Academic Coordinator**
 | 44 | Br. Jiss | Life Skills, Social Studies | |
 | 45 | Sulajamma | Library | |
 | 46 | Sreejesh | Drawing | |
-| 47 | Akash | Life Skills, Physical Training, STEAM, Library | |
-| 48 | Akhil | Physical Training, Library, STEAM | |
-| 49 | Nayana | Library, Mathematics, STEAM | |
-| 50 | Mahesh Chandran | Library, STEAM, Mathematics | |
-| 51 | Anitha | Informatics Practices, Information Technology, Life Skills, STEAM | |
+| 47 | Akash | Physical Training | |
+| 48 | Anand Santosh | Physical Training | |
+| 49 | Nayana | Dance | |
+| 50 | Mahesh Chandran | Music | |
+| 51 | Anitha | Informatics Practices, Information Technology | |
 | 52 | Swetha | Computer Science, Information Technology | |
-| 53 | Ann | Computer Science, Information Technology | |
+| 53 | Ann John | Computer Science, Information Technology | |
 | 54 | Shijo C Mathew | Informatics Practices, Information Technology | |
-| 55 | | | |
-| 56 | | | |
-| 57 | | | |
+| 55 | Ashish Kurian | Chemistry, Science | |
+| 56 | Silpa N Raju | Chemistry, Science | |
+| 57 | Shobitha Lakshmi | Social Science | |
+| 58 | Soly | Little Prodigy | |
 
 > **Action required**: Verify subject assignments for all rows. A teacher may cover additional or different subjects than listed.
 
@@ -270,19 +272,19 @@ Collect from: **Each Class Teacher / Head of Department**
 | # | Subject | Teacher | Periods/Week | Notes |
 |---|---------|---------|-------------|-------|
 | 1 | English | Siya | 7 | |
-| 2 | Malayalam | Niji Abraham | 5 | |
+| 2 | Malayalam | Neethu | 5 | |
 | 3 | Hindi | Jaya | 4 | |
-| 4 | Mathematics | Julie | 7 | |
-| 5 | Environmental Studies | Renila Mary John | 5 | |
+| 4 | Mathematics | Sahana | 7 | |
+| 5 | Environmental Studies | Aleena Joseph | 5 | |
 | 6 | General Knowledge | Ansu | 1 | |
-| 7 | Life Skills | Akash | 1 | |
-| 8 | Information Technology | Anitha | 2 | |
+| 7 | Life Skills | Siya | 1 | |
+| 8 | Information Technology | Swetha | 2 | |
 | 9 | Physical Training | Akash | 2 | |
 | 10 | Drawing | Sreejesh | 1 | |
-| 11 | Dance / Music | Sulajamma | 1 | |
+| 11 | Dance / Music | Nayana / Mahesh | 1 | |
 | 12 | Library | Sulajamma | 1 | |
-| 13 | STEAM | Akhil | 1 | |
-| 14 | Little Prodigy | Anumol | 2 | |
+| 13 | STEAM | Mahesh | 1 | |
+| 14 | Little Prodigy | Soly | 2 | |
 | | **Total** | | **40** | |
 
 ---
@@ -292,19 +294,19 @@ Collect from: **Each Class Teacher / Head of Department**
 | # | Subject | Teacher | Periods/Week | Notes |
 |---|---------|---------|-------------|-------|
 | 1 | English | Siya | 7 | |
-| 2 | Malayalam | Niji Abraham | 5 | |
-| 3 | Hindi | Sreethu | 4 | |
-| 4 | Mathematics | Julie | 7 | |
-| 5 | Environmental Studies | Renila Mary John | 5 | |
-| 6 | General Knowledge | Ansu | 1 | |
-| 7 | Life Skills | Akash | 1 | |
-| 8 | Information Technology | Anitha | 2 | |
+| 2 | Malayalam | Prabha | 5 | |
+| 3 | Hindi | Jaya | 4 | |
+| 4 | Mathematics | Saritha K | 7 | |
+| 5 | Environmental Studies | Bibitha A B | 5 | |
+| 6 | General Knowledge | Aleena Joseph | 1 | |
+| 7 | Life Skills | Gopika | 1 | |
+| 8 | Information Technology | Ann | 2 | |
 | 9 | Physical Training | Akash | 2 | |
 | 10 | Drawing | Sreejesh | 1 | |
-| 11 | Dance / Music | Sulajamma | 1 | |
+| 11 | Dance / Music | Nayana / Mahesh | 1 | |
 | 12 | Library | Sulajamma | 1 | |
 | 13 | STEAM | Mahesh Chandran | 1 | |
-| 14 | Little Prodigy | Anumol | 2 | |
+| 14 | Little Prodigy | Soly | 2 | |
 | | **Total** | | **40** | |
 
 ---
@@ -313,20 +315,20 @@ Collect from: **Each Class Teacher / Head of Department**
 
 | # | Subject | Teacher | Periods/Week | Notes |
 |---|---------|---------|-------------|-------|
-| 1 | English | Ansu | 7 | |
-| 2 | Malayalam | Niji Abraham | 5 | |
-| 3 | Hindi | Sreethu | 4 | |
-| 4 | Mathematics | Julie | 7 | |
-| 5 | Environmental Studies | Renila Mary John | 5 | |
-| 6 | General Knowledge | *verify* | 1 | |
-| 7 | Life Skills | *verify* | 1 | |
+| 1 | English | Ansu | 6 | |
+| 2 | Malayalam | Anju | 5 | |
+| 3 | Hindi | Anakha | 4 | |
+| 4 | Mathematics | Shridevi | 6 | |
+| 5 | Environmental Studies | Aleesha Varghese | 5 | |
+| 6 | General Knowledge | Gopika | 2 | |
+| 7 | Life Skills | Gouri P G | 2 | |
 | 8 | Information Technology | Anitha | 2 | |
-| 9 | Physical Training | *verify* | 2 | |
+| 9 | Physical Training | Akash | 2 | |
 | 10 | Drawing | Sreejesh | 1 | |
-| 11 | Dance / Music | Sulajamma | 1 | |
+| 11 | Dance / Music | Nayana / Mahesh | 1 | |
 | 12 | Library | Sulajamma | 1 | |
-| 13 | STEAM | *verify* | 1 | |
-| 14 | Little Prodigy | *verify* | 2 | |
+| 13 | STEAM | Nayana | 1 | |
+| 14 | Little Prodigy | Soly | 2 | |
 | | **Total** | | **40** | |
 
 ---
@@ -335,20 +337,20 @@ Collect from: **Each Class Teacher / Head of Department**
 
 | # | Subject | Teacher | Periods/Week | Notes |
 |---|---------|---------|-------------|-------|
-| 1 | English | Ansu | 6 | |
-| 2 | Malayalam | Prabha | 4 | |
-| 3 | Hindi | Sreethu | 4 | |
-| 4 | Mathematics | Sahana | 7 | |
+| 1 | English | Deepa | 6 | |
+| 2 | Malayalam | Niji | 4 | |
+| 3 | Hindi | Jaya | 4 | |
+| 4 | Mathematics | Rajani R | 6 | |
 | 5 | Environmental Studies | Aleena Joseph | 5 | |
-| 6 | General Knowledge | *verify* | 1 | |
-| 7 | Life Skills | *verify* | 1 | |
-| 8 | Information Technology | Anitha | 2 | |
-| 9 | Physical Training | *verify* | 2 | |
+| 6 | General Knowledge | Athira | 2 | |
+| 7 | Life Skills | Ansu | 1 | |
+| 8 | Information Technology | Ann | 2 | |
+| 9 | Physical Training | Anand Santosh | 2 | |
 | 10 | Drawing | Sreejesh | 1 | |
-| 11 | Dance / Music | Sulajamma | 1 | |
+| 11 | Dance / Music | Nayana / Mahesh | 1 | |
 | 12 | Library | Sulajamma | 1 | |
 | 13 | STEAM | Nayana | 1 | |
-| 14 | Little Prodigy | Anumol | 2 | |
+| 14 | Little Prodigy | Soly | 2 | |
 | 15 | Co-Curricular Activities | *verify* | 2 | |
 | | **Total** | | **40** | |
 
@@ -358,20 +360,43 @@ Collect from: **Each Class Teacher / Head of Department**
 
 | # | Subject | Teacher | Periods/Week | Notes |
 |---|---------|---------|-------------|-------|
-| 1 | English | Ansu | 6 | |
+| 1 | English | Siya | 6 | |
 | 2 | Malayalam | Prabha | 4 | |
 | 3 | Hindi | Sreethu | 4 | |
-| 4 | Mathematics | Sahana | 7 | |
-| 5 | Environmental Studies | Renila Mary John | 5 | |
-| 6 | General Knowledge | *verify* | 1 | |
-| 7 | Life Skills | *verify* | 1 | |
+| 4 | Mathematics | Sreedevi | 7 | |
+| 5 | Environmental Studies | Aleesha Varghese | 5 | |
+| 6 | General Knowledge | Bini Treesa | 1 | |
+| 7 | Life Skills | Silpa V Raju | 1 | |
 | 8 | Information Technology | Anitha | 2 | |
-| 9 | Physical Training | *verify* | 2 | |
-| 10 | Drawing | *verify* | 1 | |
-| 11 | Dance / Music | Sulajamma | 1 | |
+| 9 | Physical Training | Anand Santosh | 2 | |
+| 10 | Drawing | Sreejesh | 1 | |
+| 11 | Dance / Music | Nayana / Mahesh | 1 | |
 | 12 | Library | Sulajamma | 1 | |
 | 13 | STEAM | Mahesh Chandran | 1 | |
-| 14 | Little Prodigy | Anumol | 2 | |
+| 14 | Little Prodigy | Soly | 2 | |
+| 15 | Co-Curricular Activities | *verify* | 2 | |
+| | **Total** | | **40** | |
+
+---
+
+### CLASS II C
+
+| # | Subject | Teacher | Periods/Week | Notes |
+|---|---------|---------|-------------|-------|
+| 1 | English | Aleena Maria | 6 | |
+| 2 | Malayalam | Jayasree | 4 | |
+| 3 | Hindi | Jaya | 4 | |
+| 4 | Mathematics | Saritha K | 7 | |
+| 5 | Environmental Studies | Athira | 5 | |
+| 6 | General Knowledge | Shobita Lakshmi | 1 | |
+| 7 | Life Skills | Aleesha Varghese | 1 | |
+| 8 | Information Technology | Swetha | 2 | |
+| 9 | Physical Training | Anand Santosh | 2 | |
+| 10 | Drawing | Sreejesh | 1 | |
+| 11 | Dance / Music | Nayana / Mahesh | 1 | |
+| 12 | Library | Sulajamma | 1 | |
+| 13 | STEAM | Mahesh Chandran | 1 | |
+| 14 | Little Prodigy | Soly | 2 | |
 | 15 | Co-Curricular Activities | *verify* | 2 | |
 | | **Total** | | **40** | |
 
