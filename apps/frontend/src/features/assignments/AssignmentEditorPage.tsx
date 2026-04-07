@@ -4,15 +4,20 @@ import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, FileText, Trash2, Pencil, ArrowLeft, Settings2 } from 'lucide-react';
+import { Plus, FileText, Trash2, Pencil, ArrowLeft, Settings2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -256,7 +261,7 @@ export function Component() {
           if (!open) { setFormOpen(false); setEditTarget(null); }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editTarget ? t('form.editTitle') : t('form.createTitle')}</DialogTitle>
           </DialogHeader>
@@ -270,7 +275,7 @@ export function Component() {
                 <Label>{t('form.subject')}</Label>
                 <Select
                   value={form.watch('subjectId')}
-                  onValueChange={(v) => form.setValue('subjectId', v)}
+                  onValueChange={(v) => { form.setValue('subjectId', v); form.setValue('teacherId', ''); }}
                 >
                   <SelectTrigger><SelectValue placeholder={t('form.subjectPlaceholder')} /></SelectTrigger>
                   <SelectContent>
@@ -285,41 +290,63 @@ export function Component() {
               </div>
             )}
 
-            {/* Teacher */}
-            <div className="space-y-2">
-              <Label>{t('form.teacher')}</Label>
-              <Select
-                value={form.watch('teacherId')}
-                onValueChange={(v) => form.setValue('teacherId', v)}
-              >
-                <SelectTrigger><SelectValue placeholder={t('form.teacherPlaceholder')} /></SelectTrigger>
-                <SelectContent>
-                  {teachers.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.teacherId && (
-                <p className="text-sm text-destructive">{form.formState.errors.teacherId.message}</p>
-              )}
-            </div>
+            {/* Teacher — filtered by selected subject's qualified teachers */}
+            {(() => {
+              const selectedSubjectId = form.watch('subjectId');
+              const qualifiedTeachers = selectedSubjectId
+                ? teachers.filter((t) =>
+                    t.teacherSubjects?.some((ts) => ts.subjectId === selectedSubjectId)
+                  )
+                : teachers;
+              const selectedTeacherId = form.watch('teacherId');
 
-            {/* Assistant Teacher */}
-            <div className="space-y-2">
-              <Label>{t('form.assistantTeacher')}</Label>
-              <Select
-                value={form.watch('assistantTeacherId') || '_none'}
-                onValueChange={(v) => form.setValue('assistantTeacherId', v === '_none' ? '' : v)}
-              >
-                <SelectTrigger><SelectValue placeholder={t('form.assistantPlaceholder')} /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">None</SelectItem>
-                  {teachers.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              return (
+                <>
+                  <div className="space-y-2">
+                    <Label>{t('form.teacher')}</Label>
+                    {selectedSubjectId && qualifiedTeachers.length === 0 && (
+                      <p className="text-xs text-amber-600">No teachers qualified for this subject.</p>
+                    )}
+                    <Select
+                      value={selectedTeacherId}
+                      onValueChange={(v) => form.setValue('teacherId', v)}
+                    >
+                      <SelectTrigger><SelectValue placeholder={t('form.teacherPlaceholder')} /></SelectTrigger>
+                      <SelectContent>
+                        {(qualifiedTeachers.length > 0 ? qualifiedTeachers : teachers).map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                            {qualifiedTeachers.length > 0 && !qualifiedTeachers.find((q) => q.id === t.id) && ' (unqualified)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.teacherId && (
+                      <p className="text-sm text-destructive">{form.formState.errors.teacherId.message}</p>
+                    )}
+                  </div>
+
+                  {/* Assistant Teacher — excludes primary teacher */}
+                  <div className="space-y-2">
+                    <Label>{t('form.assistantTeacher')}</Label>
+                    <Select
+                      value={form.watch('assistantTeacherId') || '_none'}
+                      onValueChange={(v) => form.setValue('assistantTeacherId', v === '_none' ? '' : v)}
+                    >
+                      <SelectTrigger><SelectValue placeholder={t('form.assistantPlaceholder')} /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">None</SelectItem>
+                        {teachers
+                          .filter((t) => t.id !== selectedTeacherId)
+                          .map((t) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Weightage */}
             <div className="space-y-2">
@@ -334,6 +361,99 @@ export function Component() {
                 <p className="text-sm text-destructive">{form.formState.errors.weightage.message}</p>
               )}
             </div>
+
+            <Separator />
+
+            {/* Scheduling Preferences — collapsible */}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground text-xs" type="button">
+                  <span className="flex items-center gap-2">
+                    <Settings2 className="size-3.5" />
+                    Scheduling Preferences (Optional)
+                  </span>
+                  <ChevronDown className="size-3.5" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4 pt-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-xs">Constraint Type</Label>
+                    <p className="text-[10px] text-muted-foreground">Hard = must be respected, Soft = best effort</p>
+                  </div>
+                  <Select defaultValue="SOFT">
+                    <SelectTrigger className="w-24 h-7 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SOFT" className="text-xs">Soft</SelectItem>
+                      <SelectItem value="HARD" className="text-xs">Hard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Preferred Days */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Preferred Days</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
+                      <label key={day} className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[10px] cursor-pointer hover:bg-emerald-500/10 has-[:checked]:bg-emerald-500/15 has-[:checked]:border-emerald-500/40 has-[:checked]:text-emerald-700 dark:has-[:checked]:text-emerald-400 transition-colors">
+                        <input type="checkbox" value={i} className="size-3 accent-emerald-500" />
+                        {day}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Excluded Days */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Excluded Days</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
+                      <label key={day} className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[10px] cursor-pointer hover:bg-destructive/10 has-[:checked]:bg-destructive/15 has-[:checked]:border-destructive/40 has-[:checked]:text-destructive transition-colors">
+                        <input type="checkbox" value={i} className="size-3 accent-red-500" />
+                        {day}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Prefer Adjacent Periods</Label>
+                  <Switch />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Min Periods/Day</Label>
+                    <Input type="number" min={1} className="h-7 text-xs" placeholder="—" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Max Periods/Day</Label>
+                    <Input type="number" min={1} className="h-7 text-xs" placeholder="—" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Preferred Period Range</Label>
+                    <div className="flex items-center gap-1">
+                      <Input type="number" min={1} className="h-7 text-xs" placeholder="Min" />
+                      <span className="text-xs text-muted-foreground">–</span>
+                      <Input type="number" min={1} className="h-7 text-xs" placeholder="Max" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Excluded Period Range</Label>
+                    <div className="flex items-center gap-1">
+                      <Input type="number" min={1} className="h-7 text-xs" placeholder="Min" />
+                      <span className="text-xs text-muted-foreground">–</span>
+                      <Input type="number" min={1} className="h-7 text-xs" placeholder="Max" />
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-muted-foreground">Preferences are applied during timetable generation. They do not affect existing timetables.</p>
+              </CollapsibleContent>
+            </Collapsible>
 
             <DialogFooter>
               <Button
