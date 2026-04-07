@@ -272,7 +272,6 @@ export function Component() {
               onChange={setSearch}
               placeholder={t('searchPlaceholder')}
               className="w-64"
-              variant="dark"
             />
             {!isReadOnly && (
               <Button onClick={() => navigate('/teachers/new')}>

@@ -27,9 +27,9 @@ export function Component() {
         description="View weekly timetable for a selected teacher."
         actions={
           <div className="flex items-center gap-2">
-            <Label className="text-xs text-white/60 whitespace-nowrap">Select Teacher</Label>
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Select Teacher</Label>
             <Select value={selectedTeacherId} onValueChange={setSelectedTeacherId}>
-              <SelectTrigger className="w-48 h-8 text-sm border-white/20 bg-white/10 text-white">
+              <SelectTrigger className="w-48 h-8 text-sm">
                 <SelectValue placeholder="Choose teacher..." />
               </SelectTrigger>
               <SelectContent>

@@ -7,7 +7,7 @@ export function TopBar() {
   const isXl = useBreakpoint('xl');
 
   return (
-    <header className="hidden lg:flex items-center h-14 shrink-0 border-b border-border/50 backdrop-blur-xl bg-background/80 px-4 gap-4">
+    <header className="hidden lg:flex items-center h-14 shrink-0 bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white px-4 gap-4 shadow-sm">
       {/* Left — logo only shows when sidebar is collapsed (lg but not xl) */}
       {!isXl && (
         <div className="flex items-center gap-2">
