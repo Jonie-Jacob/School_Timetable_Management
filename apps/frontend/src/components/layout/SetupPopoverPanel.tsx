@@ -55,7 +55,7 @@ export function SetupPopoverPanel() {
   const currentStep = steps.find((s) => !s.complete);
 
   return (
-    <div className="w-80 space-y-4">
+    <div className="space-y-3" style={{ width: '340px' }}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm">{t('setupWizard.title')}</h3>
@@ -77,27 +77,29 @@ export function SetupPopoverPanel() {
           return (
             <button
               key={step.step}
-              className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden"
               disabled={isLocked}
               onClick={() => {
                 if (!isLocked) navigate(STEP_ROUTES[step.step]);
               }}
             >
               <StepIcon step={step} steps={steps} />
-              <div className="flex-1 min-w-0">
-                <span className={step.complete ? 'text-white/50 line-through' : 'text-white/90'}>
-                  {step.name}
-                </span>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`truncate ${step.complete ? 'text-white/50 line-through' : 'text-white/90'}`}>
+                    {step.name}
+                  </span>
+                  {isCurrent && (
+                    <span className="flex items-center gap-0.5 text-[10px] font-medium text-amber-400 shrink-0 whitespace-nowrap">
+                      {t('setupWizard.continue')}
+                      <ArrowRight className="size-3" />
+                    </span>
+                  )}
+                </div>
                 {step.detail && (
                   <p className="text-[10px] text-white/40 truncate">{step.detail}</p>
                 )}
               </div>
-              {isCurrent && (
-                <span className="flex items-center gap-1 text-[10px] font-medium text-amber-400 shrink-0">
-                  {t('setupWizard.continue')}
-                  <ArrowRight className="size-3" />
-                </span>
-              )}
             </button>
           );
         })}

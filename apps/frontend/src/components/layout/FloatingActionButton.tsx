@@ -115,7 +115,7 @@ export function FloatingActionButton() {
       <div className="fixed bottom-8 right-8 z-50">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
-          <PopoverContent side="top" align="end" className="p-4 bg-gradient-to-br from-stone-800 via-stone-700 to-stone-800 text-white border-white/10">
+          <PopoverContent side="top" align="end" className="p-4 w-auto bg-gradient-to-br from-stone-800 via-stone-700 to-stone-800 text-white border-white/10">
             {mode === 'setup' ? <SetupPopoverPanel /> : <ConflictPopoverPanel />}
           </PopoverContent>
         </Popover>
