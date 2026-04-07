@@ -1,0 +1,63 @@
+{
+  "title": "Classes",
+  "description": "Manage classes and their divisions.",
+  "addClass": "Add Class",
+  "edit": "Edit",
+  "delete": "Delete",
+  "view": "View",
+  "createSuccess": "Class created successfully.",
+  "updateSuccess": "Class updated successfully.",
+  "deleteSuccess": "Class deleted successfully.",
+  "createError": "Failed to create class.",
+  "updateError": "Failed to update class.",
+  "deleteError": "Failed to delete class.",
+  "table": {
+    "name": "Class Name",
+    "divisions": "Divisions",
+    "timetableStatus": "Timetable Status",
+    "actions": "Actions"
+  },
+  "form": {
+    "createTitle": "Add Class",
+    "editTitle": "Edit Class",
+    "name": "Class Name",
+    "namePlaceholder": "e.g. Class VII, Grade 10",
+    "requiresStream": "Requires Stream",
+    "requiresStreamHint": "Enable if divisions need stream labels (e.g. Science, Commerce)",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving..."
+  },
+  "deleteConfirm": {
+    "title": "Delete Class",
+    "description": "Are you sure you want to delete \"{{name}}\"? All divisions and their assignments will be removed.",
+    "confirm": "Delete"
+  },
+  "empty": {
+    "title": "No classes yet",
+    "description": "Add your first class to organize your school's divisions."
+  },
+  "detail": {
+    "addDivision": "Add Division",
+    "divisionLabel": "Division Label",
+    "divisionLabelPlaceholder": "e.g. A, B, C",
+    "streamName": "Stream Name",
+    "streamNamePlaceholder": "e.g. Science, Commerce",
+    "periodStructure": "Period Structure",
+    "assignments": "Assignments",
+    "generate": "Generate",
+    "viewTimetable": "View Timetable",
+    "noDivisions": "No divisions yet",
+    "noDivisionsDescription": "Add divisions to this class to start assigning subjects and teachers.",
+    "divisionCreateSuccess": "Division added successfully.",
+    "divisionCreateError": "Failed to add division.",
+    "divisionDeleteSuccess": "Division removed successfully.",
+    "divisionDeleteError": "Failed to remove division.",
+    "divisionDeleteConfirm": "Are you sure you want to remove Division {{label}}? This will delete all assignments and timetable data.",
+    "subjects": "subjects",
+    "periods": "periods",
+    "generated": "Generated",
+    "pending": "Pending",
+    "outdated": "Outdated"
+  }
+}

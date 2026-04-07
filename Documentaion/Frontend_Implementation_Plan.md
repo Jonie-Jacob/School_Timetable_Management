@@ -202,7 +202,7 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 
 > **Progress Legend**: ✅ = Fully Complete | 🟡 = Partially Complete | ⬜ = Not Started
 >
-> **Last Updated**: April 4, 2026
+> **Last Updated**: April 5, 2026
 
 | Phase | Name | Screen(s) | Complexity | Est. Sub-parts | Status |
 |-------|------|-----------|------------|----------------|--------|
@@ -215,7 +215,7 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 6 | Period Structures | Screens 3 & 3A | High | 3 (A, B, C) | ✅ Complete |
 | 7 | Subjects | Screens 4 & 5 | Low | 1 | ✅ Complete |
 | 8 | Teachers | Screens 6 & 7 | High | 2 (A, B) | ✅ Complete |
-| 9 | Classes & Divisions | Screens 8 & 9 | Medium | 2 (A, B) | ⬜ Not Started |
+| 9 | Classes & Divisions | Screens 8 & 9 | Medium | 2 (A, B) | ✅ Complete |
 | 10 | Division Assignments Editor | Screen 10 | High | 2 (A, B) | ⬜ Not Started |
 | 11 | Elective Groups | Elective Screen | Medium | 1 | ⬜ Not Started |
 | 12 | Timetable Generator | Screen 11 | Medium | 1 | ⬜ Not Started |
@@ -227,7 +227,7 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 18 | Final Responsive Polish & QA | All | Medium | 1 | ⬜ Not Started |
 
 **Total Phases**: 19 (with sub-parts: ~29 deliverables)
-**Completed**: 11/19 | **Partially Complete**: 0/19 | **Not Started**: 8/19
+**Completed**: 12/19 | **Partially Complete**: 0/19 | **Not Started**: 7/19
 
 ### Detailed Phase Completion Notes
 
@@ -235,26 +235,35 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 All tasks complete: Vite + React 19, TypeScript strict, Tailwind CSS v4, shadcn/ui, Redux Toolkit, React Router v7, i18n skeleton, custom color palette, directory structure, Redux store, RTK Query base config, router skeleton.
 
 #### ✅ Phase 1 — Design System & Shared Components
-- **1A Core Primitives** ✅ — 28+ shadcn/ui components installed (button, input, dialog, form, card, tabs, etc.)
-- **1B Composite Components** ✅ — DataTable, DataTableCardView, PageHeader, SearchInput, EmptyState, ConfirmDialog, StatusBadge, PageSkeleton, GlobalErrorBoundary, FeatureErrorBoundary all implemented
+- **1A Core Primitives** ✅ — 28+ shadcn/ui components installed (button, input, dialog, form, card, tabs, accordion, etc.)
+- **1B Composite Components** ✅ — DataTable (with resizable columns, page size selector, inline quick-edit, column size persistence via localStorage, total/filtered entry counts), DataTableCardView, PageHeader (dark gradient background), SearchInput (with dark variant for dark containers), EmptyState, ConfirmDialog, StatusBadge, PageSkeleton, GlobalErrorBoundary, FeatureErrorBoundary all implemented
 - **1C Form Components** ✅ — DatePicker, TimePicker, MultiSelect, PasswordInput, PasswordStrength all implemented
 
+**UI Redesign (April 2026)** — Complete visual overhaul:
+- **Color Palette**: Replaced purple/blue (#6A0DAD/#0047AB) with Warm Amber (#F59E0B) primary + Stone neutral palette. Dark mode uses Stone 950 with Amber 400 accents.
+- **Glassmorphism**: Frosted glass cards (`bg-card backdrop-blur-sm`), glass inputs (`bg-white/60 backdrop-blur-sm`), glass buttons (outline variant). All components use `transition-all duration-200`.
+- **Glossy Buttons**: Top-down gradients with specular highlights (`from-amber-400 via-primary to-amber-600`), `hover:scale-[1.02]` on all variants, `active:scale-[0.98]` press feedback.
+- **Warm Gradient Background**: Main content area uses `linear-gradient(135deg, #FFFBEB → #FEF3C7 → #FAFAF9 → #FFF7ED)` in light mode with 3 animated floating orbs (blur 80px, staggered 20-26s animations). Dark mode: orbs at 5% opacity.
+- **Dark UI Elements**: Table headers, pagination bars, page headers, and Setup Guide stepper all use `bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800` with white text.
+- **Colorful Icons**: Sidebar nav items each have distinct icon colors (amber, sky, violet, teal, rose, emerald, orange, yellow, cyan, stone). Active state: amber left border + amber text.
+- **DataTable Modernization**: Resizable columns (persisted per-page in localStorage), customizable page size (10/25/50), inline quick-edit (click cell → input with save/cancel), entries count (`1-10 of 54`), page controls grouped right, dark header/footer bars, alternating row backgrounds, high-contrast hover with 300ms ease transition.
+
 #### ✅ Phase 2 — App Shell & Layout
-- **2A Desktop Layout** ✅ — AppShell, Sidebar (collapsible), TopBar, AcademicYearSelector, ThemeToggle, UserMenu, Breadcrumb, ReadOnlyBanner, SidebarLink all implemented
-- **2B Mobile Layout** ✅ — BottomTabBar, MobileHeader, MobileDrawer, MoreSheet all implemented
-- **2C Auth Guard & Error Boundaries** ✅ — AuthenticatedLayout (auth guard), GlobalErrorBoundary, FeatureErrorBoundary, mock-auth all implemented
-- **FAB** ✅ — FloatingActionButton with dual mode (setup progress ring / conflict badge), SetupPopoverPanel (desktop popover / mobile bottom sheet with 7-step list), ConflictPopoverPanel (notification count with link). Integrated into AppShell.
+- **2A Desktop Layout** ✅ — AppShell with warm gradient background + animated orbs, Sidebar (dark solid `#1C1917`, collapsible, colorful per-item icons, amber active state with left border), TopBar (frosted glass `backdrop-blur-xl`), AcademicYearSelector, ThemeToggle, UserMenu (amber avatar tint), Breadcrumb (UUID-aware, skips raw IDs), ReadOnlyBanner, SidebarLink (colorful icons, amber active indicator)
+- **2B Mobile Layout** ✅ — BottomTabBar (frosted glass, amber dot active indicator), MobileHeader (frosted glass), MobileDrawer, MoreSheet all implemented
+- **2C Auth Guard & Error Boundaries** ✅ — AuthenticatedLayout (auth guard + WebSocket init), GlobalErrorBoundary, FeatureErrorBoundary, mock-auth all implemented
+- **FAB** ✅ — FloatingActionButton with amber glow shadow, dark gradient popover (`from-stone-800 via-stone-700 to-stone-800`), SetupPopoverPanel with emerald checks/amber current/white locked step icons, ConflictPopoverPanel. Desktop uses Popover, mobile uses bottom Sheet.
 
 #### ✅ Phase 3 — Auth Pages
 - **3A Login Page** ✅ — LoginPage with split layout (desktop) / single-column (mobile), LoginForm with email/password/remember-me, AuthLayout, authSlice with full state management
 - **3B Registration & Forgot Password** ✅ — RegisterForm with password strength, ForgotPasswordForm, ResetPasswordForm with verification code flow
 
 #### ✅ Phase 4 — Dashboard
-- **Summary Cards** ✅ — 6 SummaryCard components (classes, divisions, teachers, subjects, generated, pending) with RTK Query API
+- **Summary Cards** ✅ — 6 SummaryCard components in 6-column grid (xl) with unique colorful icon per metric (violet classes, sky divisions, emerald teachers, rose subjects, teal generated, amber pending). Glass cards with hover lift + amber shadow.
 - **Conflict Banner** ✅ — ConflictBanner with link to notifications
-- **Quick Links** ✅ — QuickLinks component for navigation
-- **Welcome/Empty State** ✅ — WelcomeState component
-- **Setup Wizard Cards** ✅ — SetupStepCard component with step number, title, description, completion status, locked state for unmet prerequisites, and action buttons (Continue/Review). Integrated into DashboardPage above summary cards when wizard is active. dashboardApi extended with `useGetSetupWizardQuery` and `useDismissSetupWizardMutation`. i18n strings added for all 7 step cards.
+- **Quick Links** ✅ — QuickLinks with colorful icons (violet, teal, cyan) and hover-reveal arrows
+- **Welcome/Empty State** ✅ — WelcomeState with amber gradient CTA button
+- **Setup Wizard** ✅ — Compact horizontal SetupStepper (replaces large card grid). Dark gradient bar (`from-stone-800 via-stone-700 to-stone-800`) with glass border. Steps connected by gradient lines (emerald for complete transitions). Circle indicators: emerald check (done), amber pulse with ring (current), white/10 lock (locked). Labels below circles with "Continue" link on current step. Progress pill badge with amber dot. dashboardApi extended with `useGetSetupWizardQuery` and `useDismissSetupWizardMutation`.
 
 #### ✅ Phase 5 — Academic Year Management
 All tasks complete: AcademicYearsPage with DataTable (table + card views), AcademicYearForm dialog with date validation, academicYearApi with list/create/activate endpoints, status badges, pagination, i18n strings.
@@ -265,15 +274,15 @@ All tasks complete: AcademicYearsPage with DataTable (table + card views), Acade
 - **6C DnD & Interactions** ✅ — DaySlotList with @dnd-kit sortable, SlotRow (desktop), SlotCard (mobile), add/remove/reorder slots, copy between days, reset to defaults, all slot types (Period/Interval/Lunch Break)
 
 #### ✅ Phase 7 — Subjects
-All tasks complete: SubjectsPage with DataTable + search + pagination, SubjectForm (create/edit), subjectApi with full CRUD + cascade delete check, read-only mode support, i18n strings.
+All tasks complete: SubjectsPage with DataTable (storageKey="subjects", inline quick-edit on name, compact search in dark PageHeader, totalCount in pagination), SubjectForm (create/edit dialog), subjectApi with full CRUD + cascade delete check, read-only mode support, i18n strings.
 
 #### ✅ Phase 8 — Teachers
-- **8A Teachers List** ✅ — TeachersPage with DataTable (table + card views), search, pagination, subject badges per teacher, edit navigates to form page, delete with cascade confirmation
+- **8A Teachers List** ✅ — TeachersPage with DataTable (storageKey="teachers", inline quick-edit on name, all subjects visible with flex-wrap — no overflow chips, compact search in dark PageHeader, totalCount in pagination, compact 80px actions column). Delete with cascade confirmation.
 - **8B Teacher Form + Availability** ✅ — TeacherFormPage (full page at `/teachers/new` and `/teachers/:id/edit`) with name, contact, maxPeriodsPerWeek, qualified subjects MultiSelect, and AvailabilityGrid. AvailabilityGrid fetches individual period structure details to get working days with slots, renders desktop 2D click-toggle grid and mobile day-by-day accordion with switches. teacherApi RTK Query slice with full CRUD + setSubjects + setAvailability endpoints. i18n strings added. Vite proxy fixed with bypass for HTML requests to prevent route conflicts.
 
-#### ⬜ Phase 9 — Classes & Divisions
-- **9A Classes List** ⬜ — ClassesPage is placeholder only (heading + description, no table, no API)
-- **9B Class Detail + Divisions** ⬜ — No ClassDetailPage, no DivisionCard, no classApi
+#### ✅ Phase 9 — Classes & Divisions
+- **9A Classes List** ✅ — ClassesPage with glass card grid (not table — card-based layout per class), create class dialog with name + requiresStream toggle, delete with confirmation, division count + timetable status badges per card. classApi RTK Query with full CRUD + division CRUD. i18n strings for classes namespace.
+- **9B Class Detail + Divisions** ✅ — ClassDetailPage at `/classes/:id` with division card grid. Add division dialog with label + optional stream name. Division cards show period structure badge, assignment count, timetable status (Generated/Outdated/Pending). Delete division with confirmation. Action buttons for Assignments and Generate (placeholder routes for Phase 10/12).
 
 #### ⬜ Phase 10 — Division Assignments Editor
 Not started. No AssignmentEditorPage, no assignmentApi.
@@ -301,7 +310,7 @@ TeacherTimetablePage is placeholder only. No grid, no teacherTimetableApi.
 - **Integration** ✅ — Hook initialized in AuthenticatedLayout (runs once per authenticated session), notificationApi registered in Redux store with 60s polling for notification count as fallback
 
 #### ✅ Phase 17 — i18n Setup
-All tasks complete: i18next configured with LanguageDetector, 6 namespace files (common, auth, dashboard, academic-years, period-structures, subjects), `useTranslation()` used throughout implemented features.
+All tasks complete: i18next configured with LanguageDetector, 7 namespace files (common, auth, dashboard, academic-years, period-structures, subjects, teachers), `useTranslation()` used throughout implemented features.
 
 #### ⬜ Phase 18 — Final Responsive Polish & QA
 Not started. Depends on all other phases being complete first.

@@ -136,6 +136,16 @@ All design docs are in `Documentaion/` (note the typo — keep as-is):
 - `User_Flow.md` — Step-by-step user flow + FAB/setup wizard spec
 - `DataCollection.md` — Sample school data for seeding
 
+## Frontend Design System
+
+- **Color Theme**: Warm Amber (#F59E0B) primary with Stone neutral palette. NOT purple/blue.
+- **Style**: Glassmorphism — frosted glass cards, backdrop blur, animated orbs on light mode background.
+- **Dark Surfaces**: Table headers, pagination bars, page headers, Setup Guide stepper all use `bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800` with white text.
+- **Sidebar**: Solid dark `#1C1917` (Stone 900) with colorful per-item icons (each nav item has a unique color). Active state: amber left border + amber text.
+- **Buttons**: Glossy top-down gradients with `hover:scale-[1.02]`, `active:scale-[0.98]`. Outline variant uses `backdrop-blur-[10px]`.
+- **Tables**: Dark gradient header/footer, resizable columns (persisted in localStorage per page via `storageKey`), inline quick-edit (click cell → input), customizable page size, entries count display.
+- **Orbs**: 3 animated floating orbs with blur(80px) in the main content area for glassmorphism depth. Light mode: 35% opacity. Dark mode: 5%.
+
 ## Important Notes
 
 - Do NOT add a `period_structure_classes` table — it was removed. Use `divisions.period_structure_id` instead.
@@ -143,3 +153,4 @@ All design docs are in `Documentaion/` (note the typo — keep as-is):
 - The `Documentaion/` directory name has a typo. Do not rename it — existing references depend on this path.
 - Frontend uses `sonner` for toasts, `@dnd-kit` for drag-and-drop, `shadcn/ui` primitives.
 - The guided setup wizard uses a **Floating Action Button (FAB)** — not sidebar-based. The FAB doubles as a conflict notification hub after setup is complete.
+- Vite proxy uses `bypass` to return `/index.html` for HTML requests, preventing SPA route conflicts with API proxies (e.g., `/teachers` is both a React route and an API proxy).
