@@ -189,18 +189,21 @@ export function Component() {
                   )}
                 </div>
 
-                {!isReadOnly && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button variant="outline" size="xs" className="text-[11px]">
-                      <FileText className="size-3 mr-1" />
-                      {t('detail.assignments')}
-                    </Button>
-                    <Button variant="outline" size="xs" className="text-[11px]">
-                      <CalendarDays className="size-3 mr-1" />
-                      {t('detail.generate')}
-                    </Button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="text-[11px]"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/classes/${id}/divisions/${div.id}/assignments`); }}
+                  >
+                    <FileText className="size-3 mr-1" />
+                    {t('detail.assignments')}
+                  </Button>
+                  <Button variant="outline" size="xs" className="text-[11px]" disabled>
+                    <CalendarDays className="size-3 mr-1" />
+                    {t('detail.generate')}
+                  </Button>
+                </div>
               </div>
             );
           })}

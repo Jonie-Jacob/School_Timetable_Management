@@ -38,6 +38,10 @@ export const router = createBrowserRouter([
         lazy: () => import('@/features/classes/ClassDetailPage'),
       },
       {
+        path: 'classes/:classId/divisions/:divisionId/assignments',
+        lazy: () => import('@/features/assignments/AssignmentEditorPage'),
+      },
+      {
         path: 'subjects',
         lazy: () => import('@/features/subjects/SubjectsPage'),
       },

@@ -9,6 +9,7 @@ import enPeriodStructures from './locales/en/period-structures.json';
 import enSubjects from './locales/en/subjects.json';
 import enTeachers from './locales/en/teachers.json';
 import enClasses from './locales/en/classes.json';
+import enAssignments from './locales/en/assignments.json';
 
 i18n
   .use(LanguageDetector)
@@ -24,6 +25,7 @@ i18n
         subjects: enSubjects,
         teachers: enTeachers,
         classes: enClasses,
+        assignments: enAssignments,
       },
     },
     defaultNS: 'common',

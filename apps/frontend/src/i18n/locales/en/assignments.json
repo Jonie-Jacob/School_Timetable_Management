@@ -1,0 +1,49 @@
+{
+  "title": "Division Assignments",
+  "description": "Assign subjects and teachers with weekly periods.",
+  "addAssignment": "Add Assignment",
+  "createSuccess": "Assignment created.",
+  "updateSuccess": "Assignment updated.",
+  "deleteSuccess": "Assignment deleted.",
+  "createError": "Failed to create assignment.",
+  "updateError": "Failed to update assignment.",
+  "deleteError": "Failed to delete assignment.",
+  "table": {
+    "subject": "Subject",
+    "teacher": "Teacher",
+    "assistant": "Asst. Teacher",
+    "weightage": "Periods/Week",
+    "preferences": "Prefs",
+    "actions": "Actions"
+  },
+  "form": {
+    "createTitle": "Add Assignment",
+    "editTitle": "Edit Assignment",
+    "subject": "Subject",
+    "subjectPlaceholder": "Select subject...",
+    "teacher": "Teacher",
+    "teacherPlaceholder": "Select teacher...",
+    "assistantTeacher": "Assistant Teacher (Optional)",
+    "assistantPlaceholder": "Select assistant...",
+    "weightage": "Periods Per Week",
+    "weightagePlaceholder": "e.g. 5",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving..."
+  },
+  "deleteConfirm": {
+    "title": "Delete Assignment",
+    "description": "Remove this {{subject}} assignment from the division?",
+    "confirm": "Delete"
+  },
+  "totalBar": {
+    "total": "Total",
+    "periods": "periods/week",
+    "balanced": "Balanced",
+    "unbalanced": "Unbalanced"
+  },
+  "empty": {
+    "title": "No assignments yet",
+    "description": "Add subject-teacher assignments to this division."
+  }
+}

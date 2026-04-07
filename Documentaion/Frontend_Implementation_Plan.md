@@ -216,7 +216,7 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 7 | Subjects | Screens 4 & 5 | Low | 1 | ✅ Complete |
 | 8 | Teachers | Screens 6 & 7 | High | 2 (A, B) | ✅ Complete |
 | 9 | Classes & Divisions | Screens 8 & 9 | Medium | 2 (A, B) | ✅ Complete |
-| 10 | Division Assignments Editor | Screen 10 | High | 2 (A, B) | ⬜ Not Started |
+| 10 | Division Assignments Editor | Screen 10 | High | 2 (A, B) | ✅ Complete |
 | 11 | Elective Groups | Elective Screen | Medium | 1 | ✅ Complete |
 | 12 | Timetable Generator | Screen 11 | Medium | 1 | ⬜ Not Started |
 | 13 | Timetable Editor (DnD) | Screen 12 | Very High | 3 (A, B, C) | ⬜ Not Started |
@@ -227,7 +227,7 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 18 | Final Responsive Polish & QA | All | Medium | 1 | ⬜ Not Started |
 
 **Total Phases**: 19 (with sub-parts: ~29 deliverables)
-**Completed**: 15/19 | **Partially Complete**: 0/19 | **Not Started**: 4/19
+**Completed**: 16/19 | **Partially Complete**: 0/19 | **Not Started**: 3/19
 
 ### Detailed Phase Completion Notes
 
@@ -284,8 +284,9 @@ All tasks complete: SubjectsPage with DataTable (storageKey="subjects", inline q
 - **9A Classes List** ✅ — ClassesPage with glass card grid (not table — card-based layout per class), create class dialog with name + requiresStream toggle, delete with confirmation, division count + timetable status badges per card. classApi RTK Query with full CRUD + division CRUD. i18n strings for classes namespace.
 - **9B Class Detail + Divisions** ✅ — ClassDetailPage at `/classes/:id` with division card grid. Add division dialog with label + optional stream name. Division cards show period structure badge, assignment count, timetable status (Generated/Outdated/Pending). Delete division with confirmation. Action buttons for Assignments and Generate (placeholder routes for Phase 10/12).
 
-#### ⬜ Phase 10 — Division Assignments Editor
-Not started. No AssignmentEditorPage, no assignmentApi.
+#### ✅ Phase 10 — Division Assignments Editor
+- **10A Assignment Table** ✅ — AssignmentEditorPage at `/classes/:classId/divisions/:divisionId/assignments` with custom table (dark gradient header/footer, subject badges, teacher names, assistant teacher, weightage badges in amber circles, edit/delete actions). Total bar showing total periods/week with balanced/unbalanced indicator. Back button to class detail page.
+- **10B Add/Edit Assignment Modal** ✅ — Dialog with subject selector (create only), teacher selector, optional assistant teacher selector, weightage input. Edit reuses same dialog without subject field. assignmentApi RTK Query with CRUD endpoints. ClassDetailPage updated to link "Assignments" button to the editor route. i18n namespace added.
 
 #### ✅ Phase 11 — Elective Groups
 ElectiveGroupsPage with glass card grid, create group dialog, delete with confirmation, add/remove subjects via MultiSelect dialog. electiveGroupApi RTK Query with CRUD + addSubject/removeSubject endpoints. Subject badges per group with inline remove buttons. Division usage count display. Vite proxy added for `/elective-groups` and `/divisions` routes.
