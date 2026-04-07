@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/cn';
 import { SidebarLink } from './SidebarLink';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
+import { useGetNotificationCountQuery } from '@/features/notifications/notificationApi';
 
 interface SidebarProps {
   className?: string;
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
 export function Sidebar({ className }: SidebarProps) {
   const { t } = useTranslation();
   const isXl = useBreakpoint('xl');
+  const { data: notifCount } = useGetNotificationCountQuery(undefined, { pollingInterval: 60_000 });
 
   const collapsed = !isXl;
 
@@ -80,6 +82,7 @@ export function Sidebar({ className }: SidebarProps) {
             iconColor={item.color}
             label={t(`nav.${item.key}`)}
             collapsed={collapsed}
+            badge={item.key === 'notifications' ? (notifCount?.count ?? 0) : undefined}
           />
         ))}
       </nav>

@@ -8,6 +8,7 @@ import {
   Eye,
   Settings,
   Clock,
+  CalendarCheck,
 } from 'lucide-react';
 import {
   Sheet,
@@ -27,6 +28,7 @@ const MORE_ITEMS = [
   { key: 'subjects', to: '/subjects', icon: BookOpen },
   { key: 'teachers', to: '/teachers', icon: Users },
   { key: 'electiveGroups', to: '/elective-groups', icon: Link2 },
+  { key: 'timetables', to: '/timetables', icon: CalendarCheck },
   { key: 'teacherTimetable', to: '/teacher-timetable', icon: Eye },
   { key: 'settings', to: '/settings', icon: Settings },
 ] as const;

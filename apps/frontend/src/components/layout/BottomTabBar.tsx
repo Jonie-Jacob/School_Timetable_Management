@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, School, CalendarDays, Bell, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, School, CalendarCheck, Bell, MoreHorizontal } from 'lucide-react';
 import { BottomTabItem } from './BottomTabItem';
 import { MoreSheet } from './MoreSheet';
 
@@ -22,9 +22,9 @@ export function BottomTabBar() {
           label={t('nav.classes')}
         />
         <BottomTabItem
-          to="/teacher-timetable"
-          icon={CalendarDays}
-          label={t('nav.teacherTimetable')}
+          to="/timetables"
+          icon={CalendarCheck}
+          label={t('nav.timetables')}
         />
         <BottomTabItem
           to="/notifications"

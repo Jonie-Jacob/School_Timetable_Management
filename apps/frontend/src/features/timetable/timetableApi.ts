@@ -89,6 +89,12 @@ export const timetableApi = createApi({
       providesTags: (_r, _e, divisionId) => [{ type: 'Timetable', id: divisionId }],
     }),
 
+    getTeacherTimetable: builder.query<TimetableGrid, string>({
+      query: (teacherId) => `/timetables/teacher/${teacherId}`,
+      transformResponse: (response: { data: TimetableGrid }) => response.data,
+      providesTags: (_r, _e, teacherId) => [{ type: 'Timetable', id: `teacher-${teacherId}` }],
+    }),
+
     overrideSlot: builder.mutation<void, { slotId: string; divisionAssignmentId: string | null }>({
       query: ({ slotId, ...body }) => ({
         url: `/timetables/slots/${slotId}`,
@@ -104,5 +110,6 @@ export const {
   useGenerateTimetableMutation,
   useGetGenerationStatusQuery,
   useGetDivisionTimetableQuery,
+  useGetTeacherTimetableQuery,
   useOverrideSlotMutation,
 } = timetableApi;

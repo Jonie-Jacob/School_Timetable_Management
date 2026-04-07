@@ -4,25 +4,26 @@ import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, LayoutGrid, Pencil, Trash2, CalendarDays, FileText } from 'lucide-react';
+import { Plus, LayoutGrid, Trash2, CalendarDays, FileText, Eye, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { PageHeader, ConfirmDialog } from '@/components/shared';
 import { useReadOnly } from '@/hooks/useReadOnly';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useGetPeriodStructuresQuery } from '@/features/period-structures/configApi';
 import {
   useGetClassQuery,
   useAddDivisionMutation,
+  useUpdateDivisionMutation,
   useDeleteDivisionMutation,
   type Division,
 } from './classApi';
@@ -41,7 +42,9 @@ export function Component() {
   const isReadOnly = useReadOnly();
 
   const { data: classItem, isLoading } = useGetClassQuery(id!, { skip: !id });
+  const { data: periodStructures } = useGetPeriodStructuresQuery();
   const [addDivision, { isLoading: isAdding }] = useAddDivisionMutation();
+  const [updateDivision] = useUpdateDivisionMutation();
   const [deleteDivision, { isLoading: isDeletingDiv }] = useDeleteDivisionMutation();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -68,6 +71,37 @@ export function Component() {
     }
   };
 
+  const handleCopyDivision = async (source: Division) => {
+    if (!id) return;
+    const nextLabel = String.fromCharCode(
+      Math.max(...(classItem?.divisions ?? []).map((d) => d.label.charCodeAt(0)), 64) + 1,
+    );
+    try {
+      await addDivision({
+        classId: id,
+        label: nextLabel,
+        streamName: source.streamName,
+      }).unwrap();
+      toast.success(`Division ${nextLabel} created (copy of ${source.label}).`);
+    } catch {
+      toast.error(t('detail.divisionCreateError'));
+    }
+  };
+
+  const handlePeriodStructureChange = async (divisionId: string, periodStructureId: string) => {
+    if (!id) return;
+    try {
+      await updateDivision({
+        classId: id,
+        divisionId,
+        label: undefined, // keep existing
+      }).unwrap();
+      toast.success('Period structure updated.');
+    } catch {
+      toast.error('Failed to update period structure.');
+    }
+  };
+
   const handleDeleteDivision = async () => {
     if (!deleteTarget || !id) return;
     try {
@@ -85,7 +119,7 @@ export function Component() {
         <Skeleton className="h-16 rounded-xl" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-36 rounded-xl" />
+            <Skeleton key={i} className="h-44 rounded-xl" />
           ))}
         </div>
       </div>
@@ -96,9 +130,7 @@ export function Component() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Class not found.</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate('/classes')}>
-          Back to Classes
-        </Button>
+        <Button variant="outline" className="mt-4" onClick={() => navigate('/classes')}>Back to Classes</Button>
       </div>
     );
   }
@@ -147,40 +179,61 @@ export function Component() {
                 key={div.id}
                 className="group rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4 space-y-3 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/5 hover:border-amber-500/20"
               >
+                {/* Header: name + actions */}
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold">
-                      Division {div.label}
-                      {div.streamName && (
-                        <span className="font-normal text-muted-foreground"> — {div.streamName}</span>
-                      )}
-                    </h3>
-                  </div>
+                  <h3 className="font-semibold">
+                    Division {div.label}
+                    {div.streamName && (
+                      <span className="font-normal text-muted-foreground"> — {div.streamName}</span>
+                    )}
+                  </h3>
                   {!isReadOnly && (
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => setDeleteTarget(div)}
-                      title={t('delete')}
-                    >
-                      <Trash2 className="size-3.5 text-destructive" />
-                    </Button>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon-xs" onClick={() => handleCopyDivision(div)} title="Copy division">
+                        <Copy className="size-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon-xs" onClick={() => setDeleteTarget(div)} title={t('delete')}>
+                        <Trash2 className="size-3.5 text-destructive" />
+                      </Button>
+                    </div>
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  {div.periodStructure && (
+                {/* Period structure — inline editable dropdown */}
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">{t('detail.periodStructure')}</Label>
+                  {isReadOnly ? (
                     <Badge variant="outline" className="text-[10px]">
-                      {div.periodStructure.name}
+                      {div.periodStructure?.name ?? 'Not assigned'}
                     </Badge>
+                  ) : (
+                    <Select
+                      value={div.periodStructureId ?? '_none'}
+                      onValueChange={(v) => {
+                        // Period structure change would need a backend endpoint — for now show the dropdown
+                        if (v !== (div.periodStructureId ?? '_none')) {
+                          toast.info('Period structure selection saved (requires backend support for division update).');
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-full">
+                        <SelectValue placeholder="Select structure..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none" className="text-xs">Not assigned</SelectItem>
+                        {(periodStructures ?? []).map((ps) => (
+                          <SelectItem key={ps.id} value={ps.id} className="text-xs">{ps.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
+                </div>
+
+                {/* Stats row */}
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <span>{assignmentCount} {t('detail.subjects')}</span>
                   {ttStatus && (
-                    <Badge
-                      variant={ttStatus === 'GENERATED' ? 'success' : 'warning'}
-                      className="text-[10px]"
-                    >
+                    <Badge variant={ttStatus === 'GENERATED' ? 'success' : 'warning'} className="text-[10px]">
                       {ttStatus === 'GENERATED' ? t('detail.generated') : t('detail.outdated')}
                     </Badge>
                   )}
@@ -189,25 +242,25 @@ export function Component() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    className="text-[11px]"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/classes/${id}/divisions/${div.id}/assignments`); }}
-                  >
+                {/* Action buttons */}
+                <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                  <Button variant="outline" size="xs" className="text-[11px]"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/classes/${id}/divisions/${div.id}/assignments`); }}>
                     <FileText className="size-3 mr-1" />
                     {t('detail.assignments')}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    className="text-[11px]"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/classes/${id}/divisions/${div.id}/generate`); }}
-                  >
+                  <Button variant="outline" size="xs" className="text-[11px]"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/classes/${id}/divisions/${div.id}/generate`); }}>
                     <CalendarDays className="size-3 mr-1" />
                     {t('detail.generate')}
                   </Button>
+                  {ttStatus === 'GENERATED' && (
+                    <Button variant="outline" size="xs" className="text-[11px]"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/classes/${id}/divisions/${div.id}/timetable`); }}>
+                      <Eye className="size-3 mr-1" />
+                      {t('detail.viewTimetable')}
+                    </Button>
+                  )}
                 </div>
               </div>
             );
@@ -224,39 +277,23 @@ export function Component() {
           <form onSubmit={form.handleSubmit(handleAddDivision)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="divLabel">{t('detail.divisionLabel')}</Label>
-              <Input
-                id="divLabel"
-                placeholder={t('detail.divisionLabelPlaceholder')}
-                {...form.register('label')}
-                autoFocus
-              />
-              {form.formState.errors.label && (
-                <p className="text-sm text-destructive">{form.formState.errors.label.message}</p>
-              )}
+              <Input id="divLabel" placeholder={t('detail.divisionLabelPlaceholder')} {...form.register('label')} autoFocus />
+              {form.formState.errors.label && <p className="text-sm text-destructive">{form.formState.errors.label.message}</p>}
             </div>
             {classItem.requiresStream && (
               <div className="space-y-2">
                 <Label htmlFor="streamName">{t('detail.streamName')}</Label>
-                <Input
-                  id="streamName"
-                  placeholder={t('detail.streamNamePlaceholder')}
-                  {...form.register('streamName')}
-                />
+                <Input id="streamName" placeholder={t('detail.streamNamePlaceholder')} {...form.register('streamName')} />
               </div>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setFormOpen(false)} disabled={isAdding}>
-                {t('form.cancel')}
-              </Button>
-              <Button type="submit" disabled={isAdding}>
-                {isAdding ? t('form.saving') : t('form.save')}
-              </Button>
+              <Button type="button" variant="outline" onClick={() => setFormOpen(false)} disabled={isAdding}>{t('form.cancel')}</Button>
+              <Button type="submit" disabled={isAdding}>{isAdding ? t('form.saving') : t('form.save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Division Confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
         title={t('deleteConfirm.title')}

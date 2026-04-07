@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Bell, CheckCircle2, X, Pencil, AlertTriangle } from 'lucide-react';
+import { Bell, CheckCircle2, X, Pencil, AlertTriangle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -116,7 +116,18 @@ export function Component() {
                     {new Date(notif.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {division && (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      className="text-[10px] gap-1"
+                      onClick={() => navigate(`/classes/${division.class.id}/divisions/${division.id}/timetable`)}
+                    >
+                      <ExternalLink className="size-3" />
+                      Edit TT
+                    </Button>
+                  )}
                   <Button variant="ghost" size="icon-xs" onClick={() => handleDismiss(notif.id)} title="Dismiss">
                     <X className="size-3.5" />
                   </Button>

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Link2, Trash2, X } from 'lucide-react';
+import { Plus, Link2, Trash2, X, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,9 +42,12 @@ export function Component() {
   const [removeSubject] = useRemoveElectiveSubjectMutation();
 
   const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<ElectiveGroup | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ElectiveGroup | null>(null);
   const [addSubjectTarget, setAddSubjectTarget] = useState<ElectiveGroup | null>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+
+  const [updateGroup] = useUpdateElectiveGroupMutation();
 
   const form = useForm({ resolver: zodResolver(groupSchema), defaultValues: { name: '' } });
 
@@ -89,9 +92,25 @@ export function Component() {
     }
   };
 
-  const handleRemoveSubject = async (groupId: string, subjectId: string) => {
+  const handleEditGroup = async (values: { name: string }) => {
+    if (!editTarget) return;
     try {
-      await removeSubject({ groupId, subjectId }).unwrap();
+      await updateGroup({ id: editTarget.id, name: values.name }).unwrap();
+      toast.success('Group renamed.');
+      setEditTarget(null);
+    } catch {
+      toast.error('Failed to rename group.');
+    }
+  };
+
+  const handleRemoveSubject = async (group: ElectiveGroup, subjectId: string) => {
+    const subjectCount = group.electiveGroupSubjects?.length ?? 0;
+    if (subjectCount <= 2) {
+      toast.warning('Elective groups require at least 2 subjects.');
+      return;
+    }
+    try {
+      await removeSubject({ groupId: group.id, subjectId }).unwrap();
       toast.success('Subject removed.');
     } catch {
       toast.error('Failed to remove subject.');
@@ -144,6 +163,9 @@ export function Component() {
                 <div className="flex items-center gap-1">
                   {!isReadOnly && (
                     <>
+                      <Button variant="ghost" size="icon-xs" onClick={() => { form.reset({ name: group.name }); setEditTarget(group); }} title="Rename">
+                        <Pencil className="size-3.5" />
+                      </Button>
                       <Button variant="ghost" size="icon-xs" onClick={() => { setAddSubjectTarget(group); setSelectedSubjects([]); }} title="Add subjects">
                         <Plus className="size-3.5" />
                       </Button>
@@ -162,7 +184,7 @@ export function Component() {
                     {!isReadOnly && (
                       <button
                         type="button"
-                        onClick={() => handleRemoveSubject(group.id, egs.subjectId)}
+                        onClick={() => handleRemoveSubject(group, egs.subjectId)}
                         className="ml-0.5 rounded-full hover:bg-white/20"
                       >
                         <X className="size-2.5" />
@@ -184,6 +206,24 @@ export function Component() {
           ))}
         </div>
       )}
+
+      {/* Rename dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Rename Elective Group</DialogTitle></DialogHeader>
+          <form onSubmit={form.handleSubmit(handleEditGroup)} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Group Name</Label>
+              <Input placeholder="e.g. Biology / Computer Science" {...form.register('name')} autoFocus />
+              {form.formState.errors.name && <p className="text-sm text-destructive">{form.formState.errors.name.message}</p>}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>{t('actions.cancel')}</Button>
+              <Button type="submit">{t('actions.save')}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Create dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
@@ -220,7 +260,7 @@ export function Component() {
       <ConfirmDialog
         open={!!deleteTarget}
         title="Delete Elective Group"
-        description={`Are you sure you want to delete "${deleteTarget?.name ?? ''}"? This will remove all subject associations.`}
+        description={`Are you sure you want to delete "${deleteTarget?.name ?? ''}"? This will remove all subject associations.${(deleteTarget?._count?.divisionAssignments ?? 0) > 0 ? ` This group is used in ${deleteTarget?._count?.divisionAssignments} division assignment(s) — those assignments will be dissolved and affected timetables flagged as outdated.` : ''}`}
         confirmLabel={t('actions.delete')}
         variant="destructive"
         loading={isDeleting}
