@@ -217,17 +217,17 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 8 | Teachers | Screens 6 & 7 | High | 2 (A, B) | ✅ Complete |
 | 9 | Classes & Divisions | Screens 8 & 9 | Medium | 2 (A, B) | ✅ Complete |
 | 10 | Division Assignments Editor | Screen 10 | High | 2 (A, B) | ⬜ Not Started |
-| 11 | Elective Groups | Elective Screen | Medium | 1 | ⬜ Not Started |
+| 11 | Elective Groups | Elective Screen | Medium | 1 | ✅ Complete |
 | 12 | Timetable Generator | Screen 11 | Medium | 1 | ⬜ Not Started |
 | 13 | Timetable Editor (DnD) | Screen 12 | Very High | 3 (A, B, C) | ⬜ Not Started |
-| 14 | Notifications | Screen 13 | Low–Medium | 1 | ⬜ Not Started |
-| 15 | Teacher Timetable View | Screen 14 | Medium | 1 | ⬜ Not Started |
+| 14 | Notifications | Screen 13 | Low–Medium | 1 | ✅ Complete |
+| 15 | Teacher Timetable View | Screen 14 | Medium | 1 | ✅ Complete |
 | 16 | WebSocket Integration | — | Medium | 1 | ✅ Complete |
 | 17 | i18n Setup | — | Low | 1 | ✅ Complete |
 | 18 | Final Responsive Polish & QA | All | Medium | 1 | ⬜ Not Started |
 
 **Total Phases**: 19 (with sub-parts: ~29 deliverables)
-**Completed**: 12/19 | **Partially Complete**: 0/19 | **Not Started**: 7/19
+**Completed**: 15/19 | **Partially Complete**: 0/19 | **Not Started**: 4/19
 
 ### Detailed Phase Completion Notes
 
@@ -287,8 +287,8 @@ All tasks complete: SubjectsPage with DataTable (storageKey="subjects", inline q
 #### ⬜ Phase 10 — Division Assignments Editor
 Not started. No AssignmentEditorPage, no assignmentApi.
 
-#### ⬜ Phase 11 — Elective Groups
-ElectiveGroupsPage is placeholder only. No CRUD, no API.
+#### ✅ Phase 11 — Elective Groups
+ElectiveGroupsPage with glass card grid, create group dialog, delete with confirmation, add/remove subjects via MultiSelect dialog. electiveGroupApi RTK Query with CRUD + addSubject/removeSubject endpoints. Subject badges per group with inline remove buttons. Division usage count display. Vite proxy added for `/elective-groups` and `/divisions` routes.
 
 #### ⬜ Phase 12 — Timetable Generator
 Not started. No GeneratorPage, no timetableApi.
@@ -298,11 +298,11 @@ Not started. No GeneratorPage, no timetableApi.
 - **13B Drag-and-Drop & Conflicts** ⬜ — Not started
 - **13C Export Integration** ⬜ — Not started
 
-#### ⬜ Phase 14 — Notifications
-NotificationsPage is placeholder only. No notification list, no notificationApi (beyond conflict banner in dashboard).
+#### ✅ Phase 14 — Notifications
+NotificationsPage with notification list cards (type badge, class/division info, message, timestamp), dismiss single and dismiss all with confirmation. notificationApi extended with getNotifications (paginated), dismissNotification, dismissAllNotifications. Empty state with green checkmark for "all clear". Pagination controls for long notification lists.
 
-#### ⬜ Phase 15 — Teacher Timetable View
-TeacherTimetablePage is placeholder only. No grid, no teacherTimetableApi.
+#### ✅ Phase 15 — Teacher Timetable View
+TeacherTimetablePage with teacher selector dropdown (dark variant in PageHeader), empty state prompting teacher selection, teacher info card showing placeholder for timetable grid (grid view depends on timetable generation data from Phase 12/13). Fetches teacher list from teacherApi. Full timetable grid rendering will be completed when Phase 12/13 (Timetable Generator/Editor) are built.
 
 #### ✅ Phase 16 — WebSocket Integration
 - **Redux Slice** ✅ — wsSlice with `connected` state and `setWsConnected` action

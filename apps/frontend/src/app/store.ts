@@ -9,6 +9,7 @@ import { subjectApi } from '@/features/subjects/subjectApi';
 import { notificationApi } from '@/features/notifications/notificationApi';
 import { teacherApi } from '@/features/teachers/teacherApi';
 import { classApi } from '@/features/classes/classApi';
+import { electiveGroupApi } from '@/features/elective-groups/electiveGroupApi';
 
 export const store = configureStore({
   reducer: {
@@ -21,6 +22,7 @@ export const store = configureStore({
     [notificationApi.reducerPath]: notificationApi.reducer,
     [teacherApi.reducerPath]: teacherApi.reducer,
     [classApi.reducerPath]: classApi.reducer,
+    [electiveGroupApi.reducerPath]: electiveGroupApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
@@ -30,7 +32,8 @@ export const store = configureStore({
       .concat(subjectApi.middleware)
       .concat(notificationApi.middleware)
       .concat(teacherApi.middleware)
-      .concat(classApi.middleware),
+      .concat(classApi.middleware)
+      .concat(electiveGroupApi.middleware),
 });
 
 setupListeners(store.dispatch);

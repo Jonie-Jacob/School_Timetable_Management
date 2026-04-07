@@ -31,6 +31,8 @@ export default defineConfig({
       '/teachers': apiProxy('http://localhost:4005'),
       '/classes': apiProxy('http://localhost:4006'),
       '/assignments': apiProxy('http://localhost:4007'),
+      '/divisions': apiProxy('http://localhost:4007'),
+      '/elective-groups': apiProxy('http://localhost:4007'),
       '/timetables': apiProxy('http://localhost:4008'),
       '/dashboard': apiProxy('http://localhost:4009'),
       '/export': apiProxy('http://localhost:4010'),
