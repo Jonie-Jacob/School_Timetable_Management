@@ -7,7 +7,24 @@
       "Bash(git commit:*)",
       "Bash(npm run:*)",
       "Bash(npx shadcn@latest add accordion --yes)",
-      "Bash(npx shadcn@latest add collapsible --yes)"
+      "Bash(npx shadcn@latest add collapsible --yes)",
+      "Bash(where aws:*)",
+      "Bash(dir \"C:\\\\Program Files\\\\Amazon\\\\AWSCLIV2\\\\aws.exe\")",
+      "Bash(dir \"C:\\\\Program Files \\(x86\\)\\\\Amazon\\\\AWSCLIV2\\\\aws.exe\")",
+      "Bash(dir \"%LOCALAPPDATA%\\\\Programs\\\\Amazon\\\\AWSCLIV2\\\\aws.exe\")",
+      "Read(//c/Program Files/Amazon/AWSCLIV2/**)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" --version)",
+      "Bash(terraform --version)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" sts get-caller-identity)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3 ls s3://zyphr-timetable-terraform-state)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3api head-bucket --bucket zyphr-timetable-terraform-state)",
+      "Bash(where terraform:*)",
+      "Read(//c/Program Files/Terraform/**)",
+      "Read(//c/Users/jonie/Downloads/**)",
+      "Read(//c/Users/jonie/**)",
+      "Bash(terraform init:*)",
+      "Bash(TF_VAR_db_password=\"Zyphr2026Prod!\" terraform plan -var-file environments/prod.tfvars -out=tfplan)",
+      "Bash(terraform apply:*)"
     ]
   }
 }
