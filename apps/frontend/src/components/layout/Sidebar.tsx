@@ -10,6 +10,7 @@ import {
   Eye,
   Settings,
   Clock,
+  CalendarCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { SidebarLink } from './SidebarLink';
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { key: 'subjects', to: '/subjects', icon: BookOpen, color: 'text-rose-400' },
   { key: 'teachers', to: '/teachers', icon: Users, color: 'text-emerald-400' },
   { key: 'electiveGroups', to: '/elective-groups', icon: Link2, color: 'text-orange-400' },
+  { key: 'timetables', to: '/timetables', icon: CalendarCheck, color: 'text-lime-400' },
   { key: 'notifications', to: '/notifications', icon: Bell, color: 'text-yellow-400' },
   { key: 'teacherTimetable', to: '/teacher-timetable', icon: Eye, color: 'text-cyan-400' },
   { key: 'settings', to: '/settings', icon: Settings, color: 'text-stone-400' },

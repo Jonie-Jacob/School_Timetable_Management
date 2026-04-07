@@ -199,7 +199,12 @@ export function Component() {
                     <FileText className="size-3 mr-1" />
                     {t('detail.assignments')}
                   </Button>
-                  <Button variant="outline" size="xs" className="text-[11px]" disabled>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="text-[11px]"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/classes/${id}/divisions/${div.id}/generate`); }}
+                  >
                     <CalendarDays className="size-3 mr-1" />
                     {t('detail.generate')}
                   </Button>

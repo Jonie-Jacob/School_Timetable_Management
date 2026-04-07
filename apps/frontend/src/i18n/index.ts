@@ -10,6 +10,7 @@ import enSubjects from './locales/en/subjects.json';
 import enTeachers from './locales/en/teachers.json';
 import enClasses from './locales/en/classes.json';
 import enAssignments from './locales/en/assignments.json';
+import enTimetable from './locales/en/timetable.json';
 
 i18n
   .use(LanguageDetector)
@@ -26,6 +27,7 @@ i18n
         teachers: enTeachers,
         classes: enClasses,
         assignments: enAssignments,
+        timetable: enTimetable,
       },
     },
     defaultNS: 'common',

@@ -15,6 +15,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   settings: 'Settings',
   assignments: 'Assignments',
   timetable: 'Timetable',
+  timetables: 'Timetables',
   generate: 'Generate',
   new: 'New',
   edit: 'Edit',

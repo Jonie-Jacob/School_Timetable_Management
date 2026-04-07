@@ -1,0 +1,34 @@
+{
+  "generator": {
+    "title": "Generate Timetable",
+    "description": "Generate timetable for {{division}}.",
+    "status": "Current Status",
+    "notGenerated": "Not Generated",
+    "generated": "Generated",
+    "outdated": "Outdated",
+    "generatedAt": "Generated on {{date}}",
+    "adjacency": "Adjacency Constraint",
+    "adjacencyHint": "When enabled, repeated subjects on the same day are placed in consecutive periods.",
+    "generateButton": "Generate Timetable",
+    "regenerateButton": "Regenerate Timetable",
+    "generating": "Generating...",
+    "generatingHint": "This may take up to 5 minutes. You can navigate away — you'll be notified when it's done.",
+    "confirmRegenerate": "Existing timetable will be overwritten. Continue?",
+    "confirmRegenerateTitle": "Regenerate Timetable",
+    "success": "Timetable generated successfully!",
+    "failed": "Generation failed. Please try again.",
+    "viewTimetable": "View Timetable",
+    "back": "Back"
+  },
+  "editor": {
+    "title": "Timetable",
+    "description": "View and edit the timetable grid.",
+    "break": "Break",
+    "lunch": "Lunch",
+    "free": "Free",
+    "save": "Save Changes",
+    "discard": "Discard",
+    "noChanges": "No unsaved changes",
+    "mobileHint": "Editing is available on desktop. Use landscape or a larger screen for drag-and-drop."
+  }
+}

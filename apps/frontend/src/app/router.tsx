@@ -42,6 +42,18 @@ export const router = createBrowserRouter([
         lazy: () => import('@/features/assignments/AssignmentEditorPage'),
       },
       {
+        path: 'timetables',
+        lazy: () => import('@/features/timetable/TimetablesOverviewPage'),
+      },
+      {
+        path: 'classes/:classId/divisions/:divisionId/generate',
+        lazy: () => import('@/features/timetable/GeneratorPage'),
+      },
+      {
+        path: 'classes/:classId/divisions/:divisionId/timetable',
+        lazy: () => import('@/features/timetable/TimetableViewPage'),
+      },
+      {
         path: 'subjects',
         lazy: () => import('@/features/subjects/SubjectsPage'),
       },
