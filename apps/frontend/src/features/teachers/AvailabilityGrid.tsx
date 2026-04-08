@@ -85,8 +85,8 @@ function DesktopGrid({
     if (workingDays.length === 0) return [];
     const firstDay = workingDays[0];
     return (firstDay.slots ?? [])
-      .filter((s) => s.slotType === 'PERIOD')
-      .toSorted((a, b) => a.sortOrder - b.sortOrder);
+      .filter((s: any) => s.slotType === 'PERIOD')
+      .slice().sort((a: any, b: any) => a.sortOrder - b.sortOrder);
   }, [workingDays]);
 
   const toggleSlot = (workingDayId: string, slotId: string) => {
@@ -108,7 +108,7 @@ function DesktopGrid({
           <thead>
             <tr>
               <th className="border border-border px-3 py-2 text-left font-medium bg-muted" />
-              {periodSlots.map((slot) => (
+              {periodSlots.map((slot: any) => (
                 <th
                   key={slot.id}
                   className="border border-border px-3 py-2 text-center font-medium bg-muted min-w-[60px]"
@@ -123,18 +123,18 @@ function DesktopGrid({
           </thead>
           <tbody>
             {workingDays
-              .toSorted((a, b) => a.sortOrder - b.sortOrder)
-              .map((day) => {
+              .slice().sort((a: { sortOrder: number }, b: { sortOrder: number }) => a.sortOrder - b.sortOrder)
+              .map((day: any) => {
                 const daySlots = (day.slots ?? [])
-                  .filter((s) => s.slotType === 'PERIOD')
-                  .sort((a, b) => a.sortOrder - b.sortOrder);
+                  .filter((s: any) => s.slotType === 'PERIOD')
+                  .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
 
                 return (
                   <tr key={day.id}>
                     <td className="border border-border px-3 py-2 font-medium bg-muted">
                       {DAY_LABELS[day.dayOfWeek] ?? day.label}
                     </td>
-                    {daySlots.map((slot) => {
+                    {daySlots.map((slot: any) => {
                       const unavailable = isUnavailable(value, day.id, slot.id);
                       return (
                         <td
@@ -195,10 +195,10 @@ function MobileGrid({
       <Accordion type="single" collapsible className="w-full">
         {workingDays
           .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map((day) => {
+          .map((day: any) => {
             const daySlots = (day.slots ?? [])
               .filter((s: Slot) => s.slotType === 'PERIOD')
-              .toSorted((a: Slot, b: Slot) => a.sortOrder - b.sortOrder);
+              .slice().sort((a: Slot, b: Slot) => a.sortOrder - b.sortOrder);
 
             return (
               <AccordionItem key={day.id} value={day.id}>

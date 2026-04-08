@@ -69,7 +69,7 @@ export const timetableApi = createApi({
   endpoints: (builder) => ({
     generateTimetable: builder.mutation<GenerateResponse | GenerateResponse[], GenerateRequest>({
       query: (body) => ({
-        url: '/timetables/generate',
+        url: 'timetables/generate',
         method: 'POST',
         body,
       }),
@@ -78,26 +78,26 @@ export const timetableApi = createApi({
     }),
 
     getGenerationStatus: builder.query<GenerationJob, string>({
-      query: (jobId) => `/timetables/generate/status/${jobId}`,
+      query: (jobId) => `timetables/generate/status/${jobId}`,
       transformResponse: (response: { data: GenerationJob }) => response.data,
       providesTags: (_r, _e, jobId) => [{ type: 'GenerationJob', id: jobId }],
     }),
 
     getDivisionTimetable: builder.query<TimetableGrid, string>({
-      query: (divisionId) => `/timetables/divisions/${divisionId}`,
+      query: (divisionId) => `timetables/divisions/${divisionId}`,
       transformResponse: (response: { data: TimetableGrid }) => response.data,
       providesTags: (_r, _e, divisionId) => [{ type: 'Timetable', id: divisionId }],
     }),
 
     getTeacherTimetable: builder.query<TimetableGrid, string>({
-      query: (teacherId) => `/timetables/teacher/${teacherId}`,
+      query: (teacherId) => `timetables/teacher/${teacherId}`,
       transformResponse: (response: { data: TimetableGrid }) => response.data,
       providesTags: (_r, _e, teacherId) => [{ type: 'Timetable', id: `teacher-${teacherId}` }],
     }),
 
     overrideSlot: builder.mutation<void, { slotId: string; divisionAssignmentId: string | null }>({
       query: ({ slotId, ...body }) => ({
-        url: `/timetables/slots/${slotId}`,
+        url: `timetables/slots/${slotId}`,
         method: 'PUT',
         body,
       }),

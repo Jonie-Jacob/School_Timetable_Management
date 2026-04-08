@@ -58,7 +58,7 @@ export function Component() {
   const isDesktop = useBreakpoint('lg');
 
   const { data: classItem } = useGetClassQuery(classId!, { skip: !classId });
-  const { data: grid, isLoading } = useGetDivisionTimetableQuery(divisionId!, { skip: !divisionId });
+  const { data: grid, isLoading } = useGetDivisionTimetableQuery(divisionId!, { skip: !divisionId, refetchOnMountOrArgChange: true });
   const [overrideSlot] = useOverrideSlotMutation();
 
   const division = classItem?.divisions?.find((d) => d.id === divisionId);
@@ -176,7 +176,7 @@ export function Component() {
       />
 
       {!isDesktop && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-2 text-sm text-amber-700 dark:text-amber-400">
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-2 text-sm text-amber-700">
           <AlertTriangle className="size-4 shrink-0" />
           {t('editor.mobileHint')}
         </div>

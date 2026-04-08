@@ -30,13 +30,13 @@ functions:
     events:
       - httpApi:
           method: POST
-          path: /auth/register
+          path: /api/auth/register
       - httpApi:
           method: POST
-          path: /auth/login
+          path: /api/auth/login
       - httpApi:
           method: GET
-          path: /auth/me
+          path: /api/auth/me
       - httpApi:
           method: GET
-          path: /auth/health
+          path: /api/auth/health

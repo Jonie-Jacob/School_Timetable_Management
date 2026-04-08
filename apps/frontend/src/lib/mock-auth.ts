@@ -16,18 +16,34 @@ const MOCK_USER: MockUser = {
 
 const STORAGE_KEY = 'mock-auth';
 
-export function mockLogin(_email: string, _password: string): Promise<MockUser> {
-  const user = { ...MOCK_USER };
+export function mockLogin(email: string, _password: string): Promise<MockUser> {
+  // Check if there's a previously registered school
+  const existing = localStorage.getItem(STORAGE_KEY);
+  if (existing) {
+    const prev = JSON.parse(existing) as MockUser;
+    // Reuse registered school info if email matches or use defaults
+    const user = { ...MOCK_USER, email, schoolName: prev.schoolName || MOCK_USER.schoolName, schoolId: prev.schoolId };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    return Promise.resolve(user);
+  }
+  const user = { ...MOCK_USER, email };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
   return Promise.resolve(user);
 }
 
 export function mockRegister(
-  _schoolName: string,
-  _email: string,
+  schoolName: string,
+  email: string,
   _password: string,
 ): Promise<MockUser> {
-  const user = { ...MOCK_USER };
+  const schoolId = crypto.randomUUID();
+  const user: MockUser = {
+    token: 'mock-jwt-token-' + Date.now(),
+    email,
+    schoolId,
+    userId: 'user-' + Date.now(),
+    schoolName,
+  };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
   return Promise.resolve(user);
 }

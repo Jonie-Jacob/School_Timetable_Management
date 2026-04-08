@@ -6,19 +6,19 @@ import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/cn"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer",
   {
     variants: {
       variant: {
         default: "bg-gradient-to-b from-amber-400 via-primary to-amber-600 text-primary-foreground shadow-sm hover:scale-[1.02] hover:shadow-md active:scale-[0.98]",
         destructive:
-          "bg-gradient-to-b from-red-500 to-red-700 text-white shadow-sm hover:scale-[1.02] focus-visible:ring-destructive/20 dark:from-red-600 dark:to-red-800 dark:focus-visible:ring-destructive/40 active:scale-[0.98]",
+          "bg-gradient-to-b from-red-500 to-red-700 text-white shadow-sm hover:scale-[1.02] focus-visible:ring-destructive/20 active:scale-[0.98]",
         outline:
-          "border border-border/60 bg-white/60 dark:bg-white/5 backdrop-blur-[10px] shadow-xs hover:bg-accent hover:text-accent-foreground hover:border-amber-500/30 hover:scale-[1.02] dark:border-input dark:hover:bg-input/50",
+          "border border-border/60 bg-white/60 backdrop-blur-[10px] shadow-xs hover:bg-accent hover:text-accent-foreground hover:border-amber-500/30 hover:scale-[1.02]",
         secondary:
-          "bg-gradient-to-b from-stone-50 to-stone-200 text-stone-900 shadow-xs hover:scale-[1.02] dark:from-stone-700 dark:to-stone-800 dark:text-stone-100",
+          "bg-gradient-to-b from-stone-50 to-stone-200 text-stone-900 shadow-xs hover:scale-[1.02]",
         ghost:
-          "hover:bg-amber-500/10 hover:backdrop-blur-sm hover:text-accent-foreground dark:hover:bg-amber-500/10",
+          "hover:bg-amber-500/10 hover:backdrop-blur-sm hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         gradient:
           "bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25 hover:scale-[1.02] hover:shadow-xl active:scale-[0.98]",

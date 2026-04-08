@@ -3,7 +3,6 @@ import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ThemeToggle } from './ThemeToggle';
 import { MobileDrawer } from './MobileDrawer';
 import { Badge } from '@/components/ui/badge';
 import { useAppSelector } from '@/app/hooks';
@@ -51,7 +50,6 @@ export function MobileHeader() {
             {activeAYId}
           </Badge>
         )}
-        <ThemeToggle />
       </header>
 
       <MobileDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />

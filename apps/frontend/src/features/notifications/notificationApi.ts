@@ -47,7 +47,7 @@ export const notificationApi = createApi({
   tagTypes: ['Notification', 'NotificationCount'],
   endpoints: (builder) => ({
     getNotificationCount: builder.query<NotificationCount, void>({
-      query: () => '/notifications/count',
+      query: () => 'notifications/count',
       transformResponse: (response: { data: NotificationCount }) => response.data,
       providesTags: ['NotificationCount'],
     }),
@@ -58,19 +58,19 @@ export const notificationApi = createApi({
         if (params?.page) searchParams.set('page', String(params.page));
         if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
         const qs = searchParams.toString();
-        return `/notifications${qs ? `?${qs}` : ''}`;
+        return `notifications${qs ? `?${qs}` : ''}`;
       },
       transformResponse: (response: { data: TimetableNotification[]; meta: NotificationListResponse['meta'] }) => response,
       providesTags: ['Notification'],
     }),
 
     dismissNotification: builder.mutation<void, string>({
-      query: (id) => ({ url: `/notifications/${id}/dismiss`, method: 'PUT' }),
+      query: (id) => ({ url: `notifications/${id}/dismiss`, method: 'PUT' }),
       invalidatesTags: ['Notification', 'NotificationCount'],
     }),
 
     dismissAllNotifications: builder.mutation<void, void>({
-      query: () => ({ url: '/notifications/dismiss-all', method: 'PUT' }),
+      query: () => ({ url: 'notifications/dismiss-all', method: 'PUT' }),
       invalidatesTags: ['Notification', 'NotificationCount'],
     }),
   }),

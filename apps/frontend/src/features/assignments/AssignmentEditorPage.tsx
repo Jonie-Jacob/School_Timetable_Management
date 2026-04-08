@@ -176,7 +176,7 @@ export function Component() {
       {/* Assignments list */}
       {(!assignments || assignments.length === 0) && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 mb-4">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 mb-4">
             <FileText className="size-7" />
           </div>
           <h3 className="text-lg font-semibold">{t('empty.title')}</h3>
@@ -221,7 +221,7 @@ export function Component() {
                     {assignment.assistantTeacher?.name ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className="inline-flex items-center justify-center size-8 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold text-sm">
+                    <span className="inline-flex items-center justify-center size-8 rounded-lg bg-amber-500/10 text-amber-700 font-bold text-sm">
                       {assignment.weightage}
                     </span>
                   </td>
@@ -395,7 +395,7 @@ export function Component() {
                   <Label className="text-xs">Preferred Days</Label>
                   <div className="flex flex-wrap gap-1.5">
                     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
-                      <label key={day} className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[10px] cursor-pointer hover:bg-emerald-500/10 has-[:checked]:bg-emerald-500/15 has-[:checked]:border-emerald-500/40 has-[:checked]:text-emerald-700 dark:has-[:checked]:text-emerald-400 transition-colors">
+                      <label key={day} className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[10px] cursor-pointer hover:bg-emerald-500/10 has-[:checked]:bg-emerald-500/15 has-[:checked]:border-emerald-500/40 has-[:checked]:text-emerald-700 transition-colors">
                         <input type="checkbox" value={i} className="size-3 accent-emerald-500" />
                         {day}
                       </label>

@@ -35,44 +35,69 @@ functions:
     events:
       - httpApi:
           method: POST
-          path: /classes
+          path: /api/classes
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /classes
+          path: /api/classes
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /classes/{id}
+          path: /api/classes/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /classes/{id}
+          path: /api/classes/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: DELETE
-          path: /classes/{id}
+          path: /api/classes/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /classes/{id}/divisions
+          path: /api/classes/{id}/divisions
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /classes/{classId}/divisions/{divisionId}
+          path: /api/classes/{classId}/divisions/{divisionId}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: DELETE
-          path: /classes/{classId}/divisions/{divisionId}
+          path: /api/classes/{classId}/divisions/{divisionId}
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/classes/{classId}/divisions/{divisionId}/class-teacher-analyze
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/classes/{classId}/divisions/{divisionId}/class-teacher-swap
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: PUT
+          path: /api/classes/{classId}/divisions/{divisionId}/class-teacher
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: DELETE
+          path: /api/classes/{classId}/divisions/{divisionId}/class-teacher
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: PUT
+          path: /api/classes/bulk-class-teacher
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /classes/health
+          path: /api/classes/health

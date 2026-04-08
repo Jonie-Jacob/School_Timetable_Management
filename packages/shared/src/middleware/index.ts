@@ -1,4 +1,4 @@
-export { authMiddleware } from './authMiddleware';
+export { authMiddleware, resolveSchoolId } from './authMiddleware';
 export { academicYearMiddleware } from './academicYearMiddleware';
 export { requestLogger } from './requestLogger';
 export { errorHandler } from './errorHandler';

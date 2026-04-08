@@ -17,7 +17,7 @@ const DAY_ORDER = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATU
 function formatWorkingDays(workingDays: PeriodStructure['workingDays'], tShort: (key: string) => string) {
   if (!workingDays?.length) return '—';
   const sorted = [...workingDays].sort((a, b) => a.sortOrder - b.sortOrder);
-  return sorted.map((d) => tShort(`daysShort.${DAY_ORDER[d.dayOfWeek - 1]}`)).join(', ');
+  return sorted.map((d) => tShort(`daysShort.${DAY_ORDER[d.dayOfWeek]}`)).join(', ');
 }
 
 export function Component() {

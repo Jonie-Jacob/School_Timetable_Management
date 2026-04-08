@@ -6,6 +6,7 @@ export interface Subject {
   schoolId: string;
   academicYearId: string;
   name: string;
+  abbreviation: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,11 +29,13 @@ interface SubjectListParams {
 
 interface CreateSubjectRequest {
   name: string;
+  abbreviation?: string | null;
 }
 
 interface UpdateSubjectRequest {
   id: string;
   name: string;
+  abbreviation?: string | null;
 }
 
 interface DeleteSubjectRequest {
@@ -52,7 +55,7 @@ export const subjectApi = createApi({
         if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
         if (params?.search) searchParams.set('search', params.search);
         const qs = searchParams.toString();
-        return `/subjects${qs ? `?${qs}` : ''}`;
+        return `subjects${qs ? `?${qs}` : ''}`;
       },
       transformResponse: (response: { data: Subject[]; meta: SubjectListResponse['meta'] }) => response,
       providesTags: (result) =>
@@ -65,14 +68,14 @@ export const subjectApi = createApi({
     }),
 
     getSubject: builder.query<Subject, string>({
-      query: (id) => `/subjects/${id}`,
+      query: (id) => `subjects/${id}`,
       transformResponse: (response: { data: Subject }) => response.data,
       providesTags: (_result, _error, id) => [{ type: 'Subject', id }],
     }),
 
     createSubject: builder.mutation<Subject, CreateSubjectRequest>({
       query: (body) => ({
-        url: '/subjects',
+        url: 'subjects',
         method: 'POST',
         body,
       }),
@@ -82,7 +85,7 @@ export const subjectApi = createApi({
 
     updateSubject: builder.mutation<Subject, UpdateSubjectRequest>({
       query: ({ id, ...body }) => ({
-        url: `/subjects/${id}`,
+        url: `subjects/${id}`,
         method: 'PUT',
         body,
       }),
@@ -95,7 +98,7 @@ export const subjectApi = createApi({
 
     deleteSubject: builder.mutation<void, DeleteSubjectRequest>({
       query: ({ id, confirm }) => ({
-        url: `/subjects/${id}${confirm ? '?confirm=true' : ''}`,
+        url: `subjects/${id}${confirm ? '?confirm=true' : ''}`,
         method: 'DELETE',
       }),
       invalidatesTags: [{ type: 'Subject', id: 'LIST' }],

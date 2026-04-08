@@ -29,16 +29,16 @@ functions:
     events:
       - httpApi:
           method: GET
-          path: /ws/health
+          path: /api/ws/health
       - httpApi:
           method: POST
-          path: /ws/connect
+          path: /api/ws/connect
       - httpApi:
           method: POST
-          path: /ws/disconnect
+          path: /api/ws/disconnect
       - httpApi:
           method: POST
-          path: /ws/broadcast
+          path: /api/ws/broadcast
       - httpApi:
           method: GET
-          path: /ws/connections
+          path: /api/ws/connections

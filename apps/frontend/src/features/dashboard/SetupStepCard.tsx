@@ -44,9 +44,9 @@ export function SetupStepCard({ step, isLocked }: SetupStepCardProps) {
           className={cn(
             'flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold',
             step.complete
-              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              ? 'bg-emerald-500/15 text-emerald-600'
               : isCurrent
-                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                ? 'bg-amber-500/15 text-amber-600'
                 : 'bg-muted text-muted-foreground',
           )}
         >

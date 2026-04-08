@@ -10,28 +10,28 @@ export class DashboardController {
   }
 
   async getStats(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const result = await service.getStats(ctx.schoolId, ctx.academicYearId);
     return success(result);
   }
 
   async getRecentActivity(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const result = await service.getRecentActivity(ctx.schoolId, ctx.academicYearId);
     return success(result);
   }
 
   async getSetupWizard(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const result = await service.getSetupWizard(ctx.schoolId, ctx.academicYearId);
     return success(result);
   }
 
   async dismissSetupWizard(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const result = await service.dismissSetupWizard(ctx.schoolId, ctx.academicYearId);
     return success(result);

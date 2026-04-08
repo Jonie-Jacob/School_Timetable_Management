@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Link, useLocation, useMatches } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight, Home } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -12,6 +12,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   'elective-groups': 'Elective Groups',
   notifications: 'Notifications',
   'teacher-timetable': 'Teacher Timetable',
+  'unassigned-subjects': 'Unassigned Subjects',
   settings: 'Settings',
   assignments: 'Assignments',
   timetable: 'Timetable',

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,14 +12,15 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { PageHeader, ConfirmDialog } from '@/components/shared';
-import { MultiSelect, type MultiSelectOption } from '@/components/shared/MultiSelect';
 import { useReadOnly } from '@/hooks/useReadOnly';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGetSubjectsQuery } from '@/features/subjects/subjectApi';
 import {
   useGetElectiveGroupsQuery,
   useCreateElectiveGroupMutation,
+  useUpdateElectiveGroupMutation,
   useDeleteElectiveGroupMutation,
   useAddElectiveSubjectMutation,
   useRemoveElectiveSubjectMutation,
@@ -40,27 +41,42 @@ export function Component() {
   const [deleteGroup, { isLoading: isDeleting }] = useDeleteElectiveGroupMutation();
   const [addSubject] = useAddElectiveSubjectMutation();
   const [removeSubject] = useRemoveElectiveSubjectMutation();
+  const [updateGroup] = useUpdateElectiveGroupMutation();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ElectiveGroup | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ElectiveGroup | null>(null);
   const [addSubjectTarget, setAddSubjectTarget] = useState<ElectiveGroup | null>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [createSubjects, setCreateSubjects] = useState<string[]>([]);
 
-  const [updateGroup] = useUpdateElectiveGroupMutation();
+  const allSubjects = subjectsData?.data ?? [];
 
   const form = useForm({ resolver: zodResolver(groupSchema), defaultValues: { name: '' } });
 
-  const subjectOptions: MultiSelectOption[] = (subjectsData?.data ?? []).map((s) => ({
-    value: s.id,
-    label: s.name,
-  }));
+  // For the "add subjects" dialog, filter out subjects already in the group
+  const availableSubjects = useMemo(() => {
+    if (!addSubjectTarget) return allSubjects;
+    const existingIds = new Set(
+      (addSubjectTarget.subjects ?? []).map((egs) => egs.subjectId)
+    );
+    return allSubjects.filter((s) => !existingIds.has(s.id));
+  }, [addSubjectTarget, allSubjects]);
 
   const handleCreate = async (values: { name: string }) => {
     try {
-      await createGroup(values).unwrap();
+      const group = await createGroup(values).unwrap();
+      // Add selected subjects
+      if (createSubjects.length > 0) {
+        for (const subjectId of createSubjects) {
+          try {
+            await addSubject({ groupId: group.id, subjectId }).unwrap();
+          } catch { /* skip duplicates */ }
+        }
+      }
       toast.success('Elective group created.');
       setFormOpen(false);
+      setCreateSubjects([]);
       form.reset();
     } catch {
       toast.error('Failed to create elective group.');
@@ -79,17 +95,21 @@ export function Component() {
   };
 
   const handleAddSubjects = async () => {
-    if (!addSubjectTarget) return;
-    try {
-      for (const subjectId of selectedSubjects) {
+    if (!addSubjectTarget || selectedSubjects.length === 0) return;
+    let added = 0;
+    for (const subjectId of selectedSubjects) {
+      try {
         await addSubject({ groupId: addSubjectTarget.id, subjectId }).unwrap();
-      }
-      toast.success('Subjects added.');
-      setAddSubjectTarget(null);
-      setSelectedSubjects([]);
-    } catch {
-      toast.error('Failed to add subjects.');
+        added++;
+      } catch { /* skip duplicates */ }
     }
+    if (added > 0) {
+      toast.success(`${added} subject(s) added.`);
+    } else {
+      toast.info('All selected subjects were already in the group.');
+    }
+    setAddSubjectTarget(null);
+    setSelectedSubjects([]);
   };
 
   const handleEditGroup = async (values: { name: string }) => {
@@ -104,7 +124,7 @@ export function Component() {
   };
 
   const handleRemoveSubject = async (group: ElectiveGroup, subjectId: string) => {
-    const subjectCount = group.electiveGroupSubjects?.length ?? 0;
+    const subjectCount = group.subjects?.length ?? 0;
     if (subjectCount <= 2) {
       toast.warning('Elective groups require at least 2 subjects.');
       return;
@@ -117,6 +137,10 @@ export function Component() {
     }
   };
 
+  const toggleSubject = (id: string, list: string[], setter: (v: string[]) => void) => {
+    setter(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -124,7 +148,7 @@ export function Component() {
         description="Define elective groups and their subject pools."
         actions={
           !isReadOnly ? (
-            <Button onClick={() => { form.reset(); setFormOpen(true); }}>
+            <Button onClick={() => { form.reset(); setCreateSubjects([]); setFormOpen(true); }}>
               <Plus className="size-4" />
               Add Elective Group
             </Button>
@@ -140,13 +164,13 @@ export function Component() {
 
       {!isLoading && (!groups || groups.length === 0) && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-600 dark:text-orange-400 mb-4">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-600 mb-4">
             <Link2 className="size-7" />
           </div>
           <h3 className="text-lg font-semibold">No elective groups yet</h3>
           <p className="mt-1 text-sm text-muted-foreground max-w-md">Create elective groups to co-schedule subjects for student parallel sessions.</p>
           {!isReadOnly && (
-            <Button className="mt-4" onClick={() => { form.reset(); setFormOpen(true); }}>
+            <Button className="mt-4" onClick={() => { form.reset(); setCreateSubjects([]); setFormOpen(true); }}>
               <Plus className="size-4" />
               Add Elective Group
             </Button>
@@ -178,7 +202,7 @@ export function Component() {
               </div>
 
               <div className="flex flex-wrap gap-1">
-                {group.electiveGroupSubjects?.map((egs) => (
+                {group.subjects?.map((egs) => (
                   <Badge key={egs.subjectId} variant="secondary" className="text-xs gap-1">
                     {egs.subject.name}
                     {!isReadOnly && (
@@ -192,7 +216,7 @@ export function Component() {
                     )}
                   </Badge>
                 ))}
-                {(!group.electiveGroupSubjects || group.electiveGroupSubjects.length === 0) && (
+                {(!group.subjects || group.subjects.length === 0) && (
                   <span className="text-xs text-muted-foreground">No subjects assigned</span>
                 )}
               </div>
@@ -225,9 +249,9 @@ export function Component() {
         </DialogContent>
       </Dialog>
 
-      {/* Create dialog */}
+      {/* Create dialog — includes subject selection */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Create Elective Group</DialogTitle></DialogHeader>
           <form onSubmit={form.handleSubmit(handleCreate)} className="space-y-4">
             <div className="space-y-2">
@@ -235,6 +259,20 @@ export function Component() {
               <Input placeholder="e.g. Biology / Computer Science" {...form.register('name')} autoFocus />
               {form.formState.errors.name && <p className="text-sm text-destructive">{form.formState.errors.name.message}</p>}
             </div>
+
+            <div className="space-y-2">
+              <Label>Subjects in this group</Label>
+              <p className="text-xs text-muted-foreground">Select subjects that will be co-scheduled (at least 2 recommended).</p>
+              <SubjectChecklist
+                subjects={allSubjects}
+                selected={createSubjects}
+                onToggle={(id) => toggleSubject(id, createSubjects, setCreateSubjects)}
+              />
+              {createSubjects.length > 0 && (
+                <p className="text-xs text-muted-foreground">{createSubjects.length} subject(s) selected</p>
+              )}
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setFormOpen(false)} disabled={isCreating}>{t('actions.cancel')}</Button>
               <Button type="submit" disabled={isCreating}>{isCreating ? 'Creating...' : t('actions.create')}</Button>
@@ -243,15 +281,30 @@ export function Component() {
         </DialogContent>
       </Dialog>
 
-      {/* Add subjects dialog */}
+      {/* Add subjects dialog — only shows subjects not already in the group */}
       <Dialog open={!!addSubjectTarget} onOpenChange={(open) => { if (!open) setAddSubjectTarget(null); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Add Subjects to {addSubjectTarget?.name}</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <MultiSelect options={subjectOptions} value={selectedSubjects} onChange={setSelectedSubjects} placeholder="Select subjects..." />
+            {availableSubjects.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">All subjects are already in this group.</p>
+            ) : (
+              <>
+                <SubjectChecklist
+                  subjects={availableSubjects}
+                  selected={selectedSubjects}
+                  onToggle={(id) => toggleSubject(id, selectedSubjects, setSelectedSubjects)}
+                />
+                {selectedSubjects.length > 0 && (
+                  <p className="text-xs text-muted-foreground">{selectedSubjects.length} subject(s) selected</p>
+                )}
+              </>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setAddSubjectTarget(null)}>{t('actions.cancel')}</Button>
-              <Button onClick={handleAddSubjects} disabled={selectedSubjects.length === 0}>{t('actions.add')}</Button>
+              <Button onClick={handleAddSubjects} disabled={selectedSubjects.length === 0}>
+                Add {selectedSubjects.length > 0 ? `${selectedSubjects.length} Subject(s)` : ''}
+              </Button>
             </DialogFooter>
           </div>
         </DialogContent>
@@ -267,6 +320,38 @@ export function Component() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+    </div>
+  );
+}
+
+// ── Subject checklist component ──
+
+function SubjectChecklist({
+  subjects,
+  selected,
+  onToggle,
+}: {
+  subjects: Array<{ id: string; name: string }>;
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border/40 bg-card/60 backdrop-blur-sm p-2 max-h-48 overflow-y-auto space-y-0.5">
+      {subjects.map((s) => (
+        <label
+          key={s.id}
+          className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm cursor-pointer hover:bg-amber-500/5 transition-colors"
+        >
+          <Checkbox
+            checked={selected.includes(s.id)}
+            onCheckedChange={() => onToggle(s.id)}
+          />
+          {s.name}
+        </label>
+      ))}
+      {subjects.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-2">No subjects available.</p>
+      )}
     </div>
   );
 }

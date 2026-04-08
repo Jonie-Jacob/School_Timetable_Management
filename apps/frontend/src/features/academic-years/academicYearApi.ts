@@ -40,7 +40,7 @@ export const academicYearApi = createApi({
         if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
         if (params?.search) searchParams.set('search', params.search);
         const qs = searchParams.toString();
-        return `/academic-years${qs ? `?${qs}` : ''}`;
+        return `academic-years${qs ? `?${qs}` : ''}`;
       },
       transformResponse: (response: { data: AcademicYear[]; meta: AcademicYearListResponse['meta'] }) => response,
       providesTags: (result) =>
@@ -54,7 +54,7 @@ export const academicYearApi = createApi({
 
     createAcademicYear: builder.mutation<AcademicYear, CreateAcademicYearRequest>({
       query: (body) => ({
-        url: '/academic-years',
+        url: 'academic-years',
         method: 'POST',
         body,
       }),
@@ -64,7 +64,7 @@ export const academicYearApi = createApi({
 
     activateAcademicYear: builder.mutation<AcademicYear, string>({
       query: (id) => ({
-        url: `/academic-years/${id}/activate`,
+        url: `academic-years/${id}/activate`,
         method: 'PATCH',
       }),
       transformResponse: (response: { data: AcademicYear }) => response.data,

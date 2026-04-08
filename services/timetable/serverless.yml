@@ -39,39 +39,39 @@ functions:
     events:
       - httpApi:
           method: POST
-          path: /timetables/generate
+          path: /api/timetables/generate
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /timetables/generate/status/{jobId}
+          path: /api/timetables/generate/status/{jobId}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /timetables/divisions/{divisionId}
+          path: /api/timetables/divisions/{divisionId}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /timetables/slots/{slotId}
+          path: /api/timetables/slots/{slotId}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /timetables/{id}/publish
+          path: /api/timetables/{id}/publish
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /timetables/{id}/conflicts
+          path: /api/timetables/{id}/conflicts
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /timetables/teacher/{teacherId}
+          path: /api/timetables/teacher/{teacherId}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /timetables/health
+          path: /api/timetables/health

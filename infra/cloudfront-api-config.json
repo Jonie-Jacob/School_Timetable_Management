@@ -1,0 +1,141 @@
+{
+  "Origins": {
+    "Items": [
+      {
+        "Id": "api-auth",
+        "DomainName": "7qzi5sjy57.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-academic-year",
+        "DomainName": "ktyoe2hub0.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-school-config",
+        "DomainName": "u4p6ckbwi2.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-subject",
+        "DomainName": "96y3eaw5b9.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-teacher",
+        "DomainName": "ooaa0mzts6.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-class",
+        "DomainName": "07l7jhdc7d.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-assignment",
+        "DomainName": "hy1ce6t917.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-timetable",
+        "DomainName": "oi8y49acg0.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-dashboard",
+        "DomainName": "974c7m4l1k.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-export",
+        "DomainName": "ou8ti6lcci.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-notification",
+        "DomainName": "hymkzmxboc.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      },
+      {
+        "Id": "api-websocket",
+        "DomainName": "yjzth81080.execute-api.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only",
+          "OriginSslProtocols": { "Quantity": 1, "Items": ["TLSv1.2"] }
+        }
+      }
+    ]
+  },
+  "CacheBehaviors": [
+    { "PathPattern": "/auth/*", "TargetOriginId": "api-auth" },
+    { "PathPattern": "/academic-years/*", "TargetOriginId": "api-academic-year" },
+    { "PathPattern": "/config/*", "TargetOriginId": "api-school-config" },
+    { "PathPattern": "/subjects/*", "TargetOriginId": "api-subject" },
+    { "PathPattern": "/teachers/*", "TargetOriginId": "api-teacher" },
+    { "PathPattern": "/classes/*", "TargetOriginId": "api-class" },
+    { "PathPattern": "/assignments/*", "TargetOriginId": "api-assignment" },
+    { "PathPattern": "/divisions/*", "TargetOriginId": "api-assignment" },
+    { "PathPattern": "/elective-groups/*", "TargetOriginId": "api-assignment" },
+    { "PathPattern": "/timetables/*", "TargetOriginId": "api-timetable" },
+    { "PathPattern": "/dashboard/*", "TargetOriginId": "api-dashboard" },
+    { "PathPattern": "/export/*", "TargetOriginId": "api-export" },
+    { "PathPattern": "/notifications/*", "TargetOriginId": "api-notification" }
+  ]
+}

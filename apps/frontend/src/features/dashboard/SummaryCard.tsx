@@ -11,7 +11,7 @@ interface SummaryCardProps {
   iconBg?: string;
 }
 
-export function SummaryCard({ icon: Icon, label, count, to, iconColor = 'text-amber-600 dark:text-amber-400', iconBg = 'bg-amber-500/10' }: SummaryCardProps) {
+export function SummaryCard({ icon: Icon, label, count, to, iconColor = 'text-amber-600', iconBg = 'bg-amber-500/10' }: SummaryCardProps) {
   const navigate = useNavigate();
 
   return (

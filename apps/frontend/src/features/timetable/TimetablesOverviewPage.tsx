@@ -6,16 +6,26 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader, ConfirmDialog } from '@/components/shared';
+import { ExportButton } from '@/components/shared/ExportButton';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGetClassesQuery } from '@/features/classes/classApi';
 import { useGenerateTimetableMutation } from './timetableApi';
+import {
+  useExportDivisionPdfMutation, useExportDivisionExcelMutation,
+  useExportClassesPdfMutation, useExportClassesExcelMutation,
+  downloadHtmlAsPdf, downloadExcel,
+} from '@/features/export/exportApi';
 
 export function Component() {
-  const { t } = useTranslation();
+  useTranslation();
   const navigate = useNavigate();
 
-  const { data: classes, isLoading } = useGetClassesQuery();
+  const { data: classes, isLoading } = useGetClassesQuery(undefined, { refetchOnMountOrArgChange: true });
   const [generateAll, { isLoading: isGeneratingAll }] = useGenerateTimetableMutation();
+  const [exportDivPdf] = useExportDivisionPdfMutation();
+  const [exportDivExcel] = useExportDivisionExcelMutation();
+  const [exportClassesPdf] = useExportClassesPdfMutation();
+  const [exportClassesExcel] = useExportClassesExcelMutation();
   const [confirmGenerateAll, setConfirmGenerateAll] = useState(false);
 
   // Flatten all divisions across classes
@@ -52,17 +62,40 @@ export function Component() {
         title="All Timetables"
         description="View and manage timetables across all classes and divisions."
         actions={
-          pendingIds.length > 0 ? (
-            <Button
-              variant="gradient"
-              onClick={() => setConfirmGenerateAll(true)}
-              disabled={isGeneratingAll}
-              className="gap-2"
-            >
-              {isGeneratingAll ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
-              {isGeneratingAll ? 'Generating...' : `Generate All (${pendingIds.length})`}
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {generated > 0 && (
+              <ExportButton
+                label="Export All"
+                onExportPdf={async () => {
+                  const classIds = [...new Set(allDivisions.filter(d => d.timetable?.status === 'GENERATED').map(d => d.classId))];
+                  try {
+                    const result = await exportClassesPdf({ classIds }).unwrap();
+                    downloadHtmlAsPdf(result.html, result.filename);
+                    toast.success('Export ready — use browser print dialog to save as PDF');
+                  } catch { toast.error('Export failed'); }
+                }}
+                onExportExcel={async () => {
+                  const classIds = [...new Set(allDivisions.filter(d => d.timetable?.status === 'GENERATED').map(d => d.classId))];
+                  try {
+                    const result = await exportClassesExcel({ classIds }).unwrap();
+                    downloadExcel(result.base64, result.filename);
+                    toast.success('Excel downloaded');
+                  } catch { toast.error('Export failed'); }
+                }}
+              />
+            )}
+            {pendingIds.length > 0 && (
+              <Button
+                variant="gradient"
+                onClick={() => setConfirmGenerateAll(true)}
+                disabled={isGeneratingAll}
+                className="gap-2"
+              >
+                {isGeneratingAll ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
+                {isGeneratingAll ? 'Generating...' : `Generate All (${pendingIds.length})`}
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -95,7 +128,7 @@ export function Component() {
 
       {!isLoading && allDivisions.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-600 dark:text-teal-400 mb-4">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-600 mb-4">
             <CalendarDays className="size-7" />
           </div>
           <h3 className="text-lg font-semibold">No divisions found</h3>
@@ -143,15 +176,35 @@ export function Component() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
                         {status === 'GENERATED' && (
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            className="text-[11px] gap-1"
-                            onClick={() => navigate(`/classes/${div.classId}/divisions/${div.id}/timetable`)}
-                          >
-                            <Eye className="size-3" />
-                            View
-                          </Button>
+                          <>
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              className="text-[11px] gap-1"
+                              onClick={() => navigate(`/classes/${div.classId}/divisions/${div.id}/timetable`)}
+                            >
+                              <Eye className="size-3" />
+                              View
+                            </Button>
+                            <ExportButton
+                              size="xs"
+                              label=""
+                              onExportPdf={async () => {
+                                try {
+                                  const result = await exportDivPdf({ divisionId: div.id }).unwrap();
+                                  downloadHtmlAsPdf(result.html, result.filename);
+                                  toast.success('Export ready');
+                                } catch { toast.error('Export failed'); }
+                              }}
+                              onExportExcel={async () => {
+                                try {
+                                  const result = await exportDivExcel({ divisionId: div.id }).unwrap();
+                                  downloadExcel(result.base64, result.filename);
+                                  toast.success('Excel downloaded');
+                                } catch { toast.error('Export failed'); }
+                              }}
+                            />
+                          </>
                         )}
                         <Button
                           variant={status ? 'outline' : 'default'}

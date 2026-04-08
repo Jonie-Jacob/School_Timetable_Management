@@ -35,64 +35,74 @@ functions:
     events:
       - httpApi:
           method: GET
-          path: /divisions/{divisionId}/assignments
+          path: /api/divisions/{divisionId}/assignments
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /divisions/{divisionId}/assignments
+          path: /api/divisions/{divisionId}/assignments
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /divisions/{divisionId}/assignments/elective
+          path: /api/divisions/{divisionId}/assignments/elective
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /assignments/{id}
+          path: /api/assignments/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: DELETE
-          path: /assignments/{id}
+          path: /api/assignments/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /elective-groups
+          path: /api/elective-groups
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /elective-groups
+          path: /api/elective-groups
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /elective-groups/{id}
+          path: /api/elective-groups/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /elective-groups/{id}
+          path: /api/elective-groups/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: DELETE
-          path: /elective-groups/{id}
+          path: /api/elective-groups/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /elective-groups/{id}/subjects
+          path: /api/elective-groups/{id}/subjects
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: DELETE
-          path: /elective-groups/{groupId}/subjects/{subjectId}
+          path: /api/elective-groups/{groupId}/subjects/{subjectId}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /assignments/health
+          path: /api/assignments/unassigned
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/assignments/quick-assign
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
+          path: /api/assignments/health

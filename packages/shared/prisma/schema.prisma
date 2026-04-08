@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -148,6 +149,7 @@ model Division {
   label             String    @db.VarChar(10)
   streamName        String?   @map("stream_name") @db.VarChar(100)
   periodStructureId String?   @map("period_structure_id")
+  classTeacherId    String?   @map("class_teacher_id")
   deletedAt         DateTime? @map("deleted_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
@@ -156,6 +158,7 @@ model Division {
   class               Class                @relation(fields: [classId], references: [id])
   academicYear        AcademicYear         @relation(fields: [academicYearId], references: [id])
   periodStructure     PeriodStructure?     @relation(fields: [periodStructureId], references: [id])
+  classTeacher        Teacher?             @relation("ClassTeacher", fields: [classTeacherId], references: [id])
   divisionAssignments DivisionAssignment[]
   timetables          Timetable[]
   generationJobs      GenerationJob[]
@@ -164,6 +167,7 @@ model Division {
   @@unique([schoolId, classId, label, streamName])
   @@index([schoolId, classId, academicYearId])
   @@index([periodStructureId])
+  @@index([classTeacherId])
   @@map("divisions")
 }
 
@@ -176,6 +180,7 @@ model Subject {
   schoolId       String    @map("school_id")
   academicYearId String    @map("academic_year_id")
   name           String    @db.VarChar(255)
+  abbreviation   String?   @db.VarChar(10)
   deletedAt      DateTime? @map("deleted_at")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
@@ -211,6 +216,7 @@ model Teacher {
   teacherAvailability   TeacherAvailability[]
   divisionAssignments   DivisionAssignment[] @relation("PrimaryTeacher")
   assistantAssignments  DivisionAssignment[] @relation("AssistantTeacher")
+  classTeacherDivisions Division[]           @relation("ClassTeacher")
 
   @@index([schoolId, academicYearId])
   @@map("teachers")

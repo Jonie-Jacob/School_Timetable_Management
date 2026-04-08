@@ -82,6 +82,10 @@ export const router = createBrowserRouter([
         lazy: () => import('@/features/teacher-timetable/TeacherTimetablePage'),
       },
       {
+        path: 'unassigned-subjects',
+        lazy: () => import('@/features/unassigned/UnassignedSubjectsPage'),
+      },
+      {
         path: 'settings',
         lazy: () => import('@/features/settings/SettingsPage'),
       },

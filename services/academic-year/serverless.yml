@@ -35,34 +35,34 @@ functions:
     events:
       - httpApi:
           method: POST
-          path: /academic-years
+          path: /api/academic-years
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /academic-years
+          path: /api/academic-years
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /academic-years/{id}
+          path: /api/academic-years/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /academic-years/{id}
+          path: /api/academic-years/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: DELETE
-          path: /academic-years/{id}
+          path: /api/academic-years/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PATCH
-          path: /academic-years/{id}/activate
+          path: /api/academic-years/{id}/activate
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /academic-years/health
+          path: /api/academic-years/health

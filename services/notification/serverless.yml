@@ -35,24 +35,24 @@ functions:
     events:
       - httpApi:
           method: GET
-          path: /notifications
+          path: /api/notifications
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /notifications/count
+          path: /api/notifications/count
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /notifications/{id}/dismiss
+          path: /api/notifications/{id}/dismiss
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /notifications/dismiss-all
+          path: /api/notifications/dismiss-all
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /notifications/health
+          path: /api/notifications/health

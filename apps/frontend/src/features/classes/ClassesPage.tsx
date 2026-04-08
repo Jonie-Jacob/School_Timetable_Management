@@ -103,7 +103,7 @@ export function Component() {
 
       {!isLoading && (!classes || classes.length === 0) && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-600 dark:text-violet-400 mb-4">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-600 mb-4">
             <School className="size-7" />
           </div>
           <h3 className="text-lg font-semibold">{t('empty.title')}</h3>

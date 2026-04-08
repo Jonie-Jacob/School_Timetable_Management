@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 
 const subjectSchema = z.object({
   name: z.string().min(1, 'Subject name is required').max(255),
+  abbreviation: z.string().max(10).optional().or(z.literal('')),
 });
 
 type SubjectFormValues = z.infer<typeof subjectSchema>;
@@ -25,7 +26,7 @@ interface SubjectFormProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: SubjectFormValues) => Promise<void>;
   isSubmitting: boolean;
-  defaultValues?: { name: string };
+  defaultValues?: { name: string; abbreviation?: string };
   mode?: 'create' | 'edit';
 }
 
@@ -41,12 +42,12 @@ export function SubjectForm({
 
   const form = useForm<SubjectFormValues>({
     resolver: zodResolver(subjectSchema),
-    defaultValues: defaultValues ?? { name: '' },
+    defaultValues: defaultValues ?? { name: '', abbreviation: '' },
   });
 
   useEffect(() => {
     if (open) {
-      form.reset(defaultValues ?? { name: '' });
+      form.reset(defaultValues ?? { name: '', abbreviation: '' });
     }
   }, [open, defaultValues, form]);
 
@@ -77,6 +78,17 @@ export function SubjectForm({
                 {form.formState.errors.name.message}
               </p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="abbreviation">{t('form.abbreviation')}</Label>
+            <Input
+              id="abbreviation"
+              placeholder={t('form.abbreviationPlaceholder')}
+              maxLength={10}
+              {...form.register('abbreviation')}
+            />
+            <p className="text-xs text-muted-foreground">{t('form.abbreviationHint')}</p>
           </div>
 
           <DialogFooter>

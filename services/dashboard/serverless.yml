@@ -35,24 +35,24 @@ functions:
     events:
       - httpApi:
           method: GET
-          path: /dashboard/stats
+          path: /api/dashboard/stats
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /dashboard/recent-activity
+          path: /api/dashboard/recent-activity
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /dashboard/setup-wizard
+          path: /api/dashboard/setup-wizard
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /dashboard/setup-wizard/dismiss
+          path: /api/dashboard/setup-wizard/dismiss
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /dashboard/health
+          path: /api/dashboard/health

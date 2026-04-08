@@ -45,18 +45,18 @@ export const dashboardApi = createApi({
   tagTypes: ['DashboardStats', 'SetupWizard'],
   endpoints: (builder) => ({
     getDashboardStats: builder.query<DashboardStats, void>({
-      query: () => '/dashboard/stats',
+      query: () => 'dashboard/stats',
       transformResponse: (response: { data: DashboardStats }) => response.data,
       providesTags: ['DashboardStats'],
     }),
     getSetupWizard: builder.query<SetupWizardData, void>({
-      query: () => '/dashboard/setup-wizard',
+      query: () => 'dashboard/setup-wizard',
       transformResponse: (response: { data: SetupWizardData }) => response.data,
       providesTags: ['SetupWizard'],
     }),
     dismissSetupWizard: builder.mutation<{ dismissed: boolean }, void>({
       query: () => ({
-        url: '/dashboard/setup-wizard/dismiss',
+        url: 'dashboard/setup-wizard/dismiss',
         method: 'PUT',
       }),
       invalidatesTags: ['SetupWizard'],

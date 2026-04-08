@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, LayoutGrid, Trash2, CalendarDays, FileText, Eye, Copy } from 'lucide-react';
+import { Plus, LayoutGrid, Trash2, CalendarDays, FileText, Eye, Copy, UserCheck, X, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,12 +19,18 @@ import {
 import { PageHeader, ConfirmDialog } from '@/components/shared';
 import { useReadOnly } from '@/hooks/useReadOnly';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useGetPeriodStructuresQuery } from '@/features/period-structures/configApi';
+import { useGetPeriodStructuresQuery, useAssignDivisionsMutation } from '@/features/period-structures/configApi';
+import { useGetTeachersQuery } from '@/features/teachers/teacherApi';
+import { assignmentApi } from '@/features/assignments/assignmentApi';
+import { useAppDispatch } from '@/app/hooks';
 import {
   useGetClassQuery,
   useAddDivisionMutation,
-  useUpdateDivisionMutation,
   useDeleteDivisionMutation,
+  useSetClassTeacherMutation,
+  useRemoveClassTeacherMutation,
+  useAnalyzeClassTeacherMutation,
+  useExecuteClassTeacherSwapMutation,
   type Division,
 } from './classApi';
 
@@ -41,11 +47,13 @@ export function Component() {
   const navigate = useNavigate();
   const isReadOnly = useReadOnly();
 
-  const { data: classItem, isLoading } = useGetClassQuery(id!, { skip: !id });
+  const { data: classItem, isLoading } = useGetClassQuery(id!, { skip: !id, refetchOnMountOrArgChange: true });
   const { data: periodStructures } = useGetPeriodStructuresQuery();
   const [addDivision, { isLoading: isAdding }] = useAddDivisionMutation();
-  const [updateDivision] = useUpdateDivisionMutation();
   const [deleteDivision, { isLoading: isDeletingDiv }] = useDeleteDivisionMutation();
+  const [setClassTeacher] = useSetClassTeacherMutation();
+  const [removeClassTeacher] = useRemoveClassTeacherMutation();
+  const [assignDivisions] = useAssignDivisionsMutation();
 
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Division | null>(null);
@@ -88,19 +96,6 @@ export function Component() {
     }
   };
 
-  const handlePeriodStructureChange = async (divisionId: string, periodStructureId: string) => {
-    if (!id) return;
-    try {
-      await updateDivision({
-        classId: id,
-        divisionId,
-        label: undefined, // keep existing
-      }).unwrap();
-      toast.success('Period structure updated.');
-    } catch {
-      toast.error('Failed to update period structure.');
-    }
-  };
 
   const handleDeleteDivision = async () => {
     if (!deleteTarget || !id) return;
@@ -139,6 +134,16 @@ export function Component() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-3 mb-2">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/classes')} title="Back to Classes">
+          <ArrowLeft className="size-4" />
+        </Button>
+        <div className="text-sm text-muted-foreground">
+          <span className="hover:text-foreground cursor-pointer" onClick={() => navigate('/classes')}>Classes</span>
+          <span className="mx-1.5">/</span>
+          <span className="text-foreground font-medium">{classItem.name}</span>
+        </div>
+      </div>
       <PageHeader
         title={classItem.name}
         description={`${divisions.length} ${divisions.length === 1 ? 'division' : 'divisions'}`}
@@ -154,7 +159,7 @@ export function Component() {
 
       {divisions.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400 mb-4">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 mb-4">
             <LayoutGrid className="size-7" />
           </div>
           <h3 className="text-lg font-semibold">{t('detail.noDivisions')}</h3>
@@ -209,10 +214,13 @@ export function Component() {
                   ) : (
                     <Select
                       value={div.periodStructureId ?? '_none'}
-                      onValueChange={(v) => {
-                        // Period structure change would need a backend endpoint — for now show the dropdown
-                        if (v !== (div.periodStructureId ?? '_none')) {
-                          toast.info('Period structure selection saved (requires backend support for division update).');
+                      onValueChange={async (v) => {
+                        if (v === '_none' || v === div.periodStructureId) return;
+                        try {
+                          await assignDivisions({ periodStructureId: v, divisionIds: [div.id] }).unwrap();
+                          toast.success('Period structure updated');
+                        } catch {
+                          toast.error('Failed to update period structure');
                         }
                       }}
                     >
@@ -228,6 +236,29 @@ export function Component() {
                     </Select>
                   )}
                 </div>
+
+                {/* Class Teacher */}
+                <ClassTeacherField
+                  classId={id!}
+                  division={div}
+                  isReadOnly={isReadOnly}
+                  onSet={async (teacherId) => {
+                    try {
+                      await setClassTeacher({ classId: id!, divisionId: div.id, teacherId }).unwrap();
+                      toast.success('Class teacher assigned');
+                    } catch (err: any) {
+                      toast.error(err?.data?.error?.message || 'Failed to assign class teacher');
+                    }
+                  }}
+                  onRemove={async () => {
+                    try {
+                      await removeClassTeacher({ classId: id!, divisionId: div.id }).unwrap();
+                      toast.success('Class teacher removed');
+                    } catch {
+                      toast.error('Failed to remove class teacher');
+                    }
+                  }}
+                />
 
                 {/* Stats row */}
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -304,6 +335,259 @@ export function Component() {
         onConfirm={handleDeleteDivision}
         onCancel={() => setDeleteTarget(null)}
       />
+    </div>
+  );
+}
+
+// ── Class Teacher inline field with swap modal ──
+
+function ClassTeacherField({
+  classId,
+  division,
+  isReadOnly,
+  onSet,
+  onRemove,
+}: {
+  classId: string;
+  division: Division;
+  isReadOnly: boolean;
+  onSet: (teacherId: string) => Promise<void>;
+  onRemove: () => Promise<void>;
+}) {
+  const { data: teachersData } = useGetTeachersQuery({ pageSize: 200 });
+  const allTeachers = teachersData?.data ?? [];
+
+  const dispatch = useAppDispatch();
+  const [analyze] = useAnalyzeClassTeacherMutation();
+  const [executeSwap] = useExecuteClassTeacherSwapMutation();
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [step, setStep] = useState<'pick' | 'result'>('pick');
+  const [search, setSearch] = useState('');
+  const [analysis, setAnalysis] = useState<import('./classApi').ClassTeacherAnalysis | null>(null);
+  const [selectedSwap, setSelectedSwap] = useState<import('./classApi').SwapOption | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const filteredTeachers = allTeachers.filter((t) =>
+    t.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handlePickTeacher = async (teacherId: string) => {
+    setLoading(true);
+    try {
+      const result = await analyze({ classId, divisionId: division.id, teacherId }).unwrap();
+      setAnalysis(result);
+      if (result.case === 'A') {
+        // Simple case — set directly
+        await onSet(teacherId);
+        toast.success(`${result.teacher.name} set as class teacher`);
+        setModalOpen(false);
+      } else {
+        // Show analysis result
+        if (result.swapOptions.length === 1) setSelectedSwap(result.swapOptions[0]);
+        setStep('result');
+      }
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message || 'Failed to analyze');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmSwap = async () => {
+    if (!analysis || !selectedSwap) return;
+    setLoading(true);
+    try {
+      const result = await executeSwap({
+        classId,
+        divisionId: division.id,
+        teacherId: analysis.teacher.id,
+        fromAssignmentId: selectedSwap.fromAssignmentId,
+        targetAssignmentId: selectedSwap.targetAssignmentId,
+      }).unwrap();
+      const msgs = [`${analysis.teacher.name} set as class teacher`];
+      if (result.warnings.length > 0) msgs.push(...result.warnings);
+      // Invalidate assignment cache for both divisions
+      dispatch(assignmentApi.util.invalidateTags([{ type: 'Assignment', id: 'LIST' }]));
+
+      if (result.affectedTimetables.length > 0) {
+        toast.warning(msgs.join('. '), { duration: 6000 });
+      } else {
+        toast.success(msgs.join('. '));
+      }
+      setModalOpen(false);
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message || 'Swap failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmCaseC = async () => {
+    if (!analysis) return;
+    setLoading(true);
+    try {
+      await onSet(analysis.teacher.id);
+      toast.success(`${analysis.teacher.name} set as class teacher (no swap)`);
+      setModalOpen(false);
+    } catch {
+      toast.error('Failed to set class teacher');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openModal = () => {
+    setStep('pick');
+    setSearch('');
+    setAnalysis(null);
+    setSelectedSwap(null);
+    setModalOpen(true);
+  };
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+        <UserCheck className="size-3" />
+        Class Teacher
+      </Label>
+      {isReadOnly ? (
+        <Badge variant="outline" className="text-[10px]">
+          {division.classTeacher?.name ?? 'Not assigned'}
+        </Badge>
+      ) : (
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" className="h-7 text-xs min-w-0 flex-1 justify-start font-normal truncate" onClick={openModal}>
+            {division.classTeacher?.name ?? 'Select class teacher...'}
+          </Button>
+          {division.classTeacherId && (
+            <Button variant="ghost" size="icon-xs" className="shrink-0" onClick={() => onRemove()} title="Remove class teacher">
+              <X className="size-3 text-destructive" />
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Multi-step modal */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          {step === 'pick' && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Select Class Teacher</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <Input
+                  placeholder="Search teachers..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  autoFocus
+                />
+                <div className="max-h-64 overflow-y-auto rounded-lg border border-border/40 divide-y divide-border/30">
+                  {filteredTeachers.length === 0 && (
+                    <div className="px-3 py-4 text-sm text-muted-foreground text-center">No teachers found</div>
+                  )}
+                  {filteredTeachers.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      disabled={loading || t.id === division.classTeacherId}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-amber-500/5 transition-colors disabled:opacity-50"
+                      onClick={() => handlePickTeacher(t.id)}
+                    >
+                      <UserCheck className="size-3.5 text-muted-foreground shrink-0" />
+                      <span className="flex-1">{t.name}</span>
+                      {t.id === division.classTeacherId && (
+                        <Badge variant="secondary" className="text-[9px]">Current</Badge>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 'result' && analysis?.case === 'B' && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Swap Required</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  <strong>{analysis.teacher.name}</strong> doesn't currently teach in this division. Select a subject to swap:
+                </p>
+
+                <div className="space-y-2">
+                  {analysis.swapOptions.map((opt) => (
+                    <label
+                      key={opt.fromAssignmentId}
+                      className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        selectedSwap?.fromAssignmentId === opt.fromAssignmentId
+                          ? 'border-amber-500 bg-amber-500/5'
+                          : 'border-border/40 hover:bg-muted/30'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="swap-option"
+                        checked={selectedSwap?.fromAssignmentId === opt.fromAssignmentId}
+                        onChange={() => setSelectedSwap(opt)}
+                        className="mt-1"
+                      />
+                      <div className="text-sm space-y-1">
+                        <div>
+                          <strong>{opt.subjectName}</strong>: swap{' '}
+                          <span className="text-amber-600">{analysis.teacher.name}</span> (from {opt.fromDivision.className}-{opt.fromDivision.label})
+                          {' ↔ '}
+                          <span className="text-blue-600">{opt.currentTeacherInTarget.name}</span> (from this division)
+                        </div>
+                        {opt.currentTeacherIsClassTeacherOfSource && (
+                          <div className="flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 rounded px-2 py-1">
+                            <AlertTriangle className="size-3" />
+                            {opt.currentTeacherInTarget.name} is class teacher of {opt.fromDivision.className}-{opt.fromDivision.label} and will be unset
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setStep('pick'); setAnalysis(null); }}>Back</Button>
+                  <Button onClick={handleConfirmSwap} disabled={!selectedSwap || loading}>
+                    {loading ? 'Swapping...' : 'Confirm Swap'}
+                  </Button>
+                </DialogFooter>
+              </div>
+            </>
+          )}
+
+          {step === 'result' && analysis?.case === 'C' && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Warning</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm">
+                  <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p>{analysis.warning}</p>
+                    <p className="mt-1 text-muted-foreground">
+                      <strong>{analysis.teacher.name}</strong> will be set as class teacher without any subject assignment swap.
+                    </p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setStep('pick'); setAnalysis(null); }}>Back</Button>
+                  <Button onClick={handleConfirmCaseC} disabled={loading}>
+                    {loading ? 'Setting...' : 'Set as Class Teacher'}
+                  </Button>
+                </DialogFooter>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

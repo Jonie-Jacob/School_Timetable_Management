@@ -65,6 +65,13 @@ class ServerlessProdConfig {
         this.serverless.cli.log(`[prod-config] Layer added to function ${name}`);
       }
     }
+
+    // Set Prisma engine path to the layer location
+    if (!this.serverless.service.provider.environment) {
+      this.serverless.service.provider.environment = {};
+    }
+    this.serverless.service.provider.environment.PRISMA_QUERY_ENGINE_LIBRARY = '/opt/nodejs/node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node';
+    this.serverless.cli.log('[prod-config] Prisma engine path set to layer location');
   }
 }
 

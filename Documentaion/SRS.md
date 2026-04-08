@@ -6482,6 +6482,47 @@ aws lambda publish-layer-version --layer-name SharedDepsLayer-{stage} \
 | CloudWatch Logs | 5 GB ingestion free | $0 – $5 |
 | **Total** | | **~$50 – $80** |
 
+#### 19.6.2 Actual Deployed Resources (April 2026)
+
+| Resource | Value |
+|----------|-------|
+| **CloudFront URL** | `https://d25i05v9hwcs8q.cloudfront.net` |
+| **CloudFront Distribution ID** | `EUWIXJK2BNYEF` |
+| **Cognito User Pool ID** | `ap-south-1_rlYNHNPRZ` |
+| **Cognito Client ID** | `42r2ih2m9c3l26lb4u1mrrl5sb` |
+| **RDS Endpoint** | `timetable-prod-postgres.c186gu8203df.ap-south-1.rds.amazonaws.com:5432` |
+| **Frontend S3 Bucket** | `timetable-prod-frontend` |
+| **VPC ID** | `vpc-0f42582a0c0dd1f6e` |
+| **Terraform State** | `s3://zyphr-timetable-terraform-state` |
+| **Lambda Layer ARN** | `arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:1` |
+
+#### 19.6.3 CloudFront API Routing Architecture
+
+The production deployment uses **CloudFront as a unified reverse proxy** for both the frontend SPA and all 12 backend API Gateway endpoints. Each API path pattern is routed to its respective API Gateway origin via CloudFront cache behaviors:
+
+```
+CloudFront (d25i05v9hwcs8q.cloudfront.net)
+├── Default Behavior (*)        → S3 (timetable-prod-frontend) — SPA
+├── /auth*                      → API GW (7qzi5sjy57) — Auth Service
+├── /academic-years*            → API GW (ktyoe2hub0) — Academic Year Service
+├── /config*                    → API GW (u4p6ckbwi2) — School Config Service
+├── /subjects*                  → API GW (96y3eaw5b9) — Subject Service
+├── /teachers*                  → API GW (ooaa0mzts6) — Teacher Service
+├── /classes*                   → API GW (07l7jhdc7d) — Class Service
+├── /assignments*               → API GW (hy1ce6t917) — Division Assignment Service
+├── /divisions*                 → API GW (hy1ce6t917) — Division Assignment Service
+├── /elective-groups*           → API GW (hy1ce6t917) — Division Assignment Service
+├── /timetables*                → API GW (oi8y49acg0) — Timetable Service
+├── /dashboard*                 → API GW (974c7m4l1k) — Dashboard Service
+├── /export*                    → API GW (ou8ti6lcci) — Export Service
+└── /notifications*             → API GW (hymkzmxboc) — Notification Service
+```
+
+Each API behavior uses:
+- **Cache Policy**: `CachingDisabled` (no caching for API responses)
+- **Origin Request Policy**: `AllViewerExceptHostHeader` (forwards all headers except Host)
+- **Allowed Methods**: GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE
+
 ---
 
 ### 19.7 Security Architecture

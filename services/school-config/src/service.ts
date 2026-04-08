@@ -37,6 +37,31 @@ export class SchoolConfigService {
 
     this.validatePeriods(input.periods);
 
+    // If a soft-deleted record with the same name exists, hard-delete it and its children
+    // (DB unique constraint includes soft-deleted rows)
+    const stale = await prisma.periodStructure.findMany({
+      where: { schoolId, academicYearId, name: input.name, deletedAt: { not: null } },
+      select: { id: true },
+    });
+    if (stale.length > 0) {
+      const staleIds = stale.map(s => s.id);
+      // Delete slots → working days → period structure (respecting FK order)
+      const staleDays = await prisma.workingDay.findMany({
+        where: { periodStructureId: { in: staleIds } },
+        select: { id: true },
+      });
+      if (staleDays.length > 0) {
+        await prisma.slot.deleteMany({ where: { workingDayId: { in: staleDays.map(d => d.id) } } });
+      }
+      await prisma.workingDay.deleteMany({ where: { periodStructureId: { in: staleIds } } });
+      // Unlink any divisions still pointing to this structure
+      await prisma.division.updateMany({
+        where: { periodStructureId: { in: staleIds } },
+        data: { periodStructureId: null },
+      });
+      await prisma.periodStructure.deleteMany({ where: { id: { in: staleIds } } });
+    }
+
     const periodStructure = await prisma.periodStructure.create({
       data: {
         schoolId,

@@ -14,7 +14,7 @@ export function useWebSocket() {
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const wsRef = useRef<WebSocket | null>(null);
   const retriesRef = useRef(0);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const connect = useCallback(() => {
     if (!WS_URL || !token || !isAuthenticated) return;

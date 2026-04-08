@@ -36,44 +36,54 @@ functions:
     events:
       - httpApi:
           method: POST
-          path: /export/division/pdf
+          path: /api/export/division/pdf
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /export/division/excel
+          path: /api/export/division/excel
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /export/class/pdf
+          path: /api/export/class/pdf
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /export/class/excel
+          path: /api/export/class/excel
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /export/teacher/pdf
+          path: /api/export/classes/pdf
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /export/teacher/excel
+          path: /api/export/classes/excel
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /export/teachers/pdf
+          path: /api/export/teacher/pdf
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /export/teachers/excel
+          path: /api/export/teacher/excel
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/export/teachers/pdf
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/export/teachers/excel
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /export/health
+          path: /api/export/health

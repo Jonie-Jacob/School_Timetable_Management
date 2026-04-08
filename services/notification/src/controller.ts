@@ -17,7 +17,7 @@ export class NotificationController {
   }
 
   async list(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const pagination = parsePagination(event);
     const result = await service.list(ctx.schoolId, ctx.academicYearId, pagination);
@@ -25,21 +25,21 @@ export class NotificationController {
   }
 
   async count(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const result = await service.count(ctx.schoolId, ctx.academicYearId);
     return success(result);
   }
 
   async dismiss(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     await service.dismiss(ctx.schoolId, id);
     return noContent();
   }
 
   async dismissAll(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     await service.dismissAll(ctx.schoolId, ctx.academicYearId);
     return noContent();

@@ -105,9 +105,9 @@ export function Component() {
   const subjects = data?.data ?? [];
   const meta = data?.meta;
 
-  const handleCreate = async (values: { name: string }) => {
+  const handleCreate = async (values: { name: string; abbreviation?: string }) => {
     try {
-      await createSubject(values).unwrap();
+      await createSubject({ name: values.name, abbreviation: values.abbreviation || null }).unwrap();
       toast.success(t('createSuccess'));
       setFormOpen(false);
     } catch {
@@ -115,10 +115,10 @@ export function Component() {
     }
   };
 
-  const handleUpdate = async (values: { name: string }) => {
+  const handleUpdate = async (values: { name: string; abbreviation?: string }) => {
     if (!editTarget) return;
     try {
-      await updateSubject({ id: editTarget.id, ...values }).unwrap();
+      await updateSubject({ id: editTarget.id, name: values.name, abbreviation: values.abbreviation || null }).unwrap();
       toast.success(t('updateSuccess'));
       setEditTarget(null);
     } catch {
@@ -162,6 +162,16 @@ export function Component() {
         header: t('table.name'),
         cell: ({ row }) => (
           <InlineEditSubjectName subject={row.original} isReadOnly={isReadOnly} />
+        ),
+      },
+      {
+        accessorKey: 'abbreviation',
+        header: t('table.abbreviation'),
+        size: 100,
+        cell: ({ row }) => (
+          <span className="text-muted-foreground text-xs font-mono">
+            {row.original.abbreviation || '—'}
+          </span>
         ),
       },
       {
@@ -301,7 +311,7 @@ export function Component() {
         }}
         onSubmit={handleUpdate}
         isSubmitting={isUpdating}
-        defaultValues={editTarget ? { name: editTarget.name } : undefined}
+        defaultValues={editTarget ? { name: editTarget.name, abbreviation: editTarget.abbreviation || '' } : undefined}
         mode="edit"
       />
 

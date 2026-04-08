@@ -7,6 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAppDispatch } from '@/app/hooks';
 import { loggedIn } from './authSlice';
 import { mockRegister } from '@/lib/mock-auth';
+import { isCognitoMode, cognitoSignUp, cognitoConfirmSignUp, cognitoSignIn, cognitoResendConfirmation } from '@/lib/cognito-auth';
+import { saveSessionData } from '@/app/AuthenticatedLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -48,6 +50,10 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState(false);
+  const [confirmCode, setConfirmCode] = useState('');
+  const [savedValues, setSavedValues] = useState<RegisterValues | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const {
     register,
@@ -64,13 +70,129 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const onSubmit = async (values: RegisterValues) => {
     setServerError(null);
     try {
-      const user = await mockRegister(values.schoolName, values.email, values.password);
-      dispatch(loggedIn(user));
-      navigate('/', { replace: true });
-    } catch {
-      setServerError(t('register.errors.registrationFailed'));
+      if (isCognitoMode()) {
+        await cognitoSignUp(values.email, values.password);
+        // Cognito requires email verification — show confirmation code input
+        setSavedValues(values);
+        setPendingConfirmation(true);
+      } else {
+        const user = await mockRegister(values.schoolName, values.email, values.password);
+        dispatch(loggedIn(user));
+        navigate('/', { replace: true });
+      }
+    } catch (err: any) {
+      // If user already exists but not confirmed, allow confirmation
+      if (err?.code === 'UsernameExistsException') {
+        setServerError('An account with this email already exists. Please login instead.');
+      } else {
+        setServerError(err?.message || t('register.errors.registrationFailed'));
+      }
     }
   };
+
+  const handleConfirm = async () => {
+    if (!savedValues || !confirmCode.trim()) return;
+    setServerError(null);
+    setIsConfirming(true);
+    try {
+      // 1. Confirm the signup with the verification code
+      await cognitoConfirmSignUp(savedValues.email, confirmCode.trim());
+      // 2. Sign in to get tokens
+      const cognitoResult = await cognitoSignIn(savedValues.email, savedValues.password);
+      // 3. Register school in backend
+      const resp = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${cognitoResult.idToken}`,
+        },
+        body: JSON.stringify({ schoolName: savedValues.schoolName, adminEmail: savedValues.email, password: savedValues.password }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error?.message || 'Registration failed');
+      const schoolId = data.data?.school?.id || '';
+      const schoolName = data.data?.school?.name || savedValues.schoolName;
+      saveSessionData({ email: cognitoResult.email, schoolId, userId: cognitoResult.sub, schoolName });
+      dispatch(loggedIn({
+        token: cognitoResult.idToken,
+        email: cognitoResult.email,
+        schoolId,
+        userId: cognitoResult.sub,
+        schoolName,
+      }));
+      navigate('/', { replace: true });
+    } catch (err: any) {
+      setServerError(err?.message || 'Confirmation failed. Please check the code and try again.');
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!savedValues) return;
+    try {
+      await cognitoResendConfirmation(savedValues.email);
+      setServerError(null);
+    } catch (err: any) {
+      setServerError(err?.message || 'Failed to resend code.');
+    }
+  };
+
+  // Confirmation code step
+  if (pendingConfirmation && savedValues) {
+    return (
+      <Card className="border-0 shadow-none lg:border lg:shadow-sm">
+        <CardHeader className="space-y-1 px-0 lg:px-6">
+          <CardTitle className="text-2xl font-bold">Verify Your Email</CardTitle>
+          <CardDescription>
+            We sent a verification code to <strong>{savedValues.email}</strong>. Enter it below to complete registration.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-0 lg:px-6 space-y-4">
+          {serverError && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              {serverError}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="confirmCode">Verification Code</Label>
+            <Input
+              id="confirmCode"
+              placeholder="Enter 6-digit code"
+              value={confirmCode}
+              onChange={(e) => setConfirmCode(e.target.value)}
+              autoFocus
+              maxLength={6}
+            />
+          </div>
+
+          <Button
+            variant="gradient"
+            className="w-full"
+            onClick={handleConfirm}
+            loading={isConfirming}
+            disabled={!confirmCode.trim()}
+          >
+            {isConfirming ? 'Verifying...' : 'Verify & Continue'}
+          </Button>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Didn't receive the code?{' '}
+            <button type="button" onClick={handleResendCode} className="font-medium text-primary hover:underline">
+              Resend Code
+            </button>
+          </p>
+
+          <p className="text-center text-sm text-muted-foreground">
+            <button type="button" onClick={() => { setPendingConfirmation(false); setSavedValues(null); }} className="font-medium text-primary hover:underline">
+              Back to Registration
+            </button>
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-0 shadow-none lg:border lg:shadow-sm">

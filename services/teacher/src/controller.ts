@@ -23,7 +23,7 @@ export class TeacherController {
   }
 
   async create(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const body = parseBody(event, createTeacherSchema);
     const result = await service.create(ctx.schoolId, ctx.academicYearId, body);
@@ -31,7 +31,7 @@ export class TeacherController {
   }
 
   async list(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const pagination = parsePagination(event);
     const result = await service.list(ctx.schoolId, ctx.academicYearId, pagination);
@@ -39,14 +39,14 @@ export class TeacherController {
   }
 
   async getById(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const result = await service.getById(ctx.schoolId, ctx.academicYearId, id);
     return success(result);
   }
 
   async update(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const body = parseBody(event, updateTeacherSchema);
     const result = await service.update(ctx.schoolId, ctx.academicYearId, id, body);
@@ -54,7 +54,7 @@ export class TeacherController {
   }
 
   async delete(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const confirm = event.queryStringParameters?.confirm === 'true';
     await service.delete(ctx.schoolId, ctx.academicYearId, id, confirm);
@@ -62,7 +62,7 @@ export class TeacherController {
   }
 
   async setSubjects(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const body = parseBody(event, setTeacherSubjectsSchema);
     const result = await service.setSubjects(ctx.schoolId, ctx.academicYearId, id, body);
@@ -70,7 +70,7 @@ export class TeacherController {
   }
 
   async setAvailability(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
-    const auth = authMiddleware(event);
+    const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const body = parseBody(event, setTeacherAvailabilitySchema);
     const result = await service.setAvailability(ctx.schoolId, ctx.academicYearId, id, body);

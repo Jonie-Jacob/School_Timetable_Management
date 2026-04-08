@@ -1,6 +1,5 @@
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { AcademicYearSelector } from './AcademicYearSelector';
-import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 
 export function TopBar() {
@@ -22,7 +21,6 @@ export function TopBar() {
       {/* Right controls */}
       <div className="flex items-center gap-2">
         <AcademicYearSelector />
-        <ThemeToggle />
         <UserMenu />
       </div>
     </header>

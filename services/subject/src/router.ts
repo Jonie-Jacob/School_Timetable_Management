@@ -6,18 +6,19 @@ const controller = new SubjectController();
 
 export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const method = event.requestContext.http.method;
-  const path = event.rawPath;
+  const rawPath = event.rawPath;
+  const path = rawPath.startsWith('/api/') ? rawPath : `/api${rawPath}`;
 
-  if (method === 'GET' && path === '/subjects/health') {
+  if (method === 'GET' && path === '/api/subjects/health') {
     return controller.health();
   }
 
-  const idMatch = path.match(/^\/subjects\/([^/]+)$/);
+  const idMatch = path.match(/^\/api\/subjects\/([^/]+)$/);
 
-  if (method === 'POST' && path === '/subjects') {
+  if (method === 'POST' && path === '/api/subjects') {
     return controller.create(event);
   }
-  if (method === 'GET' && path === '/subjects') {
+  if (method === 'GET' && path === '/api/subjects') {
     return controller.list(event);
   }
   if (method === 'GET' && idMatch) {

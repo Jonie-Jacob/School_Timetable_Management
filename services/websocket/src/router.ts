@@ -7,27 +7,27 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
   const method = event.requestContext.http.method;
   const path = event.rawPath;
 
-  if (method === 'GET' && path === '/ws/health') {
+  if (method === 'GET' && path === '/api/ws/health') {
     return controller.health();
   }
 
   // Simulate WebSocket $connect
-  if (method === 'POST' && path === '/ws/connect') {
+  if (method === 'POST' && path === '/api/ws/connect') {
     return controller.connect(event);
   }
 
   // Simulate WebSocket $disconnect
-  if (method === 'POST' && path === '/ws/disconnect') {
+  if (method === 'POST' && path === '/api/ws/disconnect') {
     return controller.disconnect(event);
   }
 
   // Broadcast message to all connections for a school
-  if (method === 'POST' && path === '/ws/broadcast') {
+  if (method === 'POST' && path === '/api/ws/broadcast') {
     return controller.broadcast(event);
   }
 
   // List active connections (debug/admin)
-  if (method === 'GET' && path === '/ws/connections') {
+  if (method === 'GET' && path === '/api/ws/connections') {
     return controller.listConnections(event);
   }
 

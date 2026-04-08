@@ -20,7 +20,12 @@ export class SubjectService {
     }
 
     return prisma.subject.create({
-      data: { schoolId, academicYearId, name: input.name },
+      data: {
+        schoolId,
+        academicYearId,
+        name: input.name,
+        ...(input.abbreviation ? { abbreviation: input.abbreviation } : {}),
+      },
     });
   }
 
@@ -83,9 +88,13 @@ export class SubjectService {
       }
     }
 
+    const data: Record<string, unknown> = {};
+    if (input.name !== undefined) data.name = input.name;
+    if (input.abbreviation !== undefined) data.abbreviation = input.abbreviation || null;
+
     const updated = await prisma.subject.update({
       where: { id },
-      data: { ...(input.name ? { name: input.name } : {}) },
+      data,
     });
 
     if (input.name) {

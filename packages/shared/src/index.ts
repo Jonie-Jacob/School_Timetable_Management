@@ -25,6 +25,7 @@ export {
 // Middleware
 export {
   authMiddleware,
+  resolveSchoolId,
   academicYearMiddleware,
   requestLogger,
   errorHandler,

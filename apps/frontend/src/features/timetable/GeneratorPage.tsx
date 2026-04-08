@@ -8,7 +8,6 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader, ConfirmDialog } from '@/components/shared';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useGetClassQuery } from '@/features/classes/classApi';
 import {
   useGenerateTimetableMutation,
@@ -22,7 +21,7 @@ export function Component() {
   const navigate = useNavigate();
 
   const { data: classItem } = useGetClassQuery(classId!, { skip: !classId });
-  const { data: timetableGrid } = useGetDivisionTimetableQuery(divisionId!, { skip: !divisionId });
+  const { data: timetableGrid, refetch: refetchTimetable } = useGetDivisionTimetableQuery(divisionId!, { skip: !divisionId });
 
   const [generateTimetable, { isLoading: isGenerating }] = useGenerateTimetableMutation();
 
@@ -41,11 +40,12 @@ export function Component() {
     if (jobStatus?.status === 'COMPLETED') {
       toast.success(t('generator.success'));
       setActiveJobId(null);
+      refetchTimetable();
     } else if (jobStatus?.status === 'FAILED') {
       toast.error(t('generator.failed'));
       setActiveJobId(null);
     }
-  }, [jobStatus?.status, t]);
+  }, [jobStatus?.status, t, refetchTimetable]);
 
   const division = classItem?.divisions?.find((d) => d.id === divisionId);
   const timetable = timetableGrid?.timetable;
@@ -67,7 +67,10 @@ export function Component() {
       const job = Array.isArray(result) ? result[0] : result;
       if (job?.jobId) {
         setActiveJobId(job.jobId);
-      } else {
+      }
+      // Always refetch — mock generator completes inline
+      refetchTimetable();
+      if (!job?.jobId) {
         toast.success(t('generator.success'));
       }
     } catch {
@@ -103,9 +106,9 @@ export function Component() {
         <div className="flex items-center gap-4">
           <div className={`flex size-12 shrink-0 items-center justify-center rounded-xl ${
             timetable?.status === 'GENERATED'
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              ? 'bg-emerald-500/10 text-emerald-600'
               : timetable?.status === 'OUTDATED'
-                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                ? 'bg-amber-500/10 text-amber-600'
                 : 'bg-muted text-muted-foreground'
           }`}>
             {timetable?.status === 'GENERATED' ? (

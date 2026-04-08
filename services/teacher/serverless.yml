@@ -35,39 +35,39 @@ functions:
     events:
       - httpApi:
           method: POST
-          path: /teachers
+          path: /api/teachers
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /teachers
+          path: /api/teachers
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /teachers/{id}
+          path: /api/teachers/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /teachers/{id}
+          path: /api/teachers/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: DELETE
-          path: /teachers/{id}
+          path: /api/teachers/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /teachers/{id}/subjects
+          path: /api/teachers/{id}/subjects
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /teachers/{id}/availability
+          path: /api/teachers/{id}/availability
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /teachers/health
+          path: /api/teachers/health

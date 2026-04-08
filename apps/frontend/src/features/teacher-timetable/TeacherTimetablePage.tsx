@@ -1,28 +1,33 @@
 import { useState, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Eye, CalendarDays, Coffee, UtensilsCrossed } from 'lucide-react';
+import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { PageHeader } from '@/components/shared';
+import { ExportButton } from '@/components/shared/ExportButton';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGetTeachersQuery } from '@/features/teachers/teacherApi';
 import { useGetTeacherTimetableQuery } from '@/features/timetable/timetableApi';
+import {
+  useExportTeacherPdfMutation, useExportTeacherExcelMutation,
+  downloadHtmlAsPdf, downloadExcel,
+} from '@/features/export/exportApi';
 
 const DAY_LABELS: Record<number, string> = {
   0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat',
 };
 
 const SUBJECT_COLORS = [
-  'bg-blue-300 dark:bg-blue-700 text-blue-950 dark:text-blue-50',
-  'bg-emerald-300 dark:bg-emerald-700 text-emerald-950 dark:text-emerald-50',
-  'bg-violet-300 dark:bg-violet-700 text-violet-950 dark:text-violet-50',
-  'bg-orange-300 dark:bg-orange-700 text-orange-950 dark:text-orange-50',
-  'bg-pink-300 dark:bg-pink-700 text-pink-950 dark:text-pink-50',
-  'bg-cyan-300 dark:bg-cyan-700 text-cyan-950 dark:text-cyan-50',
-  'bg-amber-300 dark:bg-amber-700 text-amber-950 dark:text-amber-50',
-  'bg-rose-300 dark:bg-rose-700 text-rose-950 dark:text-rose-50',
+  'bg-blue-300 text-blue-950',
+  'bg-emerald-300 text-emerald-950',
+  'bg-violet-300 text-violet-950',
+  'bg-orange-300 text-orange-950',
+  'bg-pink-300 text-pink-950',
+  'bg-cyan-300 text-cyan-950',
+  'bg-amber-300 text-amber-950',
+  'bg-rose-300 text-rose-950',
 ];
 
 function getSubjectColor(name: string): string {
@@ -42,11 +47,12 @@ function parseTimeToMinutes(time: string): number {
 }
 
 export function Component() {
-  const { t } = useTranslation();
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
 
   const { data: teachersData, isLoading: teachersLoading } = useGetTeachersQuery({ pageSize: 200 });
   const { data: grid, isLoading: gridLoading } = useGetTeacherTimetableQuery(selectedTeacherId, { skip: !selectedTeacherId });
+  const [exportPdf] = useExportTeacherPdfMutation();
+  const [exportExcel] = useExportTeacherExcelMutation();
 
   const teachers = teachersData?.data ?? [];
   const selectedTeacher = teachers.find((t) => t.id === selectedTeacherId);
@@ -95,6 +101,24 @@ export function Component() {
                 ))}
               </SelectContent>
             </Select>
+            {selectedTeacherId && grid && (
+              <ExportButton
+                onExportPdf={async () => {
+                  try {
+                    const result = await exportPdf({ teacherId: selectedTeacherId }).unwrap();
+                    downloadHtmlAsPdf(result.html, result.filename);
+                    toast.success('Export ready — use browser print dialog to save as PDF');
+                  } catch { toast.error('Export failed'); }
+                }}
+                onExportExcel={async () => {
+                  try {
+                    const result = await exportExcel({ teacherId: selectedTeacherId }).unwrap();
+                    downloadExcel(result.base64, result.filename);
+                    toast.success('Excel downloaded');
+                  } catch { toast.error('Export failed'); }
+                }}
+              />
+            )}
           </div>
         }
       />
@@ -103,7 +127,7 @@ export function Component() {
 
       {!teachersLoading && !selectedTeacherId && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 mb-4">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-600 mb-4">
             <Eye className="size-7" />
           </div>
           <h3 className="text-lg font-semibold">Select a teacher</h3>

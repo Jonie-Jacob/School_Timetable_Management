@@ -6,26 +6,27 @@ const controller = new AcademicYearController();
 
 export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const method = event.requestContext.http.method;
-  const path = event.rawPath;
+  const rawPath = event.rawPath;
+  const path = rawPath.startsWith('/api/') ? rawPath : `/api${rawPath}`;
 
-  if (method === 'GET' && path === '/academic-years/health') {
+  if (method === 'GET' && path === '/api/academic-years/health') {
     return controller.health();
   }
 
   // Match /academic-years/:id/activate
-  const activateMatch = path.match(/^\/academic-years\/([^/]+)\/activate$/);
+  const activateMatch = path.match(/^\/api\/academic-years\/([^/]+)\/activate$/);
   if (method === 'PATCH' && activateMatch) {
     return controller.activate(event, activateMatch[1]);
   }
 
   // Match /academic-years/:id
-  const idMatch = path.match(/^\/academic-years\/([^/]+)$/);
+  const idMatch = path.match(/^\/api\/academic-years\/([^/]+)$/);
 
-  if (method === 'POST' && path === '/academic-years') {
+  if (method === 'POST' && path === '/api/academic-years') {
     return controller.create(event);
   }
 
-  if (method === 'GET' && path === '/academic-years') {
+  if (method === 'GET' && path === '/api/academic-years') {
     return controller.list(event);
   }
 

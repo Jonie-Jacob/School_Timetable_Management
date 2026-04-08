@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import { loggedOut } from '@/features/auth/authSlice';
 import { mockLogout } from '@/lib/mock-auth';
+import { isCognitoMode, cognitoSignOut } from '@/lib/cognito-auth';
+import { clearSessionData } from '@/app/AuthenticatedLayout';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -20,7 +22,12 @@ export function UserMenu() {
   const { schoolName, email } = useAppSelector((state) => state.auth);
 
   const handleLogout = () => {
-    mockLogout();
+    if (isCognitoMode()) {
+      cognitoSignOut();
+    } else {
+      mockLogout();
+    }
+    clearSessionData();
     dispatch(loggedOut());
     navigate('/login');
   };
@@ -30,7 +37,7 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-2">
           <Avatar className="size-7">
-            <AvatarFallback className="bg-amber-500/15 text-xs text-amber-700 dark:text-amber-400">
+            <AvatarFallback className="bg-amber-500/15 text-xs text-amber-700">
               {(schoolName?.[0] ?? 'S').toUpperCase()}
             </AvatarFallback>
           </Avatar>

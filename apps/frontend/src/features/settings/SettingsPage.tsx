@@ -1,4 +1,4 @@
-import { Settings, School, Palette, Globe } from 'lucide-react';
+import { School, Palette, Globe } from 'lucide-react';
 import { PageHeader } from '@/components/shared';
 import { Badge } from '@/components/ui/badge';
 

@@ -29,12 +29,12 @@ export function Component() {
     wizard && !wizard.dismissed && wizard.totalComplete < wizard.totalSteps;
 
   const cards = [
-    { icon: School, label: t('summaryCards.classes'), count: data?.counts?.classes ?? 0, to: '/classes', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-500/10' },
-    { icon: LayoutGrid, label: t('summaryCards.divisions'), count: data?.counts?.divisions ?? 0, to: '/classes', iconColor: 'text-sky-600 dark:text-sky-400', iconBg: 'bg-sky-500/10' },
-    { icon: Users, label: t('summaryCards.teachers'), count: data?.counts?.teachers ?? 0, to: '/teachers', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-500/10' },
-    { icon: BookOpen, label: t('summaryCards.subjects'), count: data?.counts?.subjects ?? 0, to: '/subjects', iconColor: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-500/10' },
-    { icon: CheckCircle2, label: t('summaryCards.generated'), count: generatedCount, to: '/teacher-timetable', iconColor: 'text-teal-600 dark:text-teal-400', iconBg: 'bg-teal-500/10' },
-    { icon: Clock, label: t('summaryCards.pending'), count: pendingCount, to: '/teacher-timetable', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-500/10' },
+    { icon: School, label: t('summaryCards.classes'), count: data?.counts?.classes ?? 0, to: '/classes', iconColor: 'text-violet-600', iconBg: 'bg-violet-500/10' },
+    { icon: LayoutGrid, label: t('summaryCards.divisions'), count: data?.counts?.divisions ?? 0, to: '/classes', iconColor: 'text-sky-600', iconBg: 'bg-sky-500/10' },
+    { icon: Users, label: t('summaryCards.teachers'), count: data?.counts?.teachers ?? 0, to: '/teachers', iconColor: 'text-emerald-600', iconBg: 'bg-emerald-500/10' },
+    { icon: BookOpen, label: t('summaryCards.subjects'), count: data?.counts?.subjects ?? 0, to: '/subjects', iconColor: 'text-rose-600', iconBg: 'bg-rose-500/10' },
+    { icon: CheckCircle2, label: t('summaryCards.generated'), count: generatedCount, to: '/teacher-timetable', iconColor: 'text-teal-600', iconBg: 'bg-teal-500/10' },
+    { icon: Clock, label: t('summaryCards.pending'), count: pendingCount, to: '/teacher-timetable', iconColor: 'text-amber-600', iconBg: 'bg-amber-500/10' },
   ];
 
   return (
@@ -77,7 +77,7 @@ export function Component() {
                 <h2 className="text-sm font-semibold">{t('setupWizard.title')}</h2>
                 <div className="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5">
                   <div className="size-1.5 rounded-full bg-amber-500" />
-                  <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                  <span className="text-[10px] font-medium text-amber-700">
                     {t('setupWizard.stepsComplete', {
                       count: wizard.totalComplete,
                       total: wizard.totalSteps,

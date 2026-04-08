@@ -11,6 +11,7 @@ import {
   Settings,
   Clock,
   CalendarCheck,
+  UserPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { SidebarLink } from './SidebarLink';
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { key: 'timetables', to: '/timetables', icon: CalendarCheck, color: 'text-lime-400' },
   { key: 'notifications', to: '/notifications', icon: Bell, color: 'text-yellow-400' },
   { key: 'teacherTimetable', to: '/teacher-timetable', icon: Eye, color: 'text-cyan-400' },
+  { key: 'unassignedSubjects', to: '/unassigned-subjects', icon: UserPlus, color: 'text-pink-400' },
   { key: 'settings', to: '/settings', icon: Settings, color: 'text-stone-400' },
 ] as const;
 

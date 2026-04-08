@@ -4,18 +4,18 @@ import { cn } from '@/lib/cn';
 import type { TimetableSlotAssignment } from './timetableApi';
 
 const SUBJECT_COLORS = [
-  'bg-blue-300 dark:bg-blue-700 text-blue-950 dark:text-blue-50',
-  'bg-emerald-300 dark:bg-emerald-700 text-emerald-950 dark:text-emerald-50',
-  'bg-violet-300 dark:bg-violet-700 text-violet-950 dark:text-violet-50',
-  'bg-orange-300 dark:bg-orange-700 text-orange-950 dark:text-orange-50',
-  'bg-pink-300 dark:bg-pink-700 text-pink-950 dark:text-pink-50',
-  'bg-cyan-300 dark:bg-cyan-700 text-cyan-950 dark:text-cyan-50',
-  'bg-amber-300 dark:bg-amber-700 text-amber-950 dark:text-amber-50',
-  'bg-rose-300 dark:bg-rose-700 text-rose-950 dark:text-rose-50',
-  'bg-teal-300 dark:bg-teal-700 text-teal-950 dark:text-teal-50',
-  'bg-indigo-300 dark:bg-indigo-700 text-indigo-950 dark:text-indigo-50',
-  'bg-lime-300 dark:bg-lime-700 text-lime-950 dark:text-lime-50',
-  'bg-fuchsia-300 dark:bg-fuchsia-700 text-fuchsia-950 dark:text-fuchsia-50',
+  'bg-blue-300 text-blue-950',
+  'bg-emerald-300 text-emerald-950',
+  'bg-violet-300 text-violet-950',
+  'bg-orange-300 text-orange-950',
+  'bg-pink-300 text-pink-950',
+  'bg-cyan-300 text-cyan-950',
+  'bg-amber-300 text-amber-950',
+  'bg-rose-300 text-rose-950',
+  'bg-teal-300 text-teal-950',
+  'bg-indigo-300 text-indigo-950',
+  'bg-lime-300 text-lime-950',
+  'bg-fuchsia-300 text-fuchsia-950',
 ];
 
 function getSubjectColor(name: string): string {

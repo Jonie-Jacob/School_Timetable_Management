@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Bell, CheckCircle2, X, Pencil, AlertTriangle, ExternalLink } from 'lucide-react';
+import { CheckCircle2, X, AlertTriangle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -80,7 +80,7 @@ export function Component() {
 
       {!isLoading && notifications.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-emerald-500/20 bg-emerald-500/5 backdrop-blur-sm p-12 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mb-4">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 mb-4">
             <CheckCircle2 className="size-7" />
           </div>
           <h3 className="text-lg font-semibold">All clear</h3>
@@ -101,7 +101,7 @@ export function Component() {
                 key={notif.id}
                 className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4 flex items-start gap-4 transition-all duration-300 hover:shadow-sm hover:border-amber-500/20"
               >
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 mt-0.5">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 mt-0.5">
                   <AlertTriangle className="size-4" />
                 </div>
                 <div className="flex-1 min-w-0 space-y-1">

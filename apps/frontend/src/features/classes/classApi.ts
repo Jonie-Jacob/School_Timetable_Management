@@ -7,6 +7,11 @@ export interface Division {
   label: string;
   streamName: string | null;
   periodStructureId: string | null;
+  classTeacherId: string | null;
+  classTeacher?: {
+    id: string;
+    name: string;
+  } | null;
   periodStructure?: {
     id: string;
     name: string;
@@ -32,9 +37,6 @@ export interface ClassItem {
   updatedAt: string;
 }
 
-interface ClassListResponse {
-  data: ClassItem[];
-}
 
 interface CreateClassRequest {
   name: string;
@@ -67,14 +69,46 @@ interface DeleteDivisionRequest {
   divisionId: string;
 }
 
+export interface SwapOption {
+  subjectId: string;
+  subjectName: string;
+  fromDivision: { id: string; label: string; className: string };
+  fromAssignmentId: string;
+  targetAssignmentId: string;
+  currentTeacherInTarget: { id: string; name: string };
+  currentTeacherIsClassTeacherOfSource: boolean;
+  currentTeacherIsClassTeacherOfTarget: boolean;
+}
+
+export interface ClassTeacherAnalysis {
+  case: 'A' | 'B' | 'C';
+  teacher: { id: string; name: string };
+  alreadyInDivision: boolean;
+  swapOptions: SwapOption[];
+  warning: string | null;
+}
+
+export interface ClassTeacherSwapResult {
+  swapped: boolean;
+  affectedTimetables: Array<{ id: string; divisionId: string }>;
+  warnings: string[];
+}
+
 export const classApi = createApi({
   reducerPath: 'classApi',
   baseQuery,
   tagTypes: ['Class'],
   endpoints: (builder) => ({
     getClasses: builder.query<ClassItem[], void>({
-      query: () => '/classes',
-      transformResponse: (response: { data: ClassItem[] }) => response.data,
+      query: () => 'classes',
+      transformResponse: (response: { data: any[] }) =>
+        response.data.map((cls) => ({
+          ...cls,
+          divisions: (cls.divisions ?? []).map((div: any) => ({
+            ...div,
+            timetable: div.timetables?.[0] ?? null,
+          })),
+        })) as ClassItem[],
       providesTags: (result) =>
         result
           ? [
@@ -85,14 +119,23 @@ export const classApi = createApi({
     }),
 
     getClass: builder.query<ClassItem, string>({
-      query: (id) => `/classes/${id}`,
-      transformResponse: (response: { data: ClassItem }) => response.data,
+      query: (id) => `classes/${id}`,
+      transformResponse: (response: { data: any }) => {
+        const cls = response.data;
+        return {
+          ...cls,
+          divisions: (cls.divisions ?? []).map((div: any) => ({
+            ...div,
+            timetable: div.timetables?.[0] ?? null,
+          })),
+        } as ClassItem;
+      },
       providesTags: (_result, _error, id) => [{ type: 'Class', id }],
     }),
 
     createClass: builder.mutation<ClassItem, CreateClassRequest>({
       query: (body) => ({
-        url: '/classes',
+        url: 'classes',
         method: 'POST',
         body,
       }),
@@ -102,7 +145,7 @@ export const classApi = createApi({
 
     updateClass: builder.mutation<ClassItem, UpdateClassRequest>({
       query: ({ id, ...body }) => ({
-        url: `/classes/${id}`,
+        url: `classes/${id}`,
         method: 'PUT',
         body,
       }),
@@ -115,7 +158,7 @@ export const classApi = createApi({
 
     deleteClass: builder.mutation<void, string>({
       query: (id) => ({
-        url: `/classes/${id}`,
+        url: `classes/${id}`,
         method: 'DELETE',
       }),
       invalidatesTags: [{ type: 'Class', id: 'LIST' }],
@@ -123,7 +166,7 @@ export const classApi = createApi({
 
     addDivision: builder.mutation<Division, CreateDivisionRequest>({
       query: ({ classId, ...body }) => ({
-        url: `/classes/${classId}/divisions`,
+        url: `classes/${classId}/divisions`,
         method: 'POST',
         body,
       }),
@@ -136,7 +179,7 @@ export const classApi = createApi({
 
     updateDivision: builder.mutation<Division, UpdateDivisionRequest>({
       query: ({ classId, divisionId, ...body }) => ({
-        url: `/classes/${classId}/divisions/${divisionId}`,
+        url: `classes/${classId}/divisions/${divisionId}`,
         method: 'PUT',
         body,
       }),
@@ -149,13 +192,65 @@ export const classApi = createApi({
 
     deleteDivision: builder.mutation<void, DeleteDivisionRequest>({
       query: ({ classId, divisionId }) => ({
-        url: `/classes/${classId}/divisions/${divisionId}`,
+        url: `classes/${classId}/divisions/${divisionId}`,
         method: 'DELETE',
       }),
       invalidatesTags: (_result, _error, { classId }) => [
         { type: 'Class', id: classId },
         { type: 'Class', id: 'LIST' },
       ],
+    }),
+
+    setClassTeacher: builder.mutation<Division, { classId: string; divisionId: string; teacherId: string }>({
+      query: ({ classId, divisionId, teacherId }) => ({
+        url: `classes/${classId}/divisions/${divisionId}/class-teacher`,
+        method: 'PUT',
+        body: { teacherId },
+      }),
+      transformResponse: (response: { data: Division }) => response.data,
+      invalidatesTags: (_result, _error, { classId }) => [
+        { type: 'Class', id: classId },
+        { type: 'Class', id: 'LIST' },
+      ],
+    }),
+
+    removeClassTeacher: builder.mutation<void, { classId: string; divisionId: string }>({
+      query: ({ classId, divisionId }) => ({
+        url: `classes/${classId}/divisions/${divisionId}/class-teacher`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, { classId }) => [
+        { type: 'Class', id: classId },
+        { type: 'Class', id: 'LIST' },
+      ],
+    }),
+
+    bulkSetClassTeacher: builder.mutation<{ updated: number }, { assignments: Array<{ divisionId: string; teacherId: string }> }>({
+      query: (body) => ({
+        url: 'classes/bulk-class-teacher',
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: [{ type: 'Class', id: 'LIST' }],
+    }),
+
+    analyzeClassTeacher: builder.mutation<ClassTeacherAnalysis, { classId: string; divisionId: string; teacherId: string }>({
+      query: ({ classId, divisionId, teacherId }) => ({
+        url: `classes/${classId}/divisions/${divisionId}/class-teacher-analyze`,
+        method: 'POST',
+        body: { teacherId },
+      }),
+      transformResponse: (response: { data: ClassTeacherAnalysis }) => response.data,
+    }),
+
+    executeClassTeacherSwap: builder.mutation<ClassTeacherSwapResult, { classId: string; divisionId: string; teacherId: string; fromAssignmentId: string; targetAssignmentId: string }>({
+      query: ({ classId, divisionId, ...body }) => ({
+        url: `classes/${classId}/divisions/${divisionId}/class-teacher-swap`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: ClassTeacherSwapResult }) => response.data,
+      invalidatesTags: [{ type: 'Class', id: 'LIST' }],
     }),
   }),
 });
@@ -169,4 +264,9 @@ export const {
   useAddDivisionMutation,
   useUpdateDivisionMutation,
   useDeleteDivisionMutation,
+  useSetClassTeacherMutation,
+  useRemoveClassTeacherMutation,
+  useBulkSetClassTeacherMutation,
+  useAnalyzeClassTeacherMutation,
+  useExecuteClassTeacherSwapMutation,
 } = classApi;

@@ -386,6 +386,158 @@ export class AssignmentService {
     await prisma.electiveGroupSubject.delete({ where: { id: link.id } });
   }
 
+  // ── Unassigned Teacher Subjects ──
+
+  async getUnassignedTeacherSubjects(
+    schoolId: string,
+    academicYearId: string,
+    filters?: { classId?: string; subjectId?: string; teacherId?: string }
+  ) {
+    // Get all teacher-subject pairs for this school/year
+    const teacherSubjects = await prisma.teacherSubject.findMany({
+      where: {
+        schoolId,
+        teacher: { academicYearId, deletedAt: null, ...(filters?.teacherId ? { id: filters.teacherId } : {}) },
+        subject: { academicYearId, deletedAt: null, ...(filters?.subjectId ? { id: filters.subjectId } : {}) },
+      },
+      include: {
+        teacher: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true } },
+      },
+    });
+
+    // Get all active division assignments
+    const assignedPairs = await prisma.divisionAssignment.findMany({
+      where: { schoolId, academicYearId, deletedAt: null },
+      select: { teacherId: true, subjectId: true },
+    });
+
+    const assignedSet = new Set(
+      assignedPairs.map((a) => `${a.teacherId}:${a.subjectId}`)
+    );
+
+    // Filter to unassigned
+    let unassigned = teacherSubjects.filter(
+      (ts) => !assignedSet.has(`${ts.teacherId}:${ts.subjectId}`)
+    );
+
+    // If filtering by class, further filter to subjects that could be assigned to divisions of that class
+    // (This is informational — any subject can be assigned to any division)
+
+    return unassigned.map((ts) => ({
+      teacherSubjectId: ts.id,
+      teacherId: ts.teacherId,
+      teacherName: ts.teacher.name,
+      subjectId: ts.subjectId,
+      subjectName: ts.subject.name,
+    }));
+  }
+
+  async quickAssign(
+    schoolId: string,
+    academicYearId: string,
+    input: { teacherId: string; subjectId: string; divisionId: string; weightage: number }
+  ) {
+    await this.ensureDivisionExists(schoolId, input.divisionId);
+    await this.validateTeacherSubject(schoolId, input.teacherId, input.subjectId);
+
+    // Check for duplicate
+    const existing = await prisma.divisionAssignment.findFirst({
+      where: {
+        schoolId, academicYearId,
+        divisionId: input.divisionId,
+        subjectId: input.subjectId,
+        teacherId: input.teacherId,
+        deletedAt: null,
+      },
+    });
+    if (existing) {
+      throw new ConflictError('This subject is already assigned to this teacher in this division');
+    }
+
+    // Check for scheduling conflicts
+    const conflicts: Array<{ divisionId: string; divisionLabel: string; className: string }> = [];
+
+    // Find if teacher is already assigned in other divisions that have timetables
+    const otherAssignments = await prisma.divisionAssignment.findMany({
+      where: {
+        schoolId, academicYearId,
+        teacherId: input.teacherId,
+        deletedAt: null,
+        divisionId: { not: input.divisionId },
+      },
+      include: {
+        division: {
+          select: { id: true, label: true, class: { select: { name: true } } },
+        },
+        timetableSlots: {
+          select: { workingDayId: true, slotId: true },
+        },
+      },
+    });
+
+    // Get timetable slots for the target division
+    const targetTimetable = await prisma.timetable.findFirst({
+      where: { schoolId, academicYearId, divisionId: input.divisionId },
+    });
+
+    if (targetTimetable) {
+      const targetSlots = await prisma.timetableSlot.findMany({
+        where: { timetableId: targetTimetable.id },
+        select: { workingDayId: true, slotId: true },
+      });
+
+      const targetSlotSet = new Set(
+        targetSlots.map((s) => `${s.workingDayId}:${s.slotId}`)
+      );
+
+      for (const oa of otherAssignments) {
+        for (const ts of oa.timetableSlots) {
+          if (targetSlotSet.has(`${ts.workingDayId}:${ts.slotId}`)) {
+            conflicts.push({
+              divisionId: oa.division.id,
+              divisionLabel: oa.division.label,
+              className: oa.division.class.name,
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    // Create the assignment regardless of conflicts
+    const assignment = await prisma.divisionAssignment.create({
+      data: {
+        schoolId, academicYearId,
+        divisionId: input.divisionId,
+        subjectId: input.subjectId,
+        teacherId: input.teacherId,
+        weightage: input.weightage,
+      },
+      include: {
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { id: true, name: true } },
+        assistantTeacher: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true } },
+      },
+    });
+
+    // If conflicts exist, create notifications
+    if (conflicts.length > 0 && targetTimetable) {
+      await prisma.timetableNotification.createMany({
+        data: conflicts.map((c) => ({
+          schoolId,
+          timetableId: targetTimetable.id,
+          divisionId: input.divisionId,
+          conflictType: 'ASSIGNMENT_CHANGED' as const,
+          changeDescription: `Teacher ${assignment.teacher.name} has a scheduling conflict with ${c.className}-${c.divisionLabel}`,
+        })),
+      });
+    }
+
+    return { assignment, conflicts };
+  }
+
   // ── Helpers ──
 
   private async ensureDivisionExists(schoolId: string, divisionId: string) {

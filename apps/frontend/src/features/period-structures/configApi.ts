@@ -60,7 +60,7 @@ export const configApi = createApi({
   tagTypes: ['PeriodStructure', 'Class'],
   endpoints: (builder) => ({
     getPeriodStructures: builder.query<PeriodStructure[], void>({
-      query: () => '/config/period-structures',
+      query: () => 'config/period-structures',
       transformResponse: (response: { data: PeriodStructure[] }) => response.data,
       providesTags: (result) =>
         result
@@ -72,7 +72,7 @@ export const configApi = createApi({
     }),
 
     getPeriodStructure: builder.query<PeriodStructure, string>({
-      query: (id) => `/config/period-structures/${id}`,
+      query: (id) => `config/period-structures/${id}`,
       transformResponse: (response: { data: PeriodStructure }) => response.data,
       providesTags: (_result, _error, id) => [{ type: 'PeriodStructure', id }],
     }),
@@ -82,7 +82,7 @@ export const configApi = createApi({
       { name: string; periods: SlotEntry[] }
     >({
       query: (body) => ({
-        url: '/config/period-structures',
+        url: 'config/period-structures',
         method: 'POST',
         body,
       }),
@@ -95,7 +95,7 @@ export const configApi = createApi({
       { id: string; name?: string; periods?: SlotEntry[] }
     >({
       query: ({ id, ...body }) => ({
-        url: `/config/period-structures/${id}`,
+        url: `config/period-structures/${id}`,
         method: 'PUT',
         body,
       }),
@@ -108,7 +108,7 @@ export const configApi = createApi({
 
     deletePeriodStructure: builder.mutation<void, string>({
       query: (id) => ({
-        url: `/config/period-structures/${id}`,
+        url: `config/period-structures/${id}`,
         method: 'DELETE',
       }),
       invalidatesTags: [{ type: 'PeriodStructure', id: 'LIST' }],
@@ -116,7 +116,7 @@ export const configApi = createApi({
 
     assignDivisions: builder.mutation<void, { periodStructureId: string; divisionIds: string[] }>({
       query: ({ periodStructureId, divisionIds }) => ({
-        url: `/config/period-structures/${periodStructureId}/assign`,
+        url: `config/period-structures/${periodStructureId}/assign`,
         method: 'POST',
         body: { divisionIds },
       }),
@@ -125,7 +125,7 @@ export const configApi = createApi({
 
     setWorkingDays: builder.mutation<WorkingDay[], { periodStructureId: string; days: string[] }>({
       query: ({ periodStructureId, days }) => ({
-        url: `/config/period-structures/${periodStructureId}/working-days`,
+        url: `config/period-structures/${periodStructureId}/working-days`,
         method: 'PUT',
         body: { days },
       }),
@@ -136,7 +136,7 @@ export const configApi = createApi({
     }),
 
     getClasses: builder.query<ClassItem[], void>({
-      query: () => '/classes',
+      query: () => 'classes',
       transformResponse: (response: { data: Array<{ id: string; name: string; sortOrder: number }> }) =>
         response.data.map(({ id, name, sortOrder }) => ({ id, name, sortOrder })),
       providesTags: [{ type: 'Class', id: 'LIST' }],

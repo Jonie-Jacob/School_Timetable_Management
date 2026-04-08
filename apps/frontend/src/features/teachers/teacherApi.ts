@@ -99,7 +99,7 @@ export const teacherApi = createApi({
         if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
         if (params?.search) searchParams.set('search', params.search);
         const qs = searchParams.toString();
-        return `/teachers${qs ? `?${qs}` : ''}`;
+        return `teachers${qs ? `?${qs}` : ''}`;
       },
       transformResponse: (response: { data: Teacher[]; meta: TeacherListResponse['meta'] }) => response,
       providesTags: (result) =>
@@ -112,14 +112,14 @@ export const teacherApi = createApi({
     }),
 
     getTeacher: builder.query<Teacher, string>({
-      query: (id) => `/teachers/${id}`,
+      query: (id) => `teachers/${id}`,
       transformResponse: (response: { data: Teacher }) => response.data,
       providesTags: (_result, _error, id) => [{ type: 'Teacher', id }],
     }),
 
     createTeacher: builder.mutation<Teacher, CreateTeacherRequest>({
       query: (body) => ({
-        url: '/teachers',
+        url: 'teachers',
         method: 'POST',
         body,
       }),
@@ -129,7 +129,7 @@ export const teacherApi = createApi({
 
     updateTeacher: builder.mutation<Teacher, UpdateTeacherRequest>({
       query: ({ id, ...body }) => ({
-        url: `/teachers/${id}`,
+        url: `teachers/${id}`,
         method: 'PUT',
         body,
       }),
@@ -142,7 +142,7 @@ export const teacherApi = createApi({
 
     deleteTeacher: builder.mutation<void, DeleteTeacherRequest>({
       query: ({ id, confirm }) => ({
-        url: `/teachers/${id}${confirm ? '?confirm=true' : ''}`,
+        url: `teachers/${id}${confirm ? '?confirm=true' : ''}`,
         method: 'DELETE',
       }),
       invalidatesTags: [{ type: 'Teacher', id: 'LIST' }],
@@ -150,7 +150,7 @@ export const teacherApi = createApi({
 
     setTeacherSubjects: builder.mutation<Teacher, SetTeacherSubjectsRequest>({
       query: ({ id, ...body }) => ({
-        url: `/teachers/${id}/subjects`,
+        url: `teachers/${id}/subjects`,
         method: 'PUT',
         body,
       }),
@@ -163,7 +163,7 @@ export const teacherApi = createApi({
 
     setTeacherAvailability: builder.mutation<Teacher, SetTeacherAvailabilityRequest>({
       query: ({ id, ...body }) => ({
-        url: `/teachers/${id}/availability`,
+        url: `teachers/${id}/availability`,
         method: 'PUT',
         body,
       }),

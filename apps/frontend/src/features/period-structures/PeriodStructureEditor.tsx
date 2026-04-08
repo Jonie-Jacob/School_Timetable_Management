@@ -15,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PageHeader, MultiSelect, ConfirmDialog } from '@/components/shared';
+import { PageHeader, ConfirmDialog } from '@/components/shared';
+import { Badge } from '@/components/ui/badge';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { DaySlotList } from './DaySlotList';
 import {
@@ -24,9 +25,9 @@ import {
   useUpdatePeriodStructureMutation,
   useAssignDivisionsMutation,
   useSetWorkingDaysMutation,
-  useGetClassesQuery,
   type SlotEntry,
 } from './configApi';
+import { useGetClassesQuery } from '@/features/classes/classApi';
 import { ALL_DAYS, DAY_TO_NUMBER, NUMBER_TO_DAY, type DayKey, type EditorSlot } from './types';
 
 // ---------------------------------------------------------------------------
@@ -159,13 +160,6 @@ export function Component() {
       setActiveDay(days[0]);
     }
   }, [existing]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Class options for MultiSelect
-  const classOptions = useMemo(
-    () =>
-      allClasses.map((c) => ({ value: c.id, label: c.name })),
-    [allClasses],
-  );
 
   // Working day toggle
   const toggleDay = useCallback(
@@ -345,15 +339,74 @@ export function Component() {
         </div>
       </div>
 
-      {/* Assigned Classes */}
-      <div className="space-y-2 max-w-md">
+      {/* Assigned Divisions */}
+      <div className="space-y-2">
         <Label>{t('editor.assignedClasses')}</Label>
-        <MultiSelect
-          options={classOptions}
-          value={selectedClassIds}
-          onChange={setSelectedClassIds}
-          placeholder={t('editor.classesPlaceholder')}
-        />
+        <p className="text-xs text-muted-foreground">Select which divisions should use this period structure.</p>
+        <div className="rounded-lg border border-border/40 bg-card/60 backdrop-blur-sm p-3 space-y-2 max-h-64 overflow-y-auto">
+          {allClasses.length === 0 && (
+            <p className="text-sm text-muted-foreground italic">No classes found. Create classes first.</p>
+          )}
+          {allClasses.map((cls) => {
+            const divs = cls.divisions ?? [];
+            if (divs.length === 0) return null;
+            const allSelected = divs.every((d) => selectedClassIds.includes(d.id));
+            const someSelected = divs.some((d) => selectedClassIds.includes(d.id));
+            return (
+              <div key={cls.id} className="space-y-1">
+                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer hover:text-amber-600 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                    onChange={() => {
+                      const divIds = divs.map((d) => d.id);
+                      if (allSelected) {
+                        setSelectedClassIds((prev) => prev.filter((id) => !divIds.includes(id)));
+                      } else {
+                        setSelectedClassIds((prev) => [...new Set([...prev, ...divIds])]);
+                      }
+                    }}
+                    className="size-4 rounded border-stone-300 text-amber-500 focus:ring-amber-500"
+                  />
+                  {cls.name}
+                  <span className="text-xs text-muted-foreground font-normal">
+                    ({divs.filter((d) => selectedClassIds.includes(d.id)).length}/{divs.length})
+                  </span>
+                </label>
+                <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1">
+                  {divs.map((d) => (
+                    <label key={d.id} className="flex items-center gap-1.5 text-xs cursor-pointer hover:text-amber-600 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={selectedClassIds.includes(d.id)}
+                        onChange={() => {
+                          setSelectedClassIds((prev) =>
+                            prev.includes(d.id) ? prev.filter((id) => id !== d.id) : [...prev, d.id]
+                          );
+                        }}
+                        className="size-3.5 rounded border-stone-300 text-amber-500 focus:ring-amber-500"
+                      />
+                      Div {d.label}{d.streamName ? ` (${d.streamName})` : ''}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {selectedClassIds.length > 0 && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="secondary" className="text-[10px]">{selectedClassIds.length} division(s) selected</Badge>
+            <button
+              type="button"
+              className="text-amber-600 hover:underline"
+              onClick={() => setSelectedClassIds([])}
+            >
+              Clear all
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Day-wise Slot Configuration */}

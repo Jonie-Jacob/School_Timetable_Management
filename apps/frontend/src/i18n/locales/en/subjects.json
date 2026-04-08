@@ -15,6 +15,7 @@
   "deleteWarningGeneric": "This subject has active assignments. Deleting will remove those assignments and flag affected timetables as outdated.",
   "table": {
     "name": "Subject Name",
+    "abbreviation": "Abbr.",
     "actions": "Actions"
   },
   "form": {
@@ -22,6 +23,9 @@
     "editTitle": "Edit Subject",
     "name": "Subject Name",
     "namePlaceholder": "Enter subject name",
+    "abbreviation": "Abbreviation",
+    "abbreviationPlaceholder": "e.g. Phy, Maths, CS",
+    "abbreviationHint": "Short code shown in timetable grid (max 10 chars). Optional.",
     "save": "Save",
     "saving": "Saving...",
     "cancel": "Cancel"

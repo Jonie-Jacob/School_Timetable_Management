@@ -225,9 +225,12 @@ Complex desktop single-page views that split into multiple screens or fundamenta
 | 16 | WebSocket Integration | — | Medium | 1 | ✅ Complete |
 | 17 | i18n Setup | — | Low | 1 | ✅ Complete |
 | 18 | Final Responsive Polish & QA | All | Medium | 1 | ✅ Complete |
+| 19 | Class Teacher Assignment | Classes Detail | Low | 1 | ✅ Complete |
+| 20 | Export Integration | Timetables, Teacher View | Medium | 1 | ✅ Complete |
+| 21 | Unassigned Teacher Subjects | New Page | Medium | 1 | ✅ Complete |
 
-**Total Phases**: 19 (with sub-parts: ~29 deliverables)
-**Completed**: 19/19 | **Partially Complete**: 0/19 | **Not Started**: 0/19
+**Total Phases**: 22 (with sub-parts: ~32 deliverables)
+**Completed**: 22/22 | **Partially Complete**: 0/22 | **Not Started**: 0/22
 
 ### Detailed Phase Completion Notes
 
@@ -354,6 +357,37 @@ All tasks complete: i18next configured with LanguageDetector, 7 namespace files 
 - ✅ All pages have loading skeletons (Skeleton component used in 15 feature files)
 - ✅ All list pages have empty states with descriptive messages and CTA buttons
 - ✅ Error boundaries wrap all feature routes (FeatureErrorBoundary in AppShell)
+
+#### ✅ Phase 19 — Class Teacher Assignment (April 8, 2026)
+- ✅ DB: Added `class_teacher_id` nullable FK to `divisions` table
+- ✅ Backend: 3 new endpoints — `PUT/DELETE /classes/:classId/divisions/:divisionId/class-teacher`, `PUT /classes/bulk-class-teacher`
+- ✅ Backend: Class list/detail now includes `classTeacher { id, name }` in division responses
+- ✅ Backend: Validation — teacher must have at least one division assignment to be eligible
+- ✅ Frontend: `ClassDetailPage` — inline class teacher selector dropdown per division card
+- ✅ Frontend: Dropdown shows only eligible teachers (those with assignments in the division)
+- ✅ Frontend: Remove button (X icon) to unset class teacher
+- ✅ RTK Query: `setClassTeacher`, `removeClassTeacher`, `bulkSetClassTeacher` mutations
+
+#### ✅ Phase 20 — Export Integration (April 8, 2026)
+- ✅ Backend: Export service now returns HTML/base64 content inline (no filesystem writes)
+- ✅ Backend: Added multi-class export endpoints (`POST /export/classes/pdf`, `/export/classes/excel`)
+- ✅ Frontend: New `exportApi.ts` RTK Query slice with 10 mutation endpoints
+- ✅ Frontend: Shared `ExportButton` component — dropdown with PDF/Excel options, loading state
+- ✅ Frontend: Timetables Overview — "Export All" button + per-row export for generated divisions
+- ✅ Frontend: Teacher Timetable View — export button for selected teacher
+- ✅ Download helpers: `downloadHtmlAsPdf()` opens print dialog, `downloadExcel()` triggers browser download
+
+#### ✅ Phase 21 — Unassigned Teacher Subjects (April 8, 2026)
+- ✅ DB: Created `unassigned_teacher_subjects` SQL view (regular view, not materialized)
+- ✅ Backend: `GET /assignments/unassigned` — lists teacher-subject pairs with no division assignment, optional filters (classId, subjectId, teacherId)
+- ✅ Backend: `POST /assignments/quick-assign` — assigns teacher-subject to division with conflict detection, creates notifications for conflicts
+- ✅ Frontend: New `UnassignedSubjectsPage.tsx` at `/unassigned-subjects`
+- ✅ Frontend: Sidebar item with UserPlus icon (pink-400 color)
+- ✅ Frontend: Filter bar (subject, teacher dropdowns)
+- ✅ Frontend: Table with rose-tinted rows, colored dot indicator, "+" assign button per row
+- ✅ Frontend: Assign dialog — division dropdown (grouped by class), weightage input, conflict warning
+- ✅ Frontend: Conflict handling — assigns anyway, shows warning toast, creates notification
+- ✅ RTK Query: `getUnassignedSubjects` query + `quickAssign` mutation with cache invalidation
 - ✅ Dark mode: warm gradient bg uses solid dark in dark mode, orbs at 5% opacity
 - ✅ Responsive: DataTable switches to card view on mobile, timetable grids horizontal-scroll
 - ✅ Glassmorphism: all cards, buttons, inputs have backdrop-blur and glass effects

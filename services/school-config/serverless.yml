@@ -35,54 +35,84 @@ functions:
     events:
       - httpApi:
           method: POST
-          path: /config/period-structures
+          path: /api/config/period-structures
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /config/period-structures
+          path: /api/config/period-structures
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /config/period-structures/{id}
+          path: /api/config/period-structures/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /config/period-structures/{id}
+          path: /api/config/period-structures/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: DELETE
-          path: /config/period-structures/{id}
+          path: /api/config/period-structures/{id}
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /config/period-structures/{id}/assign
+          path: /api/config/period-structures/{id}/assign
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: PUT
-          path: /config/working-days
+          path: /api/config/period-structures/{id}/working-days
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /config/working-days
+          path: /api/config/period-structures/{id}/working-days
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
-          path: /config/slots/generate
+          path: /api/config/period-structures/{id}/slots/generate
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /config/slots
+          path: /api/config/period-structures/{id}/slots
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/config/period-structures/{id}/days/{dayId}/slots
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: PUT
+          path: /api/config/period-structures/{id}/days/{dayId}/slots/{slotId}
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: DELETE
+          path: /api/config/period-structures/{id}/days/{dayId}/slots/{slotId}
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: PUT
+          path: /api/config/period-structures/{id}/days/{dayId}/slots/reorder
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/config/period-structures/{id}/days/{dayId}/copy-from/{sourceDayId}
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/config/period-structures/{id}/reset
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
-          path: /config/health
+          path: /api/config/health

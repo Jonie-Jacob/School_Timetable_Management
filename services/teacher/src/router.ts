@@ -6,30 +6,31 @@ const controller = new TeacherController();
 
 export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const method = event.requestContext.http.method;
-  const path = event.rawPath;
+  const rawPath = event.rawPath;
+  const path = rawPath.startsWith('/api/') ? rawPath : `/api${rawPath}`;
 
-  if (method === 'GET' && path === '/teachers/health') {
+  if (method === 'GET' && path === '/api/teachers/health') {
     return controller.health();
   }
 
   // Nested routes: /teachers/:id/subjects, /teachers/:id/availability
-  const subjectsMatch = path.match(/^\/teachers\/([^/]+)\/subjects$/);
+  const subjectsMatch = path.match(/^\/api\/teachers\/([^/]+)\/subjects$/);
   if (method === 'PUT' && subjectsMatch) {
     return controller.setSubjects(event, subjectsMatch[1]);
   }
 
-  const availabilityMatch = path.match(/^\/teachers\/([^/]+)\/availability$/);
+  const availabilityMatch = path.match(/^\/api\/teachers\/([^/]+)\/availability$/);
   if (method === 'PUT' && availabilityMatch) {
     return controller.setAvailability(event, availabilityMatch[1]);
   }
 
   // Base routes: /teachers, /teachers/:id
-  const idMatch = path.match(/^\/teachers\/([^/]+)$/);
+  const idMatch = path.match(/^\/api\/teachers\/([^/]+)$/);
 
-  if (method === 'POST' && path === '/teachers') {
+  if (method === 'POST' && path === '/api/teachers') {
     return controller.create(event);
   }
-  if (method === 'GET' && path === '/teachers') {
+  if (method === 'GET' && path === '/api/teachers') {
     return controller.list(event);
   }
   if (method === 'GET' && idMatch) {

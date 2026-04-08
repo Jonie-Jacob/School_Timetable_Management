@@ -6,25 +6,26 @@ const controller = new DashboardController();
 
 export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const method = event.requestContext.http.method;
-  const path = event.rawPath;
+  const rawPath = event.rawPath;
+  const path = rawPath.startsWith('/api/') ? rawPath : `/api${rawPath}`;
 
-  if (method === 'GET' && path === '/dashboard/health') {
+  if (method === 'GET' && path === '/api/dashboard/health') {
     return controller.health();
   }
 
-  if (method === 'GET' && path === '/dashboard/stats') {
+  if (method === 'GET' && path === '/api/dashboard/stats') {
     return controller.getStats(event);
   }
 
-  if (method === 'GET' && path === '/dashboard/recent-activity') {
+  if (method === 'GET' && path === '/api/dashboard/recent-activity') {
     return controller.getRecentActivity(event);
   }
 
-  if (method === 'GET' && path === '/dashboard/setup-wizard') {
+  if (method === 'GET' && path === '/api/dashboard/setup-wizard') {
     return controller.getSetupWizard(event);
   }
 
-  if (method === 'PUT' && path === '/dashboard/setup-wizard/dismiss') {
+  if (method === 'PUT' && path === '/api/dashboard/setup-wizard/dismiss') {
     return controller.dismissSetupWizard(event);
   }
 

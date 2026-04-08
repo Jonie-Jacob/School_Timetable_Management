@@ -3,9 +3,6 @@ import {
 } from '@timetable/shared';
 import { SlotType } from '@prisma/client';
 import ExcelJS from 'exceljs';
-import * as fs from 'fs';
-import * as path from 'path';
-
 // ── Types for internal grid structures ──
 
 interface SlotInfo {
@@ -30,14 +27,6 @@ interface TimetableGrid {
 }
 
 // ── Helpers ──
-
-const EXPORTS_DIR = path.resolve(process.cwd(), 'exports');
-
-function ensureExportsDir() {
-  if (!fs.existsSync(EXPORTS_DIR)) {
-    fs.mkdirSync(EXPORTS_DIR, { recursive: true });
-  }
-}
 
 function formatTime(d: Date): string {
   const h = d.getUTCHours().toString().padStart(2, '0');
@@ -353,16 +342,10 @@ export class ExportService {
     const grid = await this.getDivisionGrid(schoolId, academicYearId, divisionId);
     const html = this.renderHtml(grid);
 
-    ensureExportsDir();
-    const filename = `division_${divisionId}_${Date.now()}.html`;
-    const filePath = path.join(EXPORTS_DIR, filename);
-    fs.writeFileSync(filePath, html, 'utf-8');
-
     return {
       format: 'pdf',
-      message: 'In local dev, an HTML preview is generated. In production, Chromium renders PDF and uploads to S3.',
-      filePath: filePath,
-      filename,
+      html,
+      filename: `${grid.title.replace(/\s+/g, '_')}_Timetable.html`,
     };
   }
 
@@ -370,16 +353,10 @@ export class ExportService {
     const grid = await this.getTeacherGrid(schoolId, academicYearId, teacherId);
     const html = this.renderHtml(grid);
 
-    ensureExportsDir();
-    const filename = `teacher_${teacherId}_${Date.now()}.html`;
-    const filePath = path.join(EXPORTS_DIR, filename);
-    fs.writeFileSync(filePath, html, 'utf-8');
-
     return {
       format: 'pdf',
-      message: 'In local dev, an HTML preview is generated. In production, Chromium renders PDF and uploads to S3.',
-      filePath: filePath,
-      filename,
+      html,
+      filename: `${grid.title.replace(/\s+/g, '_')}_Timetable.html`,
     };
   }
 
@@ -392,17 +369,12 @@ export class ExportService {
       grids.push(await this.getDivisionGrid(schoolId, academicYearId, div.id));
     }
 
-    const htmlPages = grids.map(g => this.renderHtml(g)).join('<div style="page-break-after: always;"></div>\n');
-    ensureExportsDir();
-    const filename = `class_${classId}_${Date.now()}.html`;
-    const filePath = path.join(EXPORTS_DIR, filename);
-    fs.writeFileSync(filePath, htmlPages, 'utf-8');
+    const html = grids.map(g => this.renderHtml(g)).join('<div style="page-break-after: always;"></div>\n');
 
     return {
       format: 'pdf',
-      message: 'In local dev, an HTML preview is generated. In production, Chromium renders PDF and uploads to S3.',
-      filePath,
-      filename,
+      html,
+      filename: `Class_Timetable_${Date.now()}.html`,
       divisionsIncluded: divisions.length,
     };
   }
@@ -414,6 +386,39 @@ export class ExportService {
       grids.push(await this.getDivisionGrid(schoolId, academicYearId, div.id));
     }
     return this.generateMultiSheetExcel(grids, `class_${classId}`);
+  }
+
+  // ── Multi-class Export ──
+
+  async exportClassesPdf(schoolId: string, academicYearId: string, classIds: string[]) {
+    const grids: TimetableGrid[] = [];
+    for (const classId of classIds) {
+      const divisions = await this.getClassDivisions(schoolId, academicYearId, classId);
+      for (const div of divisions) {
+        grids.push(await this.getDivisionGrid(schoolId, academicYearId, div.id));
+      }
+    }
+    if (grids.length === 0) throw new AppError('No timetable data found for the selected classes', 404, 'NO_TIMETABLE');
+
+    const html = grids.map(g => this.renderHtml(g)).join('<div style="page-break-after: always;"></div>\n');
+    return {
+      format: 'pdf',
+      html,
+      filename: `Classes_Timetable_${Date.now()}.html`,
+      divisionsIncluded: grids.length,
+    };
+  }
+
+  async exportClassesExcel(schoolId: string, academicYearId: string, classIds: string[]) {
+    const grids: TimetableGrid[] = [];
+    for (const classId of classIds) {
+      const divisions = await this.getClassDivisions(schoolId, academicYearId, classId);
+      for (const div of divisions) {
+        grids.push(await this.getDivisionGrid(schoolId, academicYearId, div.id));
+      }
+    }
+    if (grids.length === 0) throw new AppError('No timetable data found for the selected classes', 404, 'NO_TIMETABLE');
+    return this.generateMultiSheetExcel(grids, `Classes_Timetable`);
   }
 
   // ── Multi-teacher Export ──
@@ -430,17 +435,12 @@ export class ExportService {
     }
     if (grids.length === 0) throw new AppError('No timetable data found for the selected teachers', 404, 'NO_TIMETABLE');
 
-    const htmlPages = grids.map(g => this.renderHtml(g)).join('<div style="page-break-after: always;"></div>\n');
-    ensureExportsDir();
-    const filename = `teachers_${Date.now()}.html`;
-    const filePath = path.join(EXPORTS_DIR, filename);
-    fs.writeFileSync(filePath, htmlPages, 'utf-8');
+    const html = grids.map(g => this.renderHtml(g)).join('<div style="page-break-after: always;"></div>\n');
 
     return {
       format: 'pdf',
-      message: 'In local dev, an HTML preview is generated. In production, Chromium renders PDF and uploads to S3.',
-      filePath,
-      filename,
+      html,
+      filename: `Teachers_Timetable_${Date.now()}.html`,
       teachersIncluded: grids.length,
     };
   }
@@ -564,24 +564,22 @@ export class ExportService {
       }
     }
 
-    ensureExportsDir();
-    const filename = `${prefix}_${Date.now()}.xlsx`;
-    const filePath = path.join(EXPORTS_DIR, filename);
-    await workbook.xlsx.writeFile(filePath);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const base64 = Buffer.from(buffer as ArrayBuffer).toString('base64');
 
-    return { format: 'excel', filePath, filename, sheetsIncluded: grids.length };
+    return { format: 'excel', base64, filename: `${prefix}.xlsx`, sheetsIncluded: grids.length };
   }
 
   // ─��� Excel Export ──
 
   async exportDivisionExcel(schoolId: string, academicYearId: string, divisionId: string) {
     const grid = await this.getDivisionGrid(schoolId, academicYearId, divisionId);
-    return this.generateExcel(grid, `division_${divisionId}`);
+    return this.generateExcel(grid, `${grid.title.replace(/\s+/g, '_')}_Timetable`);
   }
 
   async exportTeacherExcel(schoolId: string, academicYearId: string, teacherId: string) {
     const grid = await this.getTeacherGrid(schoolId, academicYearId, teacherId);
-    return this.generateExcel(grid, `teacher_${teacherId}`);
+    return this.generateExcel(grid, `${grid.title.replace(/\s+/g, '_')}_Timetable`);
   }
 
   private async generateExcel(grid: TimetableGrid, prefix: string) {
@@ -679,16 +677,13 @@ export class ExportService {
       }
     }
 
-    // Write file
-    ensureExportsDir();
-    const filename = `${prefix}_${Date.now()}.xlsx`;
-    const filePath = path.join(EXPORTS_DIR, filename);
-    await workbook.xlsx.writeFile(filePath);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const base64 = Buffer.from(buffer as ArrayBuffer).toString('base64');
 
     return {
       format: 'excel',
-      filePath,
-      filename,
+      base64,
+      filename: `${prefix}.xlsx`,
     };
   }
 }
