@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CalendarDays, Eye, Zap, CheckCircle2, AlertTriangle, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAppDispatch } from '@/app/hooks';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader, ConfirmDialog } from '@/components/shared';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useGetClassesQuery } from '@/features/classes/classApi';
+import { classApi, useGetClassesQuery } from '@/features/classes/classApi';
 import { useGenerateTimetableMutation } from './timetableApi';
 import {
   useExportDivisionPdfMutation, useExportDivisionExcelMutation,
@@ -19,6 +20,7 @@ import {
 export function Component() {
   useTranslation();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
 
   const { data: classes, isLoading } = useGetClassesQuery(undefined, { refetchOnMountOrArgChange: true });
   const [generateAll, { isLoading: isGeneratingAll }] = useGenerateTimetableMutation();
@@ -50,8 +52,12 @@ export function Component() {
     }
     try {
       await generateAll({ divisionIds: pendingIds }).unwrap();
+      // Invalidate classes cache so timetable statuses refresh
+      dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
       toast.success(`Generated timetables for ${pendingIds.length} division(s).`);
     } catch {
+      // Even on partial failure, refresh to show what succeeded
+      dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
       toast.error('Some timetables failed to generate. Check individual divisions.');
     }
   };

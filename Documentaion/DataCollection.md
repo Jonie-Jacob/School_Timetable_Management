@@ -125,8 +125,7 @@ Collect from: **Academic Coordinator**
 | 17 | History | HIS | ✓ |
 | 18 | Political Science | PS | ✓ |
 | 19 | Psychology | PSY | ✓ |
-| 20 | Informatics Practices / Psychology | IP/PSY | ✓ | *XI D & XII D only* |
-| 21 | General Knowledge | GK | ✓ |
+| 20 | General Knowledge | GK | ✓ |
 | 22 | Life Skills | LS | ✓ |
 | 23 | Physical Training | PT | ✓ |
 | 24 | Drawing | DRW | ✓ |
@@ -136,11 +135,9 @@ Collect from: **Academic Coordinator**
 | 28 | STEAM | STEAM | ✓ |
 | 29 | Little Prodigy | LP | ✓ |
 | 30 | Co-Curricular Activities | CCA | ✓ |
-| 31 | Maths/IP | MATHS/IP | ✓ | *Combined period for XI & XII* |
-| 32 | Maths/IP/PSY | MATHS/IP/PSY | ✓ | *Combined period for XI & XII* |
-| 33 | Artificial Intelligence | AI | ✓ |
-| 34 | Physics Lab | PHY-L | ✓ |
-| 35 | Chemistry Lab | CHEM-L | ✓ |
+| 31 | Artificial Intelligence | AI | ✓ |
+| 32 | Physics Lab | PHY-L | ✓ |
+| 33 | Chemistry Lab | CHEM-L | ✓ |
 
 ---
 
