@@ -245,6 +245,31 @@ export class SchoolConfigService {
       ),
     );
 
+    // Auto-generate slots from the period structure's periods JSON
+    const periods = ps.periods as unknown as SlotEntry[];
+    if (periods && Array.isArray(periods) && periods.length > 0) {
+      const slotData = created.flatMap((day) => {
+        let periodNumber = 0;
+        return periods
+          .sort((a, b) => a.order - b.order)
+          .map((period, idx) => {
+            if (period.type === 'PERIOD') periodNumber++;
+            return {
+              schoolId,
+              workingDayId: day.id,
+              slotType: period.type as 'PERIOD' | 'INTERVAL' | 'LUNCH_BREAK',
+              slotNumber: period.type === 'PERIOD' ? periodNumber : null,
+              startTime: new Date(`1970-01-01T${period.startTime}:00Z`),
+              endTime: new Date(`1970-01-01T${period.endTime}:00Z`),
+              sortOrder: idx + 1,
+            };
+          });
+      });
+      if (slotData.length > 0) {
+        await prisma.slot.createMany({ data: slotData });
+      }
+    }
+
     return created;
   }
 

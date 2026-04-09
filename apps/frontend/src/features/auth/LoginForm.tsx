@@ -72,15 +72,22 @@ export function LoginForm({ onSwitchToRegister, onSwitchToForgot }: LoginFormPro
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data?.error?.message || 'Login failed');
-    const schoolId = data.data?.school?.id || '';
-    const schoolName = data.data?.school?.name || email;
-    saveSessionData({ email: cognitoResult.email, schoolId, userId: cognitoResult.sub, schoolName });
+
+    const schools: Array<{ id: string; name: string }> = data.data?.schools ?? [];
+    const userRole = data.data?.user?.role ?? 'SCHOOL_ADMIN';
+    const defaultSchool = schools[0];
+    const schoolId = defaultSchool?.id || '';
+    const schoolName = defaultSchool?.name || email;
+
+    saveSessionData({ email: cognitoResult.email, schoolId, userId: cognitoResult.sub, schoolName, schools, userRole });
     dispatch(loggedIn({
       token: cognitoResult.idToken,
       email: cognitoResult.email,
       schoolId,
       userId: cognitoResult.sub,
       schoolName,
+      schools,
+      userRole,
     }));
     navigate('/', { replace: true });
   };

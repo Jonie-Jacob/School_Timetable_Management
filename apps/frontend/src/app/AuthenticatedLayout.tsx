@@ -9,11 +9,13 @@ import { mockGetSession } from '@/lib/mock-auth';
 
 const SESSION_KEY = 'app-session';
 
-interface StoredSession {
+export interface StoredSession {
   email: string;
   schoolId: string;
   userId: string;
   schoolName: string;
+  schools?: Array<{ id: string; name: string }>;
+  userRole?: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'VIEWER';
 }
 
 /** Save session data to localStorage for fast restore on page refresh */
@@ -58,10 +60,12 @@ export function Component() {
               schoolId: cached.schoolId,
               userId: session.sub,
               schoolName: cached.schoolName,
+              schools: cached.schools,
+              userRole: cached.userRole,
             }));
             return;
           }
-          // No cached school data — try /auth/login to get it
+          // No cached school data — call /auth/login to get schools list
           const resp = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -69,15 +73,20 @@ export function Component() {
           });
           if (resp.ok) {
             const data = await resp.json();
-            const schoolId = data.data?.school?.id || '';
-            const schoolName = data.data?.school?.name || session.email;
-            saveSessionData({ email: session.email, schoolId, userId: session.sub, schoolName });
+            const schools: Array<{ id: string; name: string }> = data.data?.schools ?? [];
+            const userRole = data.data?.user?.role ?? 'SCHOOL_ADMIN';
+            const defaultSchool = schools[0];
+            const schoolId = defaultSchool?.id || '';
+            const schoolName = defaultSchool?.name || session.email;
+            saveSessionData({ email: session.email, schoolId, userId: session.sub, schoolName, schools, userRole });
             dispatch(loggedIn({
               token: session.idToken,
               email: session.email,
               schoolId,
               userId: session.sub,
               schoolName,
+              schools,
+              userRole,
             }));
             return;
           }

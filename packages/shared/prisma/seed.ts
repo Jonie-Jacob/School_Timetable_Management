@@ -15,6 +15,16 @@ async function main() {
   });
   console.log(`  ✓ School: ${school.name}`);
 
+  // ─── 1b. School User ───────────────────────────────────
+  await prisma.schoolUser.create({
+    data: {
+      email: 'admin@sacredheart.edu',
+      schoolId: school.id,
+      role: 'SCHOOL_ADMIN',
+    },
+  });
+  console.log('  ✓ SchoolUser: admin@sacredheart.edu (SCHOOL_ADMIN)');
+
   // ─── 2. Academic Year ───────────────────────────────────
   const ay = await prisma.academicYear.create({
     data: {

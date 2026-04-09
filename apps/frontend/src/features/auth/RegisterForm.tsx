@@ -110,15 +110,19 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data?.error?.message || 'Registration failed');
-      const schoolId = data.data?.school?.id || '';
-      const schoolName = data.data?.school?.name || savedValues.schoolName;
-      saveSessionData({ email: cognitoResult.email, schoolId, userId: cognitoResult.sub, schoolName });
+      const schools: Array<{ id: string; name: string }> = data.data?.schools ?? [];
+      const defaultSchool = schools[0];
+      const schoolId = defaultSchool?.id || data.data?.school?.id || '';
+      const schoolName = defaultSchool?.name || data.data?.school?.name || savedValues.schoolName;
+      saveSessionData({ email: cognitoResult.email, schoolId, userId: cognitoResult.sub, schoolName, schools, userRole: 'SCHOOL_ADMIN' });
       dispatch(loggedIn({
         token: cognitoResult.idToken,
         email: cognitoResult.email,
         schoolId,
         userId: cognitoResult.sub,
         schoolName,
+        schools,
+        userRole: 'SCHOOL_ADMIN',
       }));
       navigate('/', { replace: true });
     } catch (err: any) {

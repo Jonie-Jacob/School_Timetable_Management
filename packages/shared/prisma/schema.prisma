@@ -47,6 +47,12 @@ enum ConflictType {
   ELECTIVE_GROUP_CHANGED
 }
 
+enum UserRole {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  VIEWER
+}
+
 // ──────────────────────────────────────────────
 // Table 1: schools
 // ──────────────────────────────────────────────
@@ -77,8 +83,27 @@ model School {
   generationJobs         GenerationJob[]
   timetableNotifications TimetableNotification[]
   setupWizardStates      SetupWizardState[]
+  schoolUsers            SchoolUser[]
 
   @@map("schools")
+}
+
+// ──────────────────────────────────────────────
+// Table 1b: school_users (multi-user access)
+// ──────────────────────────────────────────────
+
+model SchoolUser {
+  id        String   @id @default(uuid())
+  email     String   @db.VarChar(255)
+  schoolId  String?  @map("school_id")
+  role      UserRole
+  createdAt DateTime @default(now()) @map("created_at")
+
+  school School? @relation(fields: [schoolId], references: [id])
+
+  @@unique([email, schoolId])
+  @@index([email])
+  @@map("school_users")
 }
 
 // ──────────────────────────────────────────────

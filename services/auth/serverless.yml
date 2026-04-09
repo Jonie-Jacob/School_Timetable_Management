@@ -39,4 +39,7 @@ functions:
           path: /api/auth/me
       - httpApi:
           method: GET
+          path: /api/auth/schools
+      - httpApi:
+          method: GET
           path: /api/auth/health

@@ -25,5 +25,9 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.me(event);
   }
 
+  if (method === 'GET' && path === '/api/auth/schools') {
+    return controller.schools(event);
+  }
+
   throw new AppError(`Route not found: ${method} ${path}`, 404, 'ROUTE_NOT_FOUND');
 }

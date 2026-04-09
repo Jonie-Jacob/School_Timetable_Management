@@ -39,29 +39,44 @@ export class AuthController {
   }
 
   async me(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-    const schoolId = this.extractSchoolId(event);
-    const result = await authService.me(schoolId);
+    const email = this.extractEmail(event);
+    const result = await authService.me(email);
     return success(result);
   }
 
+  async schools(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const email = this.extractEmail(event);
+    const schools = await authService.getSchools(email);
+    return success(schools);
+  }
+
   /**
-   * Extract school_id from Bearer token or mock headers.
+   * Extract email from Bearer token (mock JWT or Cognito idToken) or mock headers.
    */
-  private extractSchoolId(event: APIGatewayProxyEventV2): string {
-    // Try Bearer token first
+  private extractEmail(event: APIGatewayProxyEventV2): string {
+    // Try Cognito authorizer claims first (production)
+    const claims = (event.requestContext as unknown as Record<string, unknown>)?.authorizer as
+      | Record<string, unknown>
+      | undefined;
+    if (claims?.jwt) {
+      const jwtClaims = (claims.jwt as Record<string, unknown>)?.claims as
+        | Record<string, string>
+        | undefined;
+      if (jwtClaims?.email) return jwtClaims.email;
+    }
+
+    // Try Bearer token (mock/local dev JWT)
     const authHeader = event.headers?.authorization || event.headers?.Authorization;
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
       const payload = verifyToken(token);
-      return payload.school_id;
+      return payload.email;
     }
 
     // Fall back to mock headers
-    const schoolId = event.headers?.['x-school-id'];
-    if (schoolId) {
-      return schoolId;
-    }
+    const email = event.headers?.['x-user-email'];
+    if (email) return email;
 
-    throw new AppError('Unauthorized — provide Bearer token or x-school-id header', 401, 'UNAUTHORIZED');
+    throw new AppError('Unauthorized — provide Bearer token or x-user-email header', 401, 'UNAUTHORIZED');
   }
 }

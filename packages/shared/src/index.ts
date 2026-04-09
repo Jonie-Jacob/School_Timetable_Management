@@ -43,6 +43,7 @@ export {
   AcademicYearStatus,
   ConflictType,
   DayOfWeek,
+  UserRole,
 } from './models';
 
 // Models — schemas & DTOs

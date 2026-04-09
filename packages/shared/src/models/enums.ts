@@ -42,3 +42,9 @@ export enum DayOfWeek {
   SATURDAY = 5,
   SUNDAY = 6,
 }
+
+export enum UserRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
+  SCHOOL_ADMIN = 'SCHOOL_ADMIN',
+  VIEWER = 'VIEWER',
+}

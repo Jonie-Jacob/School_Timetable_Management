@@ -2,4 +2,5 @@ export interface RequestContext {
   schoolId: string;
   userId: string;
   academicYearId: string;
+  userRole?: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'VIEWER';
 }

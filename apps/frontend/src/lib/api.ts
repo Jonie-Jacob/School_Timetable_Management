@@ -18,12 +18,17 @@ const rawBaseQuery = fetchBaseQuery({
     if (academicYearId) {
       headers.set('X-Academic-Year-Id', academicYearId);
     }
+    // Always send school context header
+    const schoolId = state.auth.schoolId;
+    if (schoolId) headers.set('X-School-Id', schoolId);
+
     // Local dev: send mock auth headers that authMiddleware falls back to
     if (isMockAuth) {
-      const schoolId = state.auth.schoolId;
       const userId = state.auth.userId;
+      const email = state.auth.email;
       if (schoolId) headers.set('x-school-id', schoolId);
       if (userId) headers.set('x-user-id', userId);
+      if (email) headers.set('x-user-email', email);
     }
     return headers;
   },
@@ -56,6 +61,8 @@ export const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryE
             schoolId: state.auth.schoolId,
             userId: state.auth.userId,
             schoolName: state.auth.schoolName,
+            schools: state.auth.schools,
+            userRole: state.auth.userRole ?? undefined,
           }),
         );
       }
