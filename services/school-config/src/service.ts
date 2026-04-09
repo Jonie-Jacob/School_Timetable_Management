@@ -24,6 +24,36 @@ const DAY_MAP: Record<string, { dayOfWeek: number; label: string }> = {
   SUNDAY: { dayOfWeek: DayOfWeek.SUNDAY, label: 'Sunday' },
 };
 
+/**
+ * Format a Prisma Time field (returned as a Date) to "HH:MM" string for the frontend.
+ * The frontend's <input type="time"> requires HH:MM format.
+ */
+function formatSlotTime(d: Date | string | null | undefined): string {
+  if (!d) return '';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  const h = date.getUTCHours().toString().padStart(2, '0');
+  const m = date.getUTCMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+/**
+ * Recursively format slot times in a structure containing workingDays[].slots[].
+ */
+function formatStructureSlots<T extends { workingDays?: Array<{ slots?: Array<any> }> }>(structure: T): T {
+  if (structure?.workingDays) {
+    for (const wd of structure.workingDays) {
+      if (wd.slots) {
+        wd.slots = wd.slots.map((s: any) => ({
+          ...s,
+          startTime: formatSlotTime(s.startTime),
+          endTime: formatSlotTime(s.endTime),
+        }));
+      }
+    }
+  }
+  return structure;
+}
+
 export class SchoolConfigService {
   // ── Period Structures ──────────────────────────────────────
 
@@ -107,7 +137,7 @@ export class SchoolConfigService {
     if (!structure) {
       throw new NotFoundError('Period structure', id);
     }
-    return structure;
+    return formatStructureSlots(structure);
   }
 
   async updatePeriodStructure(schoolId: string, academicYearId: string, id: string, input: UpdatePeriodStructureDto) {

@@ -1067,7 +1067,8 @@ async function main() {
   });
 
   const dayNames = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
-  const dayMap: Record<string, number> = { MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5 };
+  // DayOfWeek enum: MONDAY=0, TUESDAY=1, ..., FRIDAY=4
+  const dayMap: Record<string, number> = { MONDAY: 0, TUESDAY: 1, WEDNESDAY: 2, THURSDAY: 3, FRIDAY: 4 };
 
   for (const dayName of dayNames) {
     const wd = await prisma.workingDay.create({
