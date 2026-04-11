@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAppSelector } from '@/app/hooks';
 import { AuthLayout } from './AuthLayout';
 import { LoginForm } from './LoginForm';
@@ -13,9 +13,14 @@ export function Component() {
   const [view, setView] = useState<AuthView>('login');
   const [resetEmail, setResetEmail] = useState('');
   const isAuthenticated = useAppSelector((s) => s.auth.isAuthenticated);
+  const location = useLocation();
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    // Return the user to the page they were trying to reach before being
+    // bounced to /login (set by AuthenticatedLayout). Fall back to dashboard.
+    const from = (location.state as { from?: string } | null)?.from;
+    const target = from && from !== '/login' ? from : '/';
+    return <Navigate to={target} replace />;
   }
 
   return (

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '@/app/hooks';
 import { loggedIn, authChecked } from '@/features/auth/authSlice';
 import { AppShell } from '@/components/layout/AppShell';
@@ -38,6 +38,7 @@ export function clearSessionData() {
 
 export function Component() {
   const dispatch = useAppDispatch();
+  const location = useLocation();
   const { isAuthenticated, isLoading } = useAppSelector((state) => state.auth);
 
   useWebSocket();
@@ -100,7 +101,10 @@ export function Component() {
       }
       dispatch(authChecked());
     })();
-  }, [dispatch, isAuthenticated]);
+    // Only run once on mount; we intentionally omit isAuthenticated from deps
+    // so this doesn't re-run after login.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch]);
 
   if (isLoading) {
     return (
@@ -111,7 +115,10 @@ export function Component() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    // Remember where the user was trying to go so LoginPage can send them
+    // back there after a successful sign-in (instead of the dashboard).
+    const intended = location.pathname + location.search + location.hash;
+    return <Navigate to="/login" replace state={{ from: intended }} />;
   }
 
   return <AppShell />;
