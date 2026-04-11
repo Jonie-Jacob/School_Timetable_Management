@@ -13,7 +13,7 @@ const schedulingPreferencesSchema = z.object({
 
 export const createAssignmentSchema = z.object({
   subjectId: z.string().uuid(),
-  teacherId: z.string().uuid(),
+  teacherId: z.string().uuid().nullable().optional(),
   assistantTeacherId: z.string().uuid().nullable().optional(),
   weightage: z.number().int().min(1),
   electiveGroupId: z.string().uuid().nullable().optional(),
@@ -21,7 +21,7 @@ export const createAssignmentSchema = z.object({
 });
 
 export const updateAssignmentSchema = z.object({
-  teacherId: z.string().uuid().optional(),
+  teacherId: z.string().uuid().nullable().optional(),
   assistantTeacherId: z.string().uuid().nullable().optional(),
   weightage: z.number().int().min(1).optional(),
   schedulingPreferences: schedulingPreferencesSchema,

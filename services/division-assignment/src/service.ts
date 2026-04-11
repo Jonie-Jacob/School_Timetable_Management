@@ -3,7 +3,7 @@ import {
   flagAffectedTimetables,
   type CreateAssignmentDto, type UpdateAssignmentDto,
   type CreateElectiveGroupDto, type UpdateElectiveGroupDto,
-  type AddElectiveSubjectDto,
+  type AddElectiveSubjectDto, type UpdateElectiveSubjectDto,
 } from '@timetable/shared';
 
 export class AssignmentService {
@@ -19,14 +19,22 @@ export class AssignmentService {
         subject: { select: { id: true, name: true } },
         teacher: { select: { id: true, name: true } },
         assistantTeacher: { select: { id: true, name: true } },
-        electiveGroup: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
       },
     });
   }
 
   async createAssignment(schoolId: string, academicYearId: string, divisionId: string, input: CreateAssignmentDto) {
     await this.ensureDivisionExists(schoolId, divisionId);
-    await this.validateTeacherSubject(schoolId, input.teacherId, input.subjectId);
+    if (input.teacherId) {
+      await this.validateTeacherSubject(schoolId, input.teacherId, input.subjectId);
+    } else {
+      // No teacher: still verify subject exists
+      const subject = await prisma.subject.findFirst({
+        where: { id: input.subjectId, schoolId, deletedAt: null },
+      });
+      if (!subject) throw new NotFoundError('Subject', input.subjectId);
+    }
 
     if (input.assistantTeacherId) {
       await this.ensureTeacherExists(schoolId, input.assistantTeacherId);
@@ -39,13 +47,17 @@ export class AssignmentService {
         academicYearId,
         divisionId,
         subjectId: input.subjectId,
-        teacherId: input.teacherId,
+        teacherId: input.teacherId ?? null,
         electiveGroupId: input.electiveGroupId ?? null,
         deletedAt: null,
       },
     });
     if (existing) {
-      throw new ConflictError('This subject is already assigned to this teacher in this division');
+      throw new ConflictError(
+        input.teacherId
+          ? 'This subject is already assigned to this teacher in this division'
+          : 'This subject already has an unassigned entry in this division',
+      );
     }
 
     if (input.electiveGroupId) {
@@ -58,7 +70,7 @@ export class AssignmentService {
         academicYearId,
         divisionId,
         subjectId: input.subjectId,
-        teacherId: input.teacherId,
+        teacherId: input.teacherId ?? null,
         assistantTeacherId: input.assistantTeacherId ?? null,
         weightage: input.weightage,
         electiveGroupId: input.electiveGroupId ?? null,
@@ -68,7 +80,7 @@ export class AssignmentService {
         subject: { select: { id: true, name: true } },
         teacher: { select: { id: true, name: true } },
         assistantTeacher: { select: { id: true, name: true } },
-        electiveGroup: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
       },
     });
   }
@@ -88,7 +100,7 @@ export class AssignmentService {
     }
 
     const data: Record<string, unknown> = {};
-    if (input.teacherId !== undefined) data.teacherId = input.teacherId;
+    if (input.teacherId !== undefined) data.teacherId = input.teacherId; // null clears teacher
     if (input.assistantTeacherId !== undefined) data.assistantTeacherId = input.assistantTeacherId;
     if (input.weightage !== undefined) data.weightage = input.weightage;
     if (input.schedulingPreferences !== undefined) data.schedulingPreferences = input.schedulingPreferences;
@@ -100,7 +112,7 @@ export class AssignmentService {
         subject: { select: { id: true, name: true } },
         teacher: { select: { id: true, name: true } },
         assistantTeacher: { select: { id: true, name: true } },
-        electiveGroup: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
       },
     });
 
@@ -177,36 +189,67 @@ export class AssignmentService {
       throw new AppError('Subject does not belong to this elective group', 400, 'VALIDATION_ERROR');
     }
 
-    await this.validateTeacherSubject(schoolId, input.teacherId, input.subjectId);
+    // Allocation check: sum of teacher weightages for this (division, subject, group)
+    // must not exceed parallelSections × periodsPerWeek.
+    if (group.periodsPerWeek > 0) {
+      const required = groupSubject.parallelSections * group.periodsPerWeek;
+      const existingAlloc = await prisma.divisionAssignment.aggregate({
+        where: {
+          schoolId,
+          academicYearId,
+          divisionId,
+          subjectId: input.subjectId,
+          electiveGroupId: input.electiveGroupId,
+          deletedAt: null,
+        },
+        _sum: { weightage: true },
+      });
+      const allocated = existingAlloc._sum.weightage ?? 0;
+      if (allocated + input.weightage > required) {
+        throw new AppError(
+          `Over-allocation: this assignment would make total ${allocated + input.weightage} hrs, but only ${required} hrs are available (${groupSubject.parallelSections} section(s) × ${group.periodsPerWeek} hrs). Currently allocated: ${allocated} hrs.`,
+          400,
+          'ELECTIVE_OVER_ALLOCATION',
+        );
+      }
+    }
+
+    if (input.teacherId) {
+      await this.validateTeacherSubject(schoolId, input.teacherId, input.subjectId);
+    }
 
     if (input.assistantTeacherId) {
       await this.ensureTeacherExists(schoolId, input.assistantTeacherId);
     }
 
     // Cross-division elective enforcement: if same elective group is assigned
-    // to another division of the same class, enforce same teachers
+    // to another division of the same class, enforce same teachers.
+    // Skip enforcement entirely when either side has no teacher.
     const division = await this.ensureDivisionExists(schoolId, divisionId);
-    const existingCrossDivAssignments = await prisma.divisionAssignment.findMany({
-      where: {
-        schoolId,
-        academicYearId,
-        electiveGroupId: input.electiveGroupId,
-        subjectId: input.subjectId,
-        deletedAt: null,
-        divisionId: { not: divisionId },
-        division: { classId: division.classId, deletedAt: null },
-      },
-      select: { teacherId: true, divisionId: true },
-    });
+    if (input.teacherId) {
+      const existingCrossDivAssignments = await prisma.divisionAssignment.findMany({
+        where: {
+          schoolId,
+          academicYearId,
+          electiveGroupId: input.electiveGroupId,
+          subjectId: input.subjectId,
+          deletedAt: null,
+          divisionId: { not: divisionId },
+          division: { classId: division.classId, deletedAt: null },
+          teacherId: { not: null },
+        },
+        select: { teacherId: true, divisionId: true },
+      });
 
-    if (existingCrossDivAssignments.length > 0) {
-      const requiredTeacherId = existingCrossDivAssignments[0].teacherId;
-      if (input.teacherId !== requiredTeacherId) {
-        throw new AppError(
-          `This elective group is shared across divisions of the same class. The teacher for this subject must be '${requiredTeacherId}' to match the existing assignment.`,
-          400,
-          'CROSS_DIVISION_TEACHER_MISMATCH',
-        );
+      if (existingCrossDivAssignments.length > 0) {
+        const requiredTeacherId = existingCrossDivAssignments[0].teacherId;
+        if (input.teacherId !== requiredTeacherId) {
+          throw new AppError(
+            `This elective group is shared across divisions of the same class. The teacher for this subject must be '${requiredTeacherId}' to match the existing assignment.`,
+            400,
+            'CROSS_DIVISION_TEACHER_MISMATCH',
+          );
+        }
       }
     }
 
@@ -217,7 +260,7 @@ export class AssignmentService {
         academicYearId,
         divisionId,
         subjectId: input.subjectId,
-        teacherId: input.teacherId,
+        teacherId: input.teacherId ?? null,
         electiveGroupId: input.electiveGroupId,
         deletedAt: null,
       },
@@ -232,7 +275,7 @@ export class AssignmentService {
         academicYearId,
         divisionId,
         subjectId: input.subjectId,
-        teacherId: input.teacherId,
+        teacherId: input.teacherId ?? null,
         assistantTeacherId: input.assistantTeacherId ?? null,
         weightage: input.weightage,
         electiveGroupId: input.electiveGroupId,
@@ -242,7 +285,7 @@ export class AssignmentService {
         subject: { select: { id: true, name: true } },
         teacher: { select: { id: true, name: true } },
         assistantTeacher: { select: { id: true, name: true } },
-        electiveGroup: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
       },
     });
   }
@@ -256,7 +299,12 @@ export class AssignmentService {
     if (existing) throw new ConflictError(`Elective group '${input.name}' already exists`);
 
     return prisma.electiveGroup.create({
-      data: { schoolId, academicYearId, name: input.name },
+      data: {
+        schoolId,
+        academicYearId,
+        name: input.name,
+        periodsPerWeek: input.periodsPerWeek,
+      },
     });
   }
 
@@ -292,7 +340,7 @@ export class AssignmentService {
   }
 
   async updateElectiveGroup(schoolId: string, academicYearId: string, id: string, input: UpdateElectiveGroupDto) {
-    await this.getElectiveGroup(schoolId, academicYearId, id);
+    const group = await this.getElectiveGroup(schoolId, academicYearId, id);
 
     if (input.name) {
       const existing = await prisma.electiveGroup.findFirst({
@@ -301,9 +349,43 @@ export class AssignmentService {
       if (existing) throw new ConflictError(`Elective group '${input.name}' already exists`);
     }
 
+    // Validate that new periodsPerWeek does not cause over-allocation.
+    // For every (division, subject) tuple, the existing sum(weightage)
+    // must NOT exceed parallelSections * newPeriodsPerWeek. Under-allocation
+    // is allowed (admin can add more assignments later).
+    if (input.periodsPerWeek !== undefined && input.periodsPerWeek !== group.periodsPerWeek) {
+      const assignments = await prisma.divisionAssignment.findMany({
+        where: { electiveGroupId: id, deletedAt: null },
+        select: { divisionId: true, subjectId: true, weightage: true },
+      });
+      const sectionsBySubject = new Map<string, number>(
+        group.subjects.map((s: any) => [s.subjectId, s.parallelSections as number]),
+      );
+      const totals = new Map<string, number>();
+      for (const a of assignments) {
+        const key = `${a.divisionId}|${a.subjectId}`;
+        totals.set(key, (totals.get(key) ?? 0) + a.weightage);
+      }
+      for (const [key, total] of totals) {
+        const subjectId = key.split('|')[1];
+        const sections = sectionsBySubject.get(subjectId) ?? 1;
+        const required = sections * input.periodsPerWeek;
+        if (total > required) {
+          throw new AppError(
+            `Cannot reduce periods/week to ${input.periodsPerWeek}: existing assignments for this group total ${total} hrs for a subject that would only allow ${required} hrs (${sections} section(s) × ${input.periodsPerWeek} hrs). Reduce or remove the over-allocated assignments first.`,
+            400,
+            'ELECTIVE_OVER_ALLOCATION',
+          );
+        }
+      }
+    }
+
     const updated = await prisma.electiveGroup.update({
       where: { id },
-      data: { ...(input.name !== undefined && { name: input.name }) },
+      data: {
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.periodsPerWeek !== undefined && { periodsPerWeek: input.periodsPerWeek }),
+      },
       include: {
         subjects: {
           include: {
@@ -318,7 +400,7 @@ export class AssignmentService {
       academicYearId,
       entityType: 'ELECTIVE_GROUP',
       entityId: id,
-      changeDescription: `Elective group updated${input.name ? ` (name changed to '${input.name}')` : ''}`,
+      changeDescription: `Elective group updated${input.name ? ` (name changed to '${input.name}')` : ''}${input.periodsPerWeek !== undefined ? ` (periods/week changed to ${input.periodsPerWeek})` : ''}`,
     });
 
     return updated;
@@ -362,11 +444,71 @@ export class AssignmentService {
     if (existing) throw new ConflictError('Subject is already in this elective group');
 
     return prisma.electiveGroupSubject.create({
-      data: { schoolId, electiveGroupId: groupId, subjectId: input.subjectId },
+      data: {
+        schoolId,
+        electiveGroupId: groupId,
+        subjectId: input.subjectId,
+        parallelSections: input.parallelSections ?? 1,
+      },
       include: {
         subject: { select: { id: true, name: true } },
       },
     });
+  }
+
+  async updateElectiveSubject(
+    schoolId: string,
+    academicYearId: string,
+    groupId: string,
+    subjectId: string,
+    input: UpdateElectiveSubjectDto,
+  ) {
+    const group = await this.getElectiveGroup(schoolId, academicYearId, groupId);
+
+    const link = await prisma.electiveGroupSubject.findFirst({
+      where: { electiveGroupId: groupId, subjectId, school: { id: schoolId } },
+    });
+    if (!link) throw new NotFoundError('Elective group subject');
+
+    // Validate that new parallelSections does not cause over-allocation.
+    // For each division using this (group, subject), sum(weightage) must NOT
+    // exceed parallelSections * periodsPerWeek. Under-allocation is allowed.
+    if (group.periodsPerWeek > 0) {
+      const assignments = await prisma.divisionAssignment.findMany({
+        where: { electiveGroupId: groupId, subjectId, deletedAt: null },
+        select: { divisionId: true, weightage: true },
+      });
+      const totalsByDivision = new Map<string, number>();
+      for (const a of assignments) {
+        totalsByDivision.set(a.divisionId, (totalsByDivision.get(a.divisionId) ?? 0) + a.weightage);
+      }
+      const required = input.parallelSections * group.periodsPerWeek;
+      for (const [divId, total] of totalsByDivision) {
+        if (total > required) {
+          throw new AppError(
+            `Cannot reduce parallel sections to ${input.parallelSections}: division ${divId} currently has ${total} hrs allocated, which exceeds the new max of ${required} hrs (${input.parallelSections} × ${group.periodsPerWeek}). Reduce or remove the over-allocated assignments first.`,
+            400,
+            'ELECTIVE_OVER_ALLOCATION',
+          );
+        }
+      }
+    }
+
+    const updated = await prisma.electiveGroupSubject.update({
+      where: { id: link.id },
+      data: { parallelSections: input.parallelSections },
+      include: { subject: { select: { id: true, name: true } } },
+    });
+
+    await flagAffectedTimetables({
+      schoolId,
+      academicYearId,
+      entityType: 'ELECTIVE_GROUP',
+      entityId: groupId,
+      changeDescription: `Elective subject parallel sections updated to ${input.parallelSections}`,
+    });
+
+    return updated;
   }
 
   async removeElectiveSubject(schoolId: string, _academicYearId: string, groupId: string, subjectId: string) {
@@ -518,7 +660,7 @@ export class AssignmentService {
         subject: { select: { id: true, name: true } },
         teacher: { select: { id: true, name: true } },
         assistantTeacher: { select: { id: true, name: true } },
-        electiveGroup: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
       },
     });
 
@@ -530,7 +672,7 @@ export class AssignmentService {
           timetableId: targetTimetable.id,
           divisionId: input.divisionId,
           conflictType: 'ASSIGNMENT_CHANGED' as const,
-          changeDescription: `Teacher ${assignment.teacher.name} has a scheduling conflict with ${c.className}-${c.divisionLabel}`,
+          changeDescription: `Teacher ${assignment.teacher?.name ?? 'Unassigned'} has a scheduling conflict with ${c.className}-${c.divisionLabel}`,
         })),
       });
     }

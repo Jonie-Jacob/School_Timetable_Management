@@ -14,7 +14,7 @@ export interface GenerationJob {
 export interface TimetableSlotAssignment {
   id: string;
   subject: { id: string; name: string };
-  teacher: { id: string; name: string };
+  teacher: { id: string; name: string } | null;
 }
 
 export interface TimetablePeriod {

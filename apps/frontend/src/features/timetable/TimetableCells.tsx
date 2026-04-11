@@ -39,7 +39,7 @@ export function CellContent({ assignment, isDragging }: CellContentProps) {
       )}
     >
       <div className="text-[11px] font-bold truncate">{assignment.subject.name}</div>
-      <div className="text-[9px] opacity-75 truncate">{assignment.teacher.name}</div>
+      <div className="text-[9px] opacity-75 truncate">{assignment.teacher?.name ?? '(Unassigned)'}</div>
     </div>
   );
 }

@@ -122,7 +122,9 @@
       "Bash(cp -r node_modules/@prisma/client layers/shared/.build/nodejs/node_modules/@prisma/client)",
       "Bash(ls -la *.node *.dll)",
       "Bash(ls -la libquery_engine*)",
-      "Bash(powershell.exe -Command \"if \\(Test-Path '../shared-layer.zip'\\) { Remove-Item '../shared-layer.zip' }; Compress-Archive -Path 'nodejs' -DestinationPath '../shared-layer.zip' -Force\")"
+      "Bash(powershell.exe -Command \"if \\(Test-Path '../shared-layer.zip'\\) { Remove-Item '../shared-layer.zip' }; Compress-Archive -Path 'nodejs' -DestinationPath '../shared-layer.zip' -Force\")",
+      "Bash(sed -i 's/electiveGroup: { select: { id: true, name: true } }/electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } }/g' src/service.ts)",
+      "Bash(grep -c \"electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } }\" src/service.ts)"
     ]
   }
 }

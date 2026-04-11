@@ -89,6 +89,11 @@ functions:
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
+          method: PUT
+          path: /api/elective-groups/{groupId}/subjects/{subjectId}
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
           method: DELETE
           path: /api/elective-groups/{groupId}/subjects/{subjectId}
           authorizer:

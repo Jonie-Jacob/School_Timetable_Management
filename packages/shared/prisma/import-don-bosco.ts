@@ -684,8 +684,8 @@ const ASSIGNMENTS: Assignment[] = [
   { className: 'Class IX', divLabel: 'A', subject: 'Mathematics', teacher: 'Rajani', weightage: 4 },
   { className: 'Class IX', divLabel: 'A', subject: 'Mathematics', teacher: 'Remya', weightage: 3 },
   // Malayalam/Hindi elective
-  { className: 'Class IX', divLabel: 'A', subject: 'Malayalam', teacher: 'Jayasree', weightage: 3, electiveTag: 'mal-hin' },
-  { className: 'Class IX', divLabel: 'A', subject: 'Malayalam', teacher: 'Prabha', weightage: 2, electiveTag: 'mal-hin' },
+  { className: 'Class IX', divLabel: 'A', subject: 'Malayalam', teacher: 'Jayasree', weightage: 5, electiveTag: 'mal-hin' },
+  { className: 'Class IX', divLabel: 'A', subject: 'Malayalam', teacher: 'Prabha', weightage: 5, electiveTag: 'mal-hin' },
   { className: 'Class IX', divLabel: 'A', subject: 'Hindi', teacher: 'Sujatha', weightage: 5, electiveTag: 'mal-hin' },
 
   // ── CLASS IX B ──
@@ -704,8 +704,8 @@ const ASSIGNMENTS: Assignment[] = [
   { className: 'Class IX', divLabel: 'B', subject: 'Social Science', teacher: 'Ashish', weightage: 3 },
   { className: 'Class IX', divLabel: 'B', subject: 'Mathematics', teacher: 'Smitha', weightage: 4 },
   { className: 'Class IX', divLabel: 'B', subject: 'Mathematics', teacher: 'Sahana', weightage: 3 },
-  { className: 'Class IX', divLabel: 'B', subject: 'Malayalam', teacher: 'Jayasree', weightage: 3, electiveTag: 'mal-hin' },
-  { className: 'Class IX', divLabel: 'B', subject: 'Malayalam', teacher: 'Prabha', weightage: 2, electiveTag: 'mal-hin' },
+  { className: 'Class IX', divLabel: 'B', subject: 'Malayalam', teacher: 'Jayasree', weightage: 5, electiveTag: 'mal-hin' },
+  { className: 'Class IX', divLabel: 'B', subject: 'Malayalam', teacher: 'Prabha', weightage: 5, electiveTag: 'mal-hin' },
   { className: 'Class IX', divLabel: 'B', subject: 'Hindi', teacher: 'Sujatha', weightage: 5, electiveTag: 'mal-hin' },
 
   // ── CLASS IX C ──
@@ -724,8 +724,8 @@ const ASSIGNMENTS: Assignment[] = [
   { className: 'Class IX', divLabel: 'C', subject: 'Social Science', teacher: 'Saritha Mohan', weightage: 3 },
   { className: 'Class IX', divLabel: 'C', subject: 'Mathematics', teacher: 'Remya', weightage: 4 },
   { className: 'Class IX', divLabel: 'C', subject: 'Mathematics', teacher: 'Smitha', weightage: 3 },
-  { className: 'Class IX', divLabel: 'C', subject: 'Malayalam', teacher: 'Jayasree', weightage: 3, electiveTag: 'mal-hin' },
-  { className: 'Class IX', divLabel: 'C', subject: 'Malayalam', teacher: 'Prabha', weightage: 2, electiveTag: 'mal-hin' },
+  { className: 'Class IX', divLabel: 'C', subject: 'Malayalam', teacher: 'Jayasree', weightage: 5, electiveTag: 'mal-hin' },
+  { className: 'Class IX', divLabel: 'C', subject: 'Malayalam', teacher: 'Prabha', weightage: 5, electiveTag: 'mal-hin' },
   { className: 'Class IX', divLabel: 'C', subject: 'Hindi', teacher: 'Sujatha', weightage: 5, electiveTag: 'mal-hin' },
 
   // ── CLASS X A ──
@@ -744,8 +744,8 @@ const ASSIGNMENTS: Assignment[] = [
   { className: 'Class X', divLabel: 'A', subject: 'Social Science', teacher: 'Athira', weightage: 3 },
   { className: 'Class X', divLabel: 'A', subject: 'Mathematics', teacher: 'Remya', weightage: 4 },
   { className: 'Class X', divLabel: 'A', subject: 'Mathematics', teacher: 'Rajani', weightage: 3 },
-  { className: 'Class X', divLabel: 'A', subject: 'Malayalam', teacher: 'Neethu', weightage: 3, electiveTag: 'mal-hin' },
-  { className: 'Class X', divLabel: 'A', subject: 'Malayalam', teacher: 'Ambily', weightage: 2, electiveTag: 'mal-hin' },
+  { className: 'Class X', divLabel: 'A', subject: 'Malayalam', teacher: 'Neethu', weightage: 5, electiveTag: 'mal-hin' },
+  { className: 'Class X', divLabel: 'A', subject: 'Malayalam', teacher: 'Ambily', weightage: 5, electiveTag: 'mal-hin' },
   { className: 'Class X', divLabel: 'A', subject: 'Hindi', teacher: 'Sujatha', weightage: 5, electiveTag: 'mal-hin' },
 
   // ── CLASS X B ──
@@ -764,8 +764,8 @@ const ASSIGNMENTS: Assignment[] = [
   { className: 'Class X', divLabel: 'B', subject: 'Social Science', teacher: 'Shobitha', weightage: 3 },
   { className: 'Class X', divLabel: 'B', subject: 'Mathematics', teacher: 'Smitha', weightage: 4 },
   { className: 'Class X', divLabel: 'B', subject: 'Mathematics', teacher: 'Rajani', weightage: 3 },
-  { className: 'Class X', divLabel: 'B', subject: 'Malayalam', teacher: 'Neethu', weightage: 3, electiveTag: 'mal-hin' },
-  { className: 'Class X', divLabel: 'B', subject: 'Malayalam', teacher: 'Ambily', weightage: 2, electiveTag: 'mal-hin' },
+  { className: 'Class X', divLabel: 'B', subject: 'Malayalam', teacher: 'Neethu', weightage: 5, electiveTag: 'mal-hin' },
+  { className: 'Class X', divLabel: 'B', subject: 'Malayalam', teacher: 'Ambily', weightage: 5, electiveTag: 'mal-hin' },
   { className: 'Class X', divLabel: 'B', subject: 'Hindi', teacher: 'Sujatha', weightage: 5, electiveTag: 'mal-hin' },
 
   // ── CLASS X C ──
@@ -784,8 +784,8 @@ const ASSIGNMENTS: Assignment[] = [
   { className: 'Class X', divLabel: 'C', subject: 'Social Science', teacher: 'Athira', weightage: 3 },
   { className: 'Class X', divLabel: 'C', subject: 'Mathematics', teacher: 'Smitha', weightage: 4 },
   { className: 'Class X', divLabel: 'C', subject: 'Mathematics', teacher: 'Remya', weightage: 3 },
-  { className: 'Class X', divLabel: 'C', subject: 'Malayalam', teacher: 'Neethu', weightage: 3, electiveTag: 'mal-hin' },
-  { className: 'Class X', divLabel: 'C', subject: 'Malayalam', teacher: 'Ambily', weightage: 2, electiveTag: 'mal-hin' },
+  { className: 'Class X', divLabel: 'C', subject: 'Malayalam', teacher: 'Neethu', weightage: 5, electiveTag: 'mal-hin' },
+  { className: 'Class X', divLabel: 'C', subject: 'Malayalam', teacher: 'Ambily', weightage: 5, electiveTag: 'mal-hin' },
   { className: 'Class X', divLabel: 'C', subject: 'Hindi', teacher: 'Sujatha', weightage: 5, electiveTag: 'mal-hin' },
 
   // ── CLASS XI A SCIENCE ──
@@ -886,8 +886,8 @@ const ASSIGNMENTS: Assignment[] = [
   { className: 'Class XII', divLabel: 'A', subject: 'Informatics Practices', teacher: 'Anitha', weightage: 4, electiveTag: 'maths-ip-psy' },
   { className: 'Class XII', divLabel: 'A', subject: 'Psychology', teacher: 'Gopikadas', weightage: 8, electiveTag: 'maths-ip-psy' },
   // Biology / CS cross-division elective
-  { className: 'Class XII', divLabel: 'A', subject: 'Biology', teacher: 'Ashamol', weightage: 4, electiveTag: 'bio-cs' },
-  { className: 'Class XII', divLabel: 'A', subject: 'Biology', teacher: 'Roshni', weightage: 4, electiveTag: 'bio-cs' },
+  { className: 'Class XII', divLabel: 'A', subject: 'Biology', teacher: 'Ashamol', weightage: 8, electiveTag: 'bio-cs' },
+  { className: 'Class XII', divLabel: 'A', subject: 'Biology', teacher: 'Roshni', weightage: 8, electiveTag: 'bio-cs' },
   { className: 'Class XII', divLabel: 'A', subject: 'Computer Science', teacher: 'Swetha', weightage: 4, electiveTag: 'bio-cs' },
   { className: 'Class XII', divLabel: 'A', subject: 'Computer Science', teacher: 'Ann', weightage: 4, electiveTag: 'bio-cs' },
 
@@ -910,8 +910,8 @@ const ASSIGNMENTS: Assignment[] = [
   { className: 'Class XII', divLabel: 'B', subject: 'Informatics Practices', teacher: 'Shijo', weightage: 4, electiveTag: 'maths-ip-psy' },
   { className: 'Class XII', divLabel: 'B', subject: 'Informatics Practices', teacher: 'Anitha', weightage: 4, electiveTag: 'maths-ip-psy' },
   { className: 'Class XII', divLabel: 'B', subject: 'Psychology', teacher: 'Gopikadas', weightage: 8, electiveTag: 'maths-ip-psy' },
-  { className: 'Class XII', divLabel: 'B', subject: 'Biology', teacher: 'Ashamol', weightage: 4, electiveTag: 'bio-cs' },
-  { className: 'Class XII', divLabel: 'B', subject: 'Biology', teacher: 'Roshni', weightage: 4, electiveTag: 'bio-cs' },
+  { className: 'Class XII', divLabel: 'B', subject: 'Biology', teacher: 'Ashamol', weightage: 8, electiveTag: 'bio-cs' },
+  { className: 'Class XII', divLabel: 'B', subject: 'Biology', teacher: 'Roshni', weightage: 8, electiveTag: 'bio-cs' },
   { className: 'Class XII', divLabel: 'B', subject: 'Computer Science', teacher: 'Swetha', weightage: 4, electiveTag: 'bio-cs' },
   { className: 'Class XII', divLabel: 'B', subject: 'Computer Science', teacher: 'Ann', weightage: 4, electiveTag: 'bio-cs' },
 
@@ -1151,10 +1151,7 @@ async function main() {
 
   for (const a of ASSIGNMENTS) {
     const teacherName = resolveTeacher(a.teacher);
-    if (teacherName === '*unassigned*') {
-      skippedCount++;
-      continue;
-    }
+    const isUnassigned = teacherName === '*unassigned*';
 
     const subjectName = resolveSubject(a.subject);
     const subjectId = subjectMap.get(subjectName);
@@ -1164,11 +1161,14 @@ async function main() {
       continue;
     }
 
-    const teacherId = teacherMap.get(teacherName);
-    if (!teacherId) {
-      console.warn(`    ⚠ Teacher not found: "${teacherName}" (original: "${a.teacher}") for ${a.className} ${a.divLabel} ${a.subject}`);
-      skippedCount++;
-      continue;
+    let teacherId: string | null = null;
+    if (!isUnassigned) {
+      teacherId = teacherMap.get(teacherName) ?? null;
+      if (!teacherId) {
+        console.warn(`    ⚠ Teacher not found: "${teacherName}" (original: "${a.teacher}") for ${a.className} ${a.divLabel} ${a.subject}`);
+        skippedCount++;
+        continue;
+      }
     }
 
     const divId = divisionMap.get(`${a.className}-${a.divLabel}`);

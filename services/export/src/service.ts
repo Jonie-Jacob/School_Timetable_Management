@@ -122,7 +122,7 @@ export class ExportService {
       const day = dayMap.get(dayKey)!;
       day.periods.set(s.slot.sortOrder, s.divisionAssignment ? {
         subject: s.divisionAssignment.subject.name,
-        teacher: s.divisionAssignment.teacher.name,
+        teacher: s.divisionAssignment.teacher?.name ?? '(Unassigned)',
       } : null);
     }
 

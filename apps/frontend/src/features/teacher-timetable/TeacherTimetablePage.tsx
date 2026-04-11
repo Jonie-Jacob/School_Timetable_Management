@@ -194,7 +194,7 @@ export function Component() {
                         <td key={slot.id} className="px-1 py-1 border-r border-border/40">
                           <div className={`rounded-lg px-1.5 py-1 text-center ${colorClass}`}>
                             <div className="text-[10px] font-bold truncate">{assignment.subject.name}</div>
-                            <div className="text-[8px] opacity-75 truncate">{assignment.teacher.name}</div>
+                            <div className="text-[8px] opacity-75 truncate">{assignment.teacher?.name ?? '(Unassigned)'}</div>
                           </div>
                         </td>
                       );

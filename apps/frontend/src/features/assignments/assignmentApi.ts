@@ -16,30 +16,40 @@ export interface Assignment {
   id: string;
   divisionId: string;
   subjectId: string;
-  teacherId: string;
+  teacherId: string | null;
   assistantTeacherId: string | null;
   weightage: number;
   electiveGroupId: string | null;
   schedulingPreferences: SchedulingPreferences | null;
   subject: { id: string; name: string };
-  teacher: { id: string; name: string };
+  teacher: { id: string; name: string } | null;
   assistantTeacher: { id: string; name: string } | null;
-  electiveGroup: { id: string; name: string } | null;
+  electiveGroup: { id: string; name: string; periodsPerWeek: number } | null;
 }
 
 interface CreateAssignmentRequest {
   divisionId: string;
   subjectId: string;
-  teacherId: string;
+  teacherId?: string | null;
   assistantTeacherId?: string | null;
   weightage: number;
   electiveGroupId?: string | null;
   schedulingPreferences?: SchedulingPreferences | null;
 }
 
+interface CreateElectiveAssignmentRequest {
+  divisionId: string;
+  electiveGroupId: string;
+  subjectId: string;
+  teacherId?: string | null;
+  assistantTeacherId?: string | null;
+  weightage: number;
+  schedulingPreferences?: SchedulingPreferences | null;
+}
+
 interface UpdateAssignmentRequest {
   id: string;
-  teacherId?: string;
+  teacherId?: string | null;
   assistantTeacherId?: string | null;
   weightage?: number;
   schedulingPreferences?: SchedulingPreferences | null;
@@ -82,6 +92,19 @@ export const assignmentApi = createApi({
     createAssignment: builder.mutation<Assignment, CreateAssignmentRequest>({
       query: ({ divisionId, ...body }) => ({
         url: `divisions/${divisionId}/assignments`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: Assignment }) => response.data,
+      invalidatesTags: (_r, _e, { divisionId }) => [
+        { type: 'Assignment', id: divisionId },
+        { type: 'Assignment', id: 'LIST' },
+      ],
+    }),
+
+    createElectiveAssignment: builder.mutation<Assignment, CreateElectiveAssignmentRequest>({
+      query: ({ divisionId, ...body }) => ({
+        url: `divisions/${divisionId}/assignments/elective`,
         method: 'POST',
         body,
       }),
@@ -145,6 +168,7 @@ export const assignmentApi = createApi({
 export const {
   useGetAssignmentsQuery,
   useCreateAssignmentMutation,
+  useCreateElectiveAssignmentMutation,
   useUpdateAssignmentMutation,
   useDeleteAssignmentMutation,
   useGetUnassignedSubjectsQuery,

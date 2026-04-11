@@ -366,6 +366,7 @@ model ElectiveGroup {
   schoolId       String    @map("school_id")
   academicYearId String    @map("academic_year_id")
   name           String    @db.VarChar(255)
+  periodsPerWeek Int       @default(0) @map("periods_per_week")
   deletedAt      DateTime? @map("deleted_at")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
@@ -384,10 +385,11 @@ model ElectiveGroup {
 // ──────────────────────────────────────────────
 
 model ElectiveGroupSubject {
-  id              String @id @default(uuid())
-  schoolId        String @map("school_id")
-  electiveGroupId String @map("elective_group_id")
-  subjectId       String @map("subject_id")
+  id               String @id @default(uuid())
+  schoolId         String @map("school_id")
+  electiveGroupId  String @map("elective_group_id")
+  subjectId        String @map("subject_id")
+  parallelSections Int    @default(1) @map("parallel_sections")
 
   school        School        @relation(fields: [schoolId], references: [id])
   electiveGroup ElectiveGroup @relation(fields: [electiveGroupId], references: [id])
@@ -406,7 +408,7 @@ model DivisionAssignment {
   schoolId                String    @map("school_id")
   divisionId              String    @map("division_id")
   subjectId               String    @map("subject_id")
-  teacherId               String    @map("teacher_id")
+  teacherId               String?   @map("teacher_id")
   assistantTeacherId      String?   @map("assistant_teacher_id")
   weightage               Int
   electiveGroupId         String?   @map("elective_group_id")
@@ -419,7 +421,7 @@ model DivisionAssignment {
   school           School         @relation(fields: [schoolId], references: [id])
   division         Division       @relation(fields: [divisionId], references: [id])
   subject          Subject        @relation(fields: [subjectId], references: [id])
-  teacher          Teacher        @relation("PrimaryTeacher", fields: [teacherId], references: [id])
+  teacher          Teacher?       @relation("PrimaryTeacher", fields: [teacherId], references: [id])
   assistantTeacher Teacher?       @relation("AssistantTeacher", fields: [assistantTeacherId], references: [id])
   electiveGroup    ElectiveGroup? @relation(fields: [electiveGroupId], references: [id])
   academicYear     AcademicYear   @relation(fields: [academicYearId], references: [id])

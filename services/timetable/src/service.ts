@@ -99,9 +99,10 @@ export class TimetableService {
       orderBy: { sortOrder: 'asc' },
     });
 
-    // Get division assignments
+    // Get division assignments — exclude unassigned-teacher entries since
+    // they cannot be scheduled until an admin assigns a teacher.
     const assignments = await prisma.divisionAssignment.findMany({
-      where: { schoolId, divisionId, academicYearId, deletedAt: null },
+      where: { schoolId, divisionId, academicYearId, deletedAt: null, teacherId: { not: null } },
     });
 
     // Build slot matrix and do round-robin assignment
@@ -176,7 +177,7 @@ export class TimetableService {
         assignment: {
           id: string;
           subject: { id: string; name: string };
-          teacher: { id: string; name: string };
+          teacher: { id: string; name: string } | null;
         } | null;
       }>;
     }> = {};

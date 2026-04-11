@@ -4,6 +4,7 @@ import { baseQuery } from '@/lib/api';
 export interface ElectiveGroupSubject {
   id: string;
   subjectId: string;
+  parallelSections: number;
   subject: {
     id: string;
     name: string;
@@ -15,6 +16,7 @@ export interface ElectiveGroup {
   schoolId: string;
   academicYearId: string;
   name: string;
+  periodsPerWeek: number;
   subjects: ElectiveGroupSubject[];
   _count?: {
     divisionAssignments: number;
@@ -40,13 +42,13 @@ export const electiveGroupApi = createApi({
           : [{ type: 'ElectiveGroup', id: 'LIST' }],
     }),
 
-    createElectiveGroup: builder.mutation<ElectiveGroup, { name: string }>({
+    createElectiveGroup: builder.mutation<ElectiveGroup, { name: string; periodsPerWeek: number }>({
       query: (body) => ({ url: 'elective-groups', method: 'POST', body }),
       transformResponse: (response: { data: ElectiveGroup }) => response.data,
       invalidatesTags: [{ type: 'ElectiveGroup', id: 'LIST' }],
     }),
 
-    updateElectiveGroup: builder.mutation<ElectiveGroup, { id: string; name: string }>({
+    updateElectiveGroup: builder.mutation<ElectiveGroup, { id: string; name?: string; periodsPerWeek?: number }>({
       query: ({ id, ...body }) => ({ url: `elective-groups/${id}`, method: 'PUT', body }),
       transformResponse: (response: { data: ElectiveGroup }) => response.data,
       invalidatesTags: (_r, _e, { id }) => [{ type: 'ElectiveGroup', id }, { type: 'ElectiveGroup', id: 'LIST' }],
@@ -57,11 +59,20 @@ export const electiveGroupApi = createApi({
       invalidatesTags: [{ type: 'ElectiveGroup', id: 'LIST' }],
     }),
 
-    addElectiveSubject: builder.mutation<void, { groupId: string; subjectId: string }>({
-      query: ({ groupId, subjectId }) => ({
+    addElectiveSubject: builder.mutation<void, { groupId: string; subjectId: string; parallelSections: number }>({
+      query: ({ groupId, subjectId, parallelSections }) => ({
         url: `elective-groups/${groupId}/subjects`,
         method: 'POST',
-        body: { subjectId },
+        body: { subjectId, parallelSections },
+      }),
+      invalidatesTags: (_r, _e, { groupId }) => [{ type: 'ElectiveGroup', id: groupId }, { type: 'ElectiveGroup', id: 'LIST' }],
+    }),
+
+    updateElectiveSubject: builder.mutation<void, { groupId: string; subjectId: string; parallelSections: number }>({
+      query: ({ groupId, subjectId, parallelSections }) => ({
+        url: `elective-groups/${groupId}/subjects/${subjectId}`,
+        method: 'PUT',
+        body: { parallelSections },
       }),
       invalidatesTags: (_r, _e, { groupId }) => [{ type: 'ElectiveGroup', id: groupId }, { type: 'ElectiveGroup', id: 'LIST' }],
     }),
@@ -82,5 +93,6 @@ export const {
   useUpdateElectiveGroupMutation,
   useDeleteElectiveGroupMutation,
   useAddElectiveSubjectMutation,
+  useUpdateElectiveSubjectMutation,
   useRemoveElectiveSubjectMutation,
 } = electiveGroupApi;

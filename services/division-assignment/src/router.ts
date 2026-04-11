@@ -27,8 +27,9 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
 
   // Elective group subject routes: /api/elective-groups/:groupId/subjects/:subjectId
   const groupSubjectIdMatch = path.match(/^\/api\/elective-groups\/([^/]+)\/subjects\/([^/]+)$/);
-  if (method === 'DELETE' && groupSubjectIdMatch) {
-    return controller.removeElectiveSubject(event, groupSubjectIdMatch[1], groupSubjectIdMatch[2]);
+  if (groupSubjectIdMatch) {
+    if (method === 'PUT') return controller.updateElectiveSubject(event, groupSubjectIdMatch[1], groupSubjectIdMatch[2]);
+    if (method === 'DELETE') return controller.removeElectiveSubject(event, groupSubjectIdMatch[1], groupSubjectIdMatch[2]);
   }
 
   // Elective group subjects: /api/elective-groups/:id/subjects

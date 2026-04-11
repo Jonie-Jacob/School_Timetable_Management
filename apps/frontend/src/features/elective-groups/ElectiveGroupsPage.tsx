@@ -23,13 +23,17 @@ import {
   useUpdateElectiveGroupMutation,
   useDeleteElectiveGroupMutation,
   useAddElectiveSubjectMutation,
+  useUpdateElectiveSubjectMutation,
   useRemoveElectiveSubjectMutation,
   type ElectiveGroup,
 } from './electiveGroupApi';
 
 const groupSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
+  periodsPerWeek: z.number().int().min(1, 'Must be at least 1').max(50),
 });
+
+type GroupFormValues = z.infer<typeof groupSchema>;
 
 export function Component() {
   const { t } = useTranslation();
@@ -40,6 +44,7 @@ export function Component() {
   const [createGroup, { isLoading: isCreating }] = useCreateElectiveGroupMutation();
   const [deleteGroup, { isLoading: isDeleting }] = useDeleteElectiveGroupMutation();
   const [addSubject] = useAddElectiveSubjectMutation();
+  const [updateElectiveSubject] = useUpdateElectiveSubjectMutation();
   const [removeSubject] = useRemoveElectiveSubjectMutation();
   const [updateGroup] = useUpdateElectiveGroupMutation();
 
@@ -47,12 +52,17 @@ export function Component() {
   const [editTarget, setEditTarget] = useState<ElectiveGroup | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ElectiveGroup | null>(null);
   const [addSubjectTarget, setAddSubjectTarget] = useState<ElectiveGroup | null>(null);
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
-  const [createSubjects, setCreateSubjects] = useState<string[]>([]);
+  // Map of subjectId -> { selected, parallelSections }
+  const [selectedSubjects, setSelectedSubjects] = useState<Record<string, number>>({});
+  const [createSubjects, setCreateSubjects] = useState<Record<string, number>>({});
+  const [editSubjects, setEditSubjects] = useState<Record<string, number>>({});
 
   const allSubjects = subjectsData?.data ?? [];
 
-  const form = useForm({ resolver: zodResolver(groupSchema), defaultValues: { name: '' } });
+  const form = useForm<GroupFormValues>({
+    resolver: zodResolver(groupSchema),
+    defaultValues: { name: '', periodsPerWeek: 1 },
+  });
 
   // For the "add subjects" dialog, filter out subjects already in the group
   const availableSubjects = useMemo(() => {
@@ -63,23 +73,24 @@ export function Component() {
     return allSubjects.filter((s) => !existingIds.has(s.id));
   }, [addSubjectTarget, allSubjects]);
 
-  const handleCreate = async (values: { name: string }) => {
+  const handleCreate = async (values: GroupFormValues) => {
     try {
       const group = await createGroup(values).unwrap();
-      // Add selected subjects
-      if (createSubjects.length > 0) {
-        for (const subjectId of createSubjects) {
+      // Add selected subjects with their parallelSections
+      const entries = Object.entries(createSubjects);
+      if (entries.length > 0) {
+        for (const [subjectId, parallelSections] of entries) {
           try {
-            await addSubject({ groupId: group.id, subjectId }).unwrap();
+            await addSubject({ groupId: group.id, subjectId, parallelSections }).unwrap();
           } catch { /* skip duplicates */ }
         }
       }
       toast.success('Elective group created.');
       setFormOpen(false);
-      setCreateSubjects([]);
+      setCreateSubjects({});
       form.reset();
-    } catch {
-      toast.error('Failed to create elective group.');
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message || 'Failed to create elective group.');
     }
   };
 
@@ -89,17 +100,19 @@ export function Component() {
       await deleteGroup(deleteTarget.id).unwrap();
       toast.success('Elective group deleted.');
       setDeleteTarget(null);
-    } catch {
-      toast.error('Failed to delete elective group.');
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message || 'Failed to delete elective group.');
     }
   };
 
   const handleAddSubjects = async () => {
-    if (!addSubjectTarget || selectedSubjects.length === 0) return;
+    if (!addSubjectTarget) return;
+    const entries = Object.entries(selectedSubjects);
+    if (entries.length === 0) return;
     let added = 0;
-    for (const subjectId of selectedSubjects) {
+    for (const [subjectId, parallelSections] of entries) {
       try {
-        await addSubject({ groupId: addSubjectTarget.id, subjectId }).unwrap();
+        await addSubject({ groupId: addSubjectTarget.id, subjectId, parallelSections }).unwrap();
         added++;
       } catch { /* skip duplicates */ }
     }
@@ -109,18 +122,74 @@ export function Component() {
       toast.info('All selected subjects were already in the group.');
     }
     setAddSubjectTarget(null);
-    setSelectedSubjects([]);
+    setSelectedSubjects({});
   };
 
-  const handleEditGroup = async (values: { name: string }) => {
+  const handleEditGroup = async (values: GroupFormValues) => {
     if (!editTarget) return;
     try {
-      await updateGroup({ id: editTarget.id, name: values.name }).unwrap();
-      toast.success('Group renamed.');
-      setEditTarget(null);
-    } catch {
-      toast.error('Failed to rename group.');
+      // 1. Update group fields if changed
+      const nameChanged = values.name !== editTarget.name;
+      const periodsChanged = values.periodsPerWeek !== (editTarget.periodsPerWeek || 0);
+      if (nameChanged || periodsChanged) {
+        await updateGroup({ id: editTarget.id, name: values.name, periodsPerWeek: values.periodsPerWeek }).unwrap();
+      }
+
+      // 2. Diff subjects and apply add/remove/update
+      const original = new Map<string, number>(
+        (editTarget.subjects ?? []).map((s) => [s.subjectId, s.parallelSections]),
+      );
+      const next = editSubjects;
+      const errors: string[] = [];
+
+      // Removals
+      for (const [subjectId] of original) {
+        if (next[subjectId] === undefined) {
+          try {
+            await removeSubject({ groupId: editTarget.id, subjectId }).unwrap();
+          } catch (err: any) {
+            errors.push(err?.data?.error?.message || `Failed to remove subject`);
+          }
+        }
+      }
+      // Additions + updates
+      for (const [subjectId, sections] of Object.entries(next)) {
+        if (!original.has(subjectId)) {
+          try {
+            await addSubject({ groupId: editTarget.id, subjectId, parallelSections: sections }).unwrap();
+          } catch (err: any) {
+            errors.push(err?.data?.error?.message || `Failed to add subject`);
+          }
+        } else if (original.get(subjectId) !== sections) {
+          try {
+            await updateElectiveSubject({ groupId: editTarget.id, subjectId, parallelSections: sections }).unwrap();
+          } catch (err: any) {
+            errors.push(err?.data?.error?.message || `Failed to update sections`);
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        toast.error(errors[0]);
+      } else {
+        toast.success('Group updated.');
+        setEditTarget(null);
+        setEditSubjects({});
+      }
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message || 'Failed to update group.');
     }
+  };
+
+  const toggleEditSubject = (id: string) => {
+    setEditSubjects((prev) => {
+      if (prev[id] !== undefined) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: 1 };
+    });
   };
 
   const handleRemoveSubject = async (group: ElectiveGroup, subjectId: string) => {
@@ -132,23 +201,50 @@ export function Component() {
     try {
       await removeSubject({ groupId: group.id, subjectId }).unwrap();
       toast.success('Subject removed.');
-    } catch {
-      toast.error('Failed to remove subject.');
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message || 'Failed to remove subject.');
     }
   };
 
-  const toggleSubject = (id: string, list: string[], setter: (v: string[]) => void) => {
-    setter(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  const handleUpdateSections = async (groupId: string, subjectId: string, parallelSections: number) => {
+    try {
+      await updateElectiveSubject({ groupId, subjectId, parallelSections }).unwrap();
+      toast.success('Parallel sections updated.');
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message || 'Failed to update sections.');
+    }
+  };
+
+  const toggleCreateSubject = (id: string) => {
+    setCreateSubjects((prev) => {
+      if (prev[id] !== undefined) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: 1 };
+    });
+  };
+
+  const toggleSelectedSubject = (id: string) => {
+    setSelectedSubjects((prev) => {
+      if (prev[id] !== undefined) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: 1 };
+    });
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Elective Groups"
-        description="Define elective groups and their subject pools."
+        description="Define elective groups, their block duration, and parallel sections per subject."
         actions={
           !isReadOnly ? (
-            <Button onClick={() => { form.reset(); setCreateSubjects([]); setFormOpen(true); }}>
+            <Button onClick={() => { form.reset({ name: '', periodsPerWeek: 1 }); setCreateSubjects({}); setFormOpen(true); }}>
               <Plus className="size-4" />
               Add Elective Group
             </Button>
@@ -170,7 +266,7 @@ export function Component() {
           <h3 className="text-lg font-semibold">No elective groups yet</h3>
           <p className="mt-1 text-sm text-muted-foreground max-w-md">Create elective groups to co-schedule subjects for student parallel sessions.</p>
           {!isReadOnly && (
-            <Button className="mt-4" onClick={() => { form.reset(); setCreateSubjects([]); setFormOpen(true); }}>
+            <Button className="mt-4" onClick={() => { form.reset({ name: '', periodsPerWeek: 1 }); setCreateSubjects({}); setFormOpen(true); }}>
               <Plus className="size-4" />
               Add Elective Group
             </Button>
@@ -183,14 +279,25 @@ export function Component() {
           {groups.map((group) => (
             <div key={group.id} className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4 space-y-3 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/5 hover:border-amber-500/20">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">{group.name}</h3>
+                <div>
+                  <h3 className="font-semibold">{group.name}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {group.periodsPerWeek > 0 ? `${group.periodsPerWeek} period${group.periodsPerWeek === 1 ? '' : 's'}/week` : 'No duration set'}
+                  </p>
+                </div>
                 <div className="flex items-center gap-1">
                   {!isReadOnly && (
                     <>
-                      <Button variant="ghost" size="icon-xs" onClick={() => { form.reset({ name: group.name }); setEditTarget(group); }} title="Rename">
+                      <Button variant="ghost" size="icon-xs" onClick={() => {
+                        form.reset({ name: group.name, periodsPerWeek: group.periodsPerWeek || 1 });
+                        const initial: Record<string, number> = {};
+                        for (const egs of group.subjects ?? []) initial[egs.subjectId] = egs.parallelSections;
+                        setEditSubjects(initial);
+                        setEditTarget(group);
+                      }} title="Edit group">
                         <Pencil className="size-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon-xs" onClick={() => { setAddSubjectTarget(group); setSelectedSubjects([]); }} title="Add subjects">
+                      <Button variant="ghost" size="icon-xs" onClick={() => { setAddSubjectTarget(group); setSelectedSubjects({}); }} title="Add subjects">
                         <Plus className="size-3.5" />
                       </Button>
                       <Button variant="ghost" size="icon-xs" onClick={() => setDeleteTarget(group)} title="Delete">
@@ -205,14 +312,22 @@ export function Component() {
                 {group.subjects?.map((egs) => (
                   <Badge key={egs.subjectId} variant="secondary" className="text-xs gap-1">
                     {egs.subject.name}
+                    <span className="text-muted-foreground">×{egs.parallelSections}</span>
                     {!isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSubject(group, egs.subjectId)}
-                        className="ml-0.5 rounded-full hover:bg-white/20"
-                      >
-                        <X className="size-2.5" />
-                      </button>
+                      <>
+                        <SectionEditButton
+                          current={egs.parallelSections}
+                          onSave={(v) => handleUpdateSections(group.id, egs.subjectId, v)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSubject(group, egs.subjectId)}
+                          className="ml-0.5 rounded-full hover:bg-white/20"
+                          title="Remove subject"
+                        >
+                          <X className="size-2.5" />
+                        </button>
+                      </>
                     )}
                   </Badge>
                 ))}
@@ -231,25 +346,52 @@ export function Component() {
         </div>
       )}
 
-      {/* Rename dialog */}
-      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Rename Elective Group</DialogTitle></DialogHeader>
+      {/* Edit dialog — name + periodsPerWeek + subjects */}
+      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) { setEditTarget(null); setEditSubjects({}); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>Edit Elective Group</DialogTitle></DialogHeader>
           <form onSubmit={form.handleSubmit(handleEditGroup)} className="space-y-4">
             <div className="space-y-2">
               <Label>Group Name</Label>
               <Input placeholder="e.g. Biology / Computer Science" {...form.register('name')} autoFocus />
               {form.formState.errors.name && <p className="text-sm text-destructive">{form.formState.errors.name.message}</p>}
             </div>
+            <div className="space-y-2">
+              <Label>Periods per week</Label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                {...form.register('periodsPerWeek', { valueAsNumber: true })}
+              />
+              <p className="text-xs text-muted-foreground">The number of periods each student attends from this elective per week.</p>
+              {form.formState.errors.periodsPerWeek && <p className="text-sm text-destructive">{form.formState.errors.periodsPerWeek.message}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Subjects in this group</Label>
+              <p className="text-xs text-muted-foreground">Toggle subjects on/off and adjust how many concurrent sections of each run. Changes apply when you click Save.</p>
+              <SubjectChecklistWithSections
+                subjects={allSubjects}
+                selected={editSubjects}
+                onToggle={toggleEditSubject}
+                onChangeSections={(id, v) => setEditSubjects((prev) => ({ ...prev, [id]: v }))}
+                periodsPerWeek={form.watch('periodsPerWeek') || 0}
+              />
+              {Object.keys(editSubjects).length > 0 && (
+                <p className="text-xs text-muted-foreground">{Object.keys(editSubjects).length} subject(s) selected</p>
+              )}
+            </div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>{t('actions.cancel')}</Button>
+              <Button type="button" variant="outline" onClick={() => { setEditTarget(null); setEditSubjects({}); }}>{t('actions.cancel')}</Button>
               <Button type="submit">{t('actions.save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Create dialog — includes subject selection */}
+      {/* Create dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Create Elective Group</DialogTitle></DialogHeader>
@@ -261,15 +403,30 @@ export function Component() {
             </div>
 
             <div className="space-y-2">
+              <Label>Periods per week</Label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                placeholder="e.g. 8"
+                {...form.register('periodsPerWeek', { valueAsNumber: true })}
+              />
+              <p className="text-xs text-muted-foreground">The number of periods each student attends from this elective per week.</p>
+              {form.formState.errors.periodsPerWeek && <p className="text-sm text-destructive">{form.formState.errors.periodsPerWeek.message}</p>}
+            </div>
+
+            <div className="space-y-2">
               <Label>Subjects in this group</Label>
-              <p className="text-xs text-muted-foreground">Select subjects that will be co-scheduled (at least 2 recommended).</p>
-              <SubjectChecklist
+              <p className="text-xs text-muted-foreground">Select subjects that will run in parallel, and set how many concurrent sections of each run.</p>
+              <SubjectChecklistWithSections
                 subjects={allSubjects}
                 selected={createSubjects}
-                onToggle={(id) => toggleSubject(id, createSubjects, setCreateSubjects)}
+                onToggle={toggleCreateSubject}
+                onChangeSections={(id, v) => setCreateSubjects((prev) => ({ ...prev, [id]: v }))}
+                periodsPerWeek={form.watch('periodsPerWeek') || 0}
               />
-              {createSubjects.length > 0 && (
-                <p className="text-xs text-muted-foreground">{createSubjects.length} subject(s) selected</p>
+              {Object.keys(createSubjects).length > 0 && (
+                <p className="text-xs text-muted-foreground">{Object.keys(createSubjects).length} subject(s) selected</p>
               )}
             </div>
 
@@ -281,7 +438,7 @@ export function Component() {
         </DialogContent>
       </Dialog>
 
-      {/* Add subjects dialog — only shows subjects not already in the group */}
+      {/* Add subjects dialog */}
       <Dialog open={!!addSubjectTarget} onOpenChange={(open) => { if (!open) setAddSubjectTarget(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Add Subjects to {addSubjectTarget?.name}</DialogTitle></DialogHeader>
@@ -290,20 +447,22 @@ export function Component() {
               <p className="text-sm text-muted-foreground text-center py-4">All subjects are already in this group.</p>
             ) : (
               <>
-                <SubjectChecklist
+                <SubjectChecklistWithSections
                   subjects={availableSubjects}
                   selected={selectedSubjects}
-                  onToggle={(id) => toggleSubject(id, selectedSubjects, setSelectedSubjects)}
+                  onToggle={toggleSelectedSubject}
+                  onChangeSections={(id, v) => setSelectedSubjects((prev) => ({ ...prev, [id]: v }))}
+                  periodsPerWeek={addSubjectTarget?.periodsPerWeek ?? 0}
                 />
-                {selectedSubjects.length > 0 && (
-                  <p className="text-xs text-muted-foreground">{selectedSubjects.length} subject(s) selected</p>
+                {Object.keys(selectedSubjects).length > 0 && (
+                  <p className="text-xs text-muted-foreground">{Object.keys(selectedSubjects).length} subject(s) selected</p>
                 )}
               </>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setAddSubjectTarget(null)}>{t('actions.cancel')}</Button>
-              <Button onClick={handleAddSubjects} disabled={selectedSubjects.length === 0}>
-                Add {selectedSubjects.length > 0 ? `${selectedSubjects.length} Subject(s)` : ''}
+              <Button onClick={handleAddSubjects} disabled={Object.keys(selectedSubjects).length === 0}>
+                Add {Object.keys(selectedSubjects).length > 0 ? `${Object.keys(selectedSubjects).length} Subject(s)` : ''}
               </Button>
             </DialogFooter>
           </div>
@@ -324,34 +483,118 @@ export function Component() {
   );
 }
 
-// ── Subject checklist component ──
+// ── Subject checklist with sections input ──
 
-function SubjectChecklist({
+function SubjectChecklistWithSections({
   subjects,
   selected,
   onToggle,
+  onChangeSections,
+  periodsPerWeek,
 }: {
   subjects: Array<{ id: string; name: string }>;
-  selected: string[];
+  selected: Record<string, number>;
   onToggle: (id: string) => void;
+  onChangeSections: (id: string, value: number) => void;
+  periodsPerWeek: number;
 }) {
   return (
-    <div className="rounded-lg border border-border/40 bg-card/60 backdrop-blur-sm p-2 max-h-48 overflow-y-auto space-y-0.5">
-      {subjects.map((s) => (
-        <label
-          key={s.id}
-          className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm cursor-pointer hover:bg-amber-500/5 transition-colors"
-        >
-          <Checkbox
-            checked={selected.includes(s.id)}
-            onCheckedChange={() => onToggle(s.id)}
-          />
-          {s.name}
-        </label>
-      ))}
+    <div className="rounded-lg border border-border/40 bg-card/60 backdrop-blur-sm p-2 max-h-56 overflow-y-auto space-y-0.5">
+      {subjects.map((s) => {
+        const isSelected = selected[s.id] !== undefined;
+        const sections = selected[s.id] ?? 1;
+        const required = sections * periodsPerWeek;
+        return (
+          <div
+            key={s.id}
+            className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-amber-500/5 transition-colors"
+          >
+            <label className="flex items-center gap-2 flex-1 cursor-pointer">
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => onToggle(s.id)}
+              />
+              <span className="flex-1">{s.name}</span>
+            </label>
+            {isSelected && (
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground">Sections</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={sections}
+                  onChange={(e) => onChangeSections(s.id, Math.max(1, parseInt(e.target.value) || 1))}
+                  className="h-7 w-14 text-xs"
+                />
+                {periodsPerWeek > 0 && (
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    = {required} hrs
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
       {subjects.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-2">No subjects available.</p>
       )}
     </div>
+  );
+}
+
+// ── Inline sections edit button ──
+
+function SectionEditButton({
+  current,
+  onSave,
+}: {
+  current: number;
+  onSave: (value: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(current);
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-0.5">
+        <Input
+          type="number"
+          min={1}
+          max={10}
+          value={value}
+          onChange={(e) => setValue(Math.max(1, parseInt(e.target.value) || 1))}
+          className="h-5 w-10 text-[10px] px-1"
+        />
+        <button
+          type="button"
+          onClick={() => { onSave(value); setEditing(false); }}
+          className="text-[10px] text-green-600 hover:text-green-700"
+          title="Save"
+        >
+          ✓
+        </button>
+        <button
+          type="button"
+          onClick={() => { setValue(current); setEditing(false); }}
+          className="text-[10px] text-destructive hover:text-destructive/80"
+          title="Cancel"
+        >
+          ✕
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setValue(current); setEditing(true); }}
+      className="ml-0.5 rounded-full hover:bg-white/20 p-0.5"
+      title="Edit parallel sections"
+    >
+      <Pencil className="size-2.5" />
+    </button>
   );
 }

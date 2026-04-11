@@ -4,7 +4,7 @@ import {
   parseBody, authMiddleware, academicYearMiddleware,
   createAssignmentSchema, updateAssignmentSchema,
   createElectiveGroupSchema, updateElectiveGroupSchema,
-  addElectiveSubjectSchema,
+  addElectiveSubjectSchema, updateElectiveSubjectSchema,
 } from '@timetable/shared';
 import { AssignmentService } from './service';
 
@@ -127,6 +127,14 @@ export class AssignmentController {
     const body = parseBody(event, addElectiveSubjectSchema);
     const result = await service.addElectiveSubject(ctx.schoolId, ctx.academicYearId, groupId, body);
     return created(result);
+  }
+
+  async updateElectiveSubject(event: APIGatewayProxyEventV2, groupId: string, subjectId: string): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const body = parseBody(event, updateElectiveSubjectSchema);
+    const result = await service.updateElectiveSubject(ctx.schoolId, ctx.academicYearId, groupId, subjectId, body);
+    return success(result);
   }
 
   async removeElectiveSubject(event: APIGatewayProxyEventV2, groupId: string, subjectId: string): Promise<APIGatewayProxyResultV2> {
