@@ -41,6 +41,12 @@ SOFT_WEIGHT_BALANCE = 2.0
 SOFT_WEIGHT_PREFS = 4.0
 SOFT_WEIGHT_ADJACENT = 2.0
 SOFT_WEIGHT_MAX_PERIODS = 6.0
+# When the global adjacency_constraint flag is on, we enforce clustering of
+# multi-period subjects within the same day with a much higher weight than
+# the per-assignment "preferAdjacentPeriods" preference. This is intentionally
+# strong (close to a hard constraint) but soft so the GA can still converge
+# in tight schedules.
+SOFT_WEIGHT_ADJACENCY_GLOBAL = 50.0
 
 
 def evaluate(
@@ -66,14 +72,76 @@ def evaluate(
     penalties += _h5_elective_alignment(data, chromosome, other_chromosomes)
     penalties += _h7_hard_preferences(data, chromosome)
 
-    penalties += _s1_subject_spread(data, chromosome)
+    # When adjacency clustering is the goal, S1 (spread across days) and
+    # S3 (avoid consecutive same-subject) directly oppose it — disable them.
+    if not data.adjacency_constraint_enabled:
+        penalties += _s1_subject_spread(data, chromosome)
+        penalties += _s3_consecutive_same_subject(data, chromosome)
+    else:
+        penalties += _s7_adjacency_clustering(data, chromosome)
+
     penalties += _s2_period_preference(data, chromosome)
-    penalties += _s3_consecutive_same_subject(data, chromosome)
     penalties += _s4_teacher_workload_balance(data, chromosome)
     penalties += _s5_soft_preferences(data, chromosome)
     penalties += _s6_teacher_max_periods(data, chromosome)
 
     return -penalties
+
+
+# ── S7: Global adjacency clustering ──────────────────────────────────────
+
+def _s7_adjacency_clustering(data: SchoolData, chromosome: np.ndarray) -> float:
+    """Reward (= negative-cost) clustering of multi-period assignments into
+    contiguous blocks within the same day. Active only when
+    `adjacency_constraint_enabled` is True.
+
+    For each (assignment, day) where the assignment appears 2+ times, we
+    count "gap pairs" — adjacent placements that are NOT actually adjacent
+    in real clock time. A pair counts as a gap when EITHER:
+
+      * the two period indices are not consecutive (positions[i+1] - positions[i] > 1), OR
+      * the two period indices are consecutive but a break/lunch slot sits
+        between them in the period structure (data.period_after_break).
+
+    Each gap incurs SOFT_WEIGHT_ADJACENCY_GLOBAL penalty, which is heavy
+    enough to dominate small spread/balance signals so the GA chooses
+    clustered solutions.
+
+    Single-occurrence-per-day assignments incur no penalty.
+    """
+    penalty = 0.0
+    ppd = data.periods_per_day
+    if ppd == 0:
+        return 0.0
+
+    # (assignment_idx, day_idx) → list of period_idx
+    placements: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for gi in range(data.total_periods):
+        a_idx = int(chromosome[gi])
+        if a_idx < 0:
+            continue
+        day_idx = gi // ppd
+        period_idx = gi % ppd
+        placements[(a_idx, day_idx)].append(period_idx)
+
+    for (_, day_idx), positions in placements.items():
+        if len(positions) < 2:
+            continue
+        positions_sorted = sorted(positions)
+        gaps = 0
+        for i in range(len(positions_sorted) - 1):
+            lo = positions_sorted[i]
+            hi = positions_sorted[i + 1]
+            if hi - lo > 1:
+                gaps += 1
+                continue
+            # hi - lo == 1 → consecutive in chromosome encoding, but check
+            # whether a break sits between them in real clock time.
+            if (day_idx, hi) in data.period_after_break:
+                gaps += 1
+        penalty += gaps * SOFT_WEIGHT_ADJACENCY_GLOBAL
+
+    return penalty
 
 
 # ── Helpers for scheduling_preferences ────────────────────────────────────

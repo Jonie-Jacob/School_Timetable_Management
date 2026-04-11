@@ -8,8 +8,8 @@ export interface NotificationCount {
 export interface TimetableNotification {
   id: string;
   timetableId: string;
-  type: string;
-  message: string;
+  conflictType: string;
+  changeDescription: string;
   dismissed: boolean;
   createdAt: string;
   timetable: {

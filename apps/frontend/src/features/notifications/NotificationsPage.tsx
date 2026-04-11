@@ -91,7 +91,8 @@ export function Component() {
       {!isLoading && notifications.length > 0 && (
         <div className="space-y-2">
           {notifications.map((notif) => {
-            const badgeVariant = (TYPE_COLORS[notif.type] ?? 'outline') as 'destructive' | 'warning' | 'outline';
+            const conflictType = notif.conflictType ?? 'CONFLICT';
+            const badgeVariant = (TYPE_COLORS[conflictType] ?? 'outline') as 'destructive' | 'warning' | 'outline';
             const division = notif.timetable?.division;
             const className = division?.class?.name ?? '';
             const divLabel = division?.label ?? '';
@@ -106,12 +107,14 @@ export function Component() {
                 </div>
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm">{className} — Division {divLabel}</span>
+                    <span className="font-medium text-sm">
+                      {className ? `${className} — Division ${divLabel}` : 'Timetable conflict'}
+                    </span>
                     <Badge variant={badgeVariant} className="text-[10px]">
-                      {notif.type.replace(/_/g, ' ')}
+                      {conflictType.replace(/_/g, ' ')}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">{notif.message}</p>
+                  <p className="text-xs text-muted-foreground">{notif.changeDescription}</p>
                   <p className="text-[10px] text-muted-foreground/60">
                     {new Date(notif.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>

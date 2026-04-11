@@ -86,6 +86,11 @@ class SchoolData:
     academic_year_id: str
     division_id: str
 
+    # Global flag — when True, the GA fitness function rewards clustering
+    # multi-period subjects into adjacent slots within the same day, and
+    # disables the spread/anti-consecutive constraints that would oppose it.
+    adjacency_constraint_enabled: bool = False
+
     # Period slots only (no intervals/lunch), ordered by day then sort_order
     period_slots: list[SlotInfo] = field(default_factory=list)
     # All slots grouped by working_day_id
@@ -94,6 +99,11 @@ class SchoolData:
     working_day_ids: list[str] = field(default_factory=list)
     # day_of_week → working_day_id
     day_map: dict[int, str] = field(default_factory=dict)
+    # (day_idx, period_idx) → True iff there is at least one INTERVAL or
+    # LUNCH_BREAK slot between this period and the previous period in real
+    # clock time. Used by the adjacency clustering constraint to refuse to
+    # call P3+P4 "adjacent" when a break sits between them.
+    period_after_break: set[tuple[int, int]] = field(default_factory=set)
 
     # Assignments for this division
     assignments: list[Assignment] = field(default_factory=list)
@@ -140,6 +150,7 @@ def load_school_data(
     academic_year_id: str,
     division_id: str,
     batch_division_ids: list[str] | None = None,
+    adjacency_constraint_enabled: bool = False,
 ) -> SchoolData:
     """Load all data for timetable generation from the database."""
     conn = psycopg2.connect(DATABASE_URL)
@@ -149,6 +160,7 @@ def load_school_data(
                 school_id=school_id,
                 academic_year_id=academic_year_id,
                 division_id=division_id,
+                adjacency_constraint_enabled=adjacency_constraint_enabled,
                 batch_division_ids=batch_division_ids or [division_id],
             )
 
@@ -182,7 +194,10 @@ def _load_period_slots(cur, data: SchoolData) -> None:
         raise ValueError(f"No period structure assigned to division {data.division_id}")
     period_structure_id = row["period_structure_id"]
 
-    # Load working days + period-type slots
+    # Load ALL slots (periods + breaks) so we can detect which period
+    # transitions have a break between them in real clock time. We still
+    # only put PERIOD slots into the chromosome encoding, but the adjacency
+    # constraint needs to know "is there a break between sortOrder N and M".
     cur.execute("""
         SELECT
             s.id AS slot_id,
@@ -191,32 +206,63 @@ def _load_period_slots(cur, data: SchoolData) -> None:
             s.slot_number,
             s.sort_order,
             wd.day_of_week,
+            wd.sort_order AS day_sort_order,
             wd.label AS day_label
         FROM slots s
         JOIN working_days wd ON wd.id = s.working_day_id
         WHERE wd.period_structure_id = %s
-          AND s.slot_type = 'PERIOD'
         ORDER BY wd.sort_order, s.sort_order
     """, (period_structure_id,))
 
+    # Group all slots (periods + breaks) by working_day_id, in sort_order
+    all_slots_by_day: dict[str, list[dict]] = {}
     for row in cur.fetchall():
-        slot = SlotInfo(
-            id=row["slot_id"],
-            working_day_id=row["working_day_id"],
-            slot_type=row["slot_type"],
-            slot_number=row["slot_number"],
-            sort_order=row["sort_order"],
-            day_of_week=row["day_of_week"],
-            day_label=row["day_label"],
-        )
-        data.period_slots.append(slot)
+        wd_id = row["working_day_id"]
+        all_slots_by_day.setdefault(wd_id, []).append(row)
 
-        wd_id = slot.working_day_id
-        if wd_id not in data.slots_by_day:
-            data.slots_by_day[wd_id] = []
-            data.working_day_ids.append(wd_id)
-            data.day_map[slot.day_of_week] = wd_id
-        data.slots_by_day[wd_id].append(slot)
+    # Walk each day in working-day order, populate period_slots / slots_by_day
+    # for PERIOD-only chromosome encoding, and mark each period whose
+    # immediately-previous slot was a break.
+    sorted_day_keys = sorted(
+        all_slots_by_day.keys(),
+        key=lambda wid: all_slots_by_day[wid][0]["day_sort_order"],
+    )
+    day_idx = 0
+    for wd_id in sorted_day_keys:
+        rows = all_slots_by_day[wd_id]
+        period_idx = 0
+        prev_was_break = False
+        for row in rows:
+            if row["slot_type"] != "PERIOD":
+                # Non-period slot — mark that the next period (if any) is
+                # "after a break" and skip encoding it into the chromosome.
+                prev_was_break = True
+                continue
+
+            slot = SlotInfo(
+                id=row["slot_id"],
+                working_day_id=row["working_day_id"],
+                slot_type=row["slot_type"],
+                slot_number=row["slot_number"],
+                sort_order=row["sort_order"],
+                day_of_week=row["day_of_week"],
+                day_label=row["day_label"],
+            )
+            data.period_slots.append(slot)
+
+            if wd_id not in data.slots_by_day:
+                data.slots_by_day[wd_id] = []
+                data.working_day_ids.append(wd_id)
+                data.day_map[slot.day_of_week] = wd_id
+            data.slots_by_day[wd_id].append(slot)
+
+            if prev_was_break and period_idx > 0:
+                # period_idx > 0 ensures we don't mark the very first period
+                # of the day (no "previous period" to be non-adjacent to)
+                data.period_after_break.add((day_idx, period_idx))
+            period_idx += 1
+            prev_was_break = False
+        day_idx += 1
 
 
 def _load_assignments(cur, data: SchoolData) -> None:

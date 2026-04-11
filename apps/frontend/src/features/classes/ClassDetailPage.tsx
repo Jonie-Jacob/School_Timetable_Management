@@ -21,7 +21,7 @@ import { useReadOnly } from '@/hooks/useReadOnly';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGetPeriodStructuresQuery, useAssignDivisionsMutation } from '@/features/period-structures/configApi';
 import { useGetTeachersQuery } from '@/features/teachers/teacherApi';
-import { assignmentApi } from '@/features/assignments/assignmentApi';
+import { assignmentApi, useGetAssignmentsQuery } from '@/features/assignments/assignmentApi';
 import { useAppDispatch } from '@/app/hooks';
 import {
   useGetClassQuery,
@@ -356,20 +356,58 @@ function ClassTeacherField({
 }) {
   const { data: teachersData } = useGetTeachersQuery({ pageSize: 200 });
   const allTeachers = teachersData?.data ?? [];
+  // Pull assignments for this division so we can tell which teachers already
+  // teach here. Skip the query until the modal is opened to avoid loading
+  // data for every division card on the page.
+  const [modalOpen, setModalOpen] = useState(false);
+  const { data: divisionAssignments } = useGetAssignmentsQuery(division.id, {
+    skip: !modalOpen,
+  });
 
   const dispatch = useAppDispatch();
   const [analyze] = useAnalyzeClassTeacherMutation();
   const [executeSwap] = useExecuteClassTeacherSwapMutation();
 
-  const [modalOpen, setModalOpen] = useState(false);
   const [step, setStep] = useState<'pick' | 'result'>('pick');
   const [search, setSearch] = useState('');
   const [analysis, setAnalysis] = useState<import('./classApi').ClassTeacherAnalysis | null>(null);
   const [selectedSwap, setSelectedSwap] = useState<import('./classApi').SwapOption | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const filteredTeachers = allTeachers.filter((t) =>
-    t.name.toLowerCase().includes(search.toLowerCase())
+  // teacherId → list of subject names they teach in THIS division.
+  // Used to pin assigned teachers to the top of the list and tag them
+  // with the subjects they handle.
+  const assignedTeachersInDivision = (() => {
+    const map = new Map<string, string[]>();
+    for (const a of divisionAssignments ?? []) {
+      if (!a.teacherId) continue;
+      const list = map.get(a.teacherId) ?? [];
+      list.push(a.subject.name);
+      map.set(a.teacherId, list);
+    }
+    return map;
+  })();
+
+  // Build the picker list:
+  //   1. Apply search filter
+  //   2. Sort: teachers already in this division first (alpha within),
+  //      then everyone else (alpha within)
+  const filteredTeachers = (() => {
+    const term = search.trim().toLowerCase();
+    const matched = allTeachers.filter((t) =>
+      term === '' || t.name.toLowerCase().includes(term),
+    );
+    return [...matched].sort((a, b) => {
+      const aIn = assignedTeachersInDivision.has(a.id);
+      const bIn = assignedTeachersInDivision.has(b.id);
+      if (aIn !== bIn) return aIn ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  })();
+
+  // Index of the first non-assigned teacher — used to render a divider row.
+  const firstUnassignedIdx = filteredTeachers.findIndex(
+    (t) => !assignedTeachersInDivision.has(t.id),
   );
 
   const handlePickTeacher = async (teacherId: string) => {
@@ -483,25 +521,57 @@ function ClassTeacherField({
                   onChange={(e) => setSearch(e.target.value)}
                   autoFocus
                 />
-                <div className="max-h-64 overflow-y-auto rounded-lg border border-border/40 divide-y divide-border/30">
+                <div className="max-h-72 overflow-y-auto rounded-lg border border-border/40">
                   {filteredTeachers.length === 0 && (
                     <div className="px-3 py-4 text-sm text-muted-foreground text-center">No teachers found</div>
                   )}
-                  {filteredTeachers.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      disabled={loading || t.id === division.classTeacherId}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-amber-500/5 transition-colors disabled:opacity-50"
-                      onClick={() => handlePickTeacher(t.id)}
-                    >
-                      <UserCheck className="size-3.5 text-muted-foreground shrink-0" />
-                      <span className="flex-1">{t.name}</span>
-                      {t.id === division.classTeacherId && (
-                        <Badge variant="secondary" className="text-[9px]">Current</Badge>
-                      )}
-                    </button>
-                  ))}
+
+                  {/* Section header for teachers already in this division */}
+                  {assignedTeachersInDivision.size > 0 && filteredTeachers.some((t) => assignedTeachersInDivision.has(t.id)) && (
+                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-amber-700 bg-amber-500/10 border-b border-amber-500/20">
+                      Teaching this division
+                    </div>
+                  )}
+
+                  {filteredTeachers.map((t, idx) => {
+                    const subjects = assignedTeachersInDivision.get(t.id);
+                    const isInDivision = !!subjects;
+                    const showSeparator =
+                      firstUnassignedIdx > 0 && idx === firstUnassignedIdx;
+                    return (
+                      <div key={t.id}>
+                        {showSeparator && (
+                          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground bg-muted/40 border-y border-border/30">
+                            Other teachers
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          disabled={loading || t.id === division.classTeacherId}
+                          className="w-full flex items-start gap-2 px-3 py-2 text-sm text-left hover:bg-amber-500/5 transition-colors disabled:opacity-50 border-b border-border/30 last:border-b-0"
+                          onClick={() => handlePickTeacher(t.id)}
+                        >
+                          <UserCheck className={`size-3.5 shrink-0 mt-0.5 ${isInDivision ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={isInDivision ? 'font-medium' : ''}>{t.name}</span>
+                              {t.id === division.classTeacherId && (
+                                <Badge variant="secondary" className="text-[9px] h-4 px-1.5">Current</Badge>
+                              )}
+                              {isInDivision && t.id !== division.classTeacherId && (
+                                <Badge variant="warning" className="text-[9px] h-4 px-1.5">In division</Badge>
+                              )}
+                            </div>
+                            {isInDivision && subjects && subjects.length > 0 && (
+                              <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                                Teaches: {subjects.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </>

@@ -41,8 +41,16 @@ export class NotificationService {
         take: pagination.pageSize,
         include: {
           timetable: {
-            include: {
-              division: true,
+            select: {
+              id: true,
+              status: true,
+              division: {
+                select: {
+                  id: true,
+                  label: true,
+                  class: { select: { id: true, name: true } },
+                },
+              },
             },
           },
         },

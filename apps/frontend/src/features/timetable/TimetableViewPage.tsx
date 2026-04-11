@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, CalendarDays, Coffee, UtensilsCrossed, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Coffee, UtensilsCrossed, AlertTriangle, Trash2, Check, X as XIcon } from 'lucide-react';
 import {
   DndContext,
   type DragEndEvent,
@@ -13,19 +13,19 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter,
+  Sheet, SheetContent,
 } from '@/components/ui/sheet';
+import { cn } from '@/lib/cn';
 import { PageHeader } from '@/components/shared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { useGetClassQuery } from '@/features/classes/classApi';
 import { useGetPeriodStructureQuery } from '@/features/period-structures/configApi';
-import { useGetAssignmentsQuery } from '@/features/assignments/assignmentApi';
+import {
+  useGetAssignmentsQuery,
+  useUpdateAssignmentMutation,
+} from '@/features/assignments/assignmentApi';
 import {
   useGetTeachersLoadQuery,
   useGetTeacherSlotConflictsQuery,
@@ -71,6 +71,7 @@ export function Component() {
   const { data: divisionAssignments } = useGetAssignmentsQuery(divisionId!, { skip: !divisionId });
   const { data: teacherLoads } = useGetTeachersLoadQuery();
   const [overrideSlot] = useOverrideSlotMutation();
+  const [updateAssignment] = useUpdateAssignmentMutation();
 
   // Click-to-edit sheet state
   const [editSlot, setEditSlot] = useState<{
@@ -78,10 +79,25 @@ export function Component() {
     workingDayId: string;
     slotId: string;
     dayLabel: string;
-    periodLabel: string;
-    assignmentId: string | null;
+    periodNumber: number | null;
+    startTime: string;
+    endTime: string;
+    currentAssignmentId: string | null;
+    currentSubjectName: string | null;
+    currentTeacherName: string | null;
   } | null>(null);
-  const [sheetAssignmentId, setSheetAssignmentId] = useState<string>('');
+  const [sheetSelectedTeacherId, setSheetSelectedTeacherId] = useState<string>('');
+  const [sheetSubjectId, setSheetSubjectId] = useState<string>('');
+  // Filter / sort controls for the teacher picker.
+  // teacherPool — which teachers are eligible for the picker:
+  //   'relevant' = qualified for the subject (default)
+  //   'all'      = every teacher in the school
+  // hideConflicts — independent toggle, applied AFTER the pool filter, that
+  // removes any teacher already booked in the same (day, slot) elsewhere.
+  // Combinations: Relevant + No conflicts, All + No conflicts, etc.
+  const [teacherPool, setTeacherPool] = useState<'relevant' | 'all'>('relevant');
+  const [hideConflicts, setHideConflicts] = useState(false);
+  const [teacherSort, setTeacherSort] = useState<'name' | 'load-asc' | 'load-desc'>('name');
   const [savingOverride, setSavingOverride] = useState(false);
 
   // Fetch conflicts for the currently-open slot
@@ -252,15 +268,27 @@ export function Component() {
                     if (!period) return <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40"><span className="text-xs text-muted-foreground/40">—</span></td>;
 
                     const openEditor = () => {
+                      // Look up the underlying assignment to capture subjectId
+                      const fullAssignment = (divisionAssignments ?? []).find(
+                        (a) => a.id === period.assignment?.id,
+                      );
                       setEditSlot({
                         timetableSlotId: period.timetableSlotId,
                         workingDayId: day.workingDay.id,
                         slotId: slot.id,
                         dayLabel: DAY_LABELS[day.workingDay.dayOfWeek] ?? day.workingDay.label,
-                        periodLabel: `P${slot.slotNumber} ${formatSlotTime(slot.startTime)}–${formatSlotTime(slot.endTime)}`,
-                        assignmentId: period.assignment?.id ?? null,
+                        periodNumber: slot.slotNumber,
+                        startTime: slot.startTime,
+                        endTime: slot.endTime,
+                        currentAssignmentId: period.assignment?.id ?? null,
+                        currentSubjectName: period.assignment?.subject.name ?? null,
+                        currentTeacherName: period.assignment?.teacher?.name ?? null,
                       });
-                      setSheetAssignmentId(period.assignment?.id ?? '_clear');
+                      setSheetSubjectId(fullAssignment?.subjectId ?? period.assignment?.subject.id ?? '');
+                      setSheetSelectedTeacherId(fullAssignment?.teacherId ?? '');
+                      setTeacherPool('relevant');
+                      setHideConflicts(false);
+                      setTeacherSort('name');
                     };
 
                     return (
@@ -296,93 +324,365 @@ export function Component() {
         </DragOverlay>
       </DndContext>
 
-      {/* Click-to-edit cell sheet */}
+      {/* Click-to-edit cell sheet — glassmorphism design matching the rest of the app */}
       <Sheet open={!!editSlot} onOpenChange={(open) => { if (!open) setEditSlot(null); }}>
-        <SheetContent side="right" className="w-[420px] sm:w-[480px]">
-          <SheetHeader>
-            <SheetTitle>Edit cell</SheetTitle>
-            <SheetDescription>
-              {editSlot && <>{editSlot.dayLabel} · {editSlot.periodLabel}</>}
-            </SheetDescription>
-          </SheetHeader>
-
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="w-full sm:max-w-md p-0 bg-background border-l border-amber-500/20 shadow-2xl"
+        >
           {editSlot && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label className="text-xs">Subject + Teacher</Label>
-                <Select value={sheetAssignmentId} onValueChange={setSheetAssignmentId}>
-                  <SelectTrigger><SelectValue placeholder="Select an assignment..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_clear">
-                      <span className="italic text-muted-foreground">(Clear — empty slot)</span>
-                    </SelectItem>
-                    {(divisionAssignments ?? []).map((a) => {
-                      const teacherId = a.teacherId;
-                      const conflictingTeacher = slotConflicts?.find((c) => c.teacherId === teacherId);
-                      const load = teacherLoads?.find((l) => l.id === teacherId);
-                      const assigned = load?.assignedPeriods ?? 0;
-                      const max = load?.maxPeriodsPerWeek;
-                      const over = max != null && assigned > max;
-                      return (
-                        <SelectItem key={a.id} value={a.id}>
-                          <span className="flex flex-col items-start gap-0.5">
-                            <span className="font-medium">{a.subject.name}</span>
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                              {a.teacher?.name ?? <em className="italic">(Unassigned)</em>}
-                              {teacherId && (
-                                <span className={over ? 'text-destructive' : ''}>
-                                  · {assigned}{max != null ? `/${max}` : ''} pds/wk
-                                </span>
-                              )}
-                              {conflictingTeacher && (
-                                <span className="text-destructive">
-                                  ⚠ Conflict: {conflictingTeacher.className}-{conflictingTeacher.divisionLabel} {conflictingTeacher.subjectName}
-                                </span>
-                              )}
-                            </span>
-                          </span>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+            <div className="flex h-full flex-col">
+              {/* Dark gradient header — matches table header styling */}
+              <div className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 px-5 py-4 text-white relative">
+                <button
+                  type="button"
+                  onClick={() => setEditSlot(null)}
+                  className="absolute top-3 right-3 size-7 rounded-md bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                  aria-label="Close"
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+                <div className="text-[10px] uppercase tracking-widest text-amber-300/80 font-semibold">Edit Cell</div>
+                <div className="mt-1 text-lg font-bold">{editSlot.dayLabel}</div>
+                <div className="mt-0.5 text-xs text-white/70">
+                  {editSlot.periodNumber != null && <>P{editSlot.periodNumber} · </>}
+                  {formatSlotTime(editSlot.startTime)} – {formatSlotTime(editSlot.endTime)}
+                </div>
               </div>
 
-              {slotConflicts && slotConflicts.length > 0 && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs space-y-1">
-                  <div className="font-medium text-destructive">Teachers already booked in this slot:</div>
-                  {slotConflicts.map((c) => (
-                    <div key={c.teacherId} className="text-muted-foreground">
-                      · {c.teacherName} — {c.className}-{c.divisionLabel} ({c.subjectName})
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+                {/* Current state */}
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Currently</div>
+                  {editSlot.currentSubjectName ? (
+                    <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm px-4 py-3">
+                      <div className="text-sm font-semibold">{editSlot.currentSubjectName}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {editSlot.currentTeacherName ?? <span className="italic">(Unassigned)</span>}
+                      </div>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border/40 bg-muted/20 px-4 py-3 text-xs text-muted-foreground italic text-center">
+                      Empty slot
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Subject filter pills — every subject taught in this division */}
+                {(() => {
+                  const assignments = divisionAssignments ?? [];
+                  const uniqueSubjects = Array.from(
+                    new Map(assignments.map((a) => [a.subject.id, a.subject])).values(),
+                  );
+                  return (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Subject</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {uniqueSubjects.map((s) => {
+                          const active = sheetSubjectId === s.id;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => { setSheetSubjectId(s.id); setSheetSelectedTeacherId(''); }}
+                              className={cn(
+                                'px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all',
+                                active
+                                  ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                                  : 'bg-card border-border/60 text-foreground/80 hover:border-amber-500/40 hover:bg-amber-500/5',
+                              )}
+                            >
+                              {s.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Teacher options for selected subject — with filter + sort */}
+                {sheetSubjectId && (() => {
+                  const allTeachers = teacherLoads ?? [];
+                  const conflictIds = new Set((slotConflicts ?? []).map((c) => c.teacherId));
+
+                  // Step 1 — pool filter (Relevant vs All)
+                  let visibleTeachers =
+                    teacherPool === 'all'
+                      ? allTeachers
+                      : allTeachers.filter((t) => t.qualifiedSubjectIds.includes(sheetSubjectId));
+
+                  // Step 2 — conflict filter (independent toggle)
+                  if (hideConflicts) {
+                    visibleTeachers = visibleTeachers.filter((t) => !conflictIds.has(t.id));
+                  }
+
+                  // Step 3 — sort
+                  visibleTeachers = [...visibleTeachers].sort((a, b) => {
+                    if (teacherSort === 'name') {
+                      return a.name.localeCompare(b.name);
+                    }
+                    if (teacherSort === 'load-asc') {
+                      return a.assignedPeriods - b.assignedPeriods || a.name.localeCompare(b.name);
+                    }
+                    return b.assignedPeriods - a.assignedPeriods || a.name.localeCompare(b.name);
+                  });
+
+                  // How many of the currently visible teachers have a conflict
+                  const visibleConflictCount = visibleTeachers.filter((t) => conflictIds.has(t.id)).length;
+
+                  // Identify which teachers already have an existing assignment
+                  // for this (subject, division) — used for the badge.
+                  const subjectAssignments = (divisionAssignments ?? []).filter(
+                    (a) => a.subjectId === sheetSubjectId,
+                  );
+                  const teacherIdsWithAssignment = new Set(
+                    subjectAssignments.map((a) => a.teacherId).filter(Boolean) as string[],
+                  );
+
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+                          Teacher · {visibleTeachers.length}
+                          {visibleConflictCount > 0 && (
+                            <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 gap-0.5">
+                              <AlertTriangle className="size-2.5" />
+                              {visibleConflictCount} conflict{visibleConflictCount === 1 ? '' : 's'}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Filter + sort controls */}
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        {/* Pool toggle: Relevant / All */}
+                        <div className="flex items-center gap-1">
+                          {(['relevant', 'all'] as const).map((p) => {
+                            const active = teacherPool === p;
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setTeacherPool(p)}
+                                className={cn(
+                                  'px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all capitalize',
+                                  active
+                                    ? 'bg-amber-500 border-amber-500 text-white'
+                                    : 'bg-card border-border/60 text-foreground/70 hover:border-amber-500/40',
+                                )}
+                              >
+                                {p}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {/* Independent: Hide-conflicts toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setHideConflicts((v) => !v)}
+                          className={cn(
+                            'px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all',
+                            hideConflicts
+                              ? 'bg-amber-500 border-amber-500 text-white'
+                              : 'bg-card border-border/60 text-foreground/70 hover:border-amber-500/40',
+                          )}
+                          title="Hide teachers already booked in this slot in another division"
+                        >
+                          Hide conflicts
+                        </button>
+                        <div className="flex-1" />
+                        <select
+                          value={teacherSort}
+                          onChange={(e) => setTeacherSort(e.target.value as typeof teacherSort)}
+                          className="text-[10px] rounded-md border border-border/60 bg-card px-1.5 py-0.5 text-foreground/80 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+                        >
+                          <option value="name">Sort: Name</option>
+                          <option value="load-asc">Sort: Load ↑</option>
+                          <option value="load-desc">Sort: Load ↓</option>
+                        </select>
+                      </div>
+
+                      {visibleTeachers.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border/40 p-3 text-xs text-muted-foreground italic text-center">
+                          No teachers match the current filter.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-[40vh] overflow-y-auto pr-1">
+                          {visibleTeachers.map((tch) => {
+                            const assigned = tch.assignedPeriods;
+                            const max = tch.maxPeriodsPerWeek;
+                            const over = max != null && assigned > max;
+                            const conflict = slotConflicts?.find((c) => c.teacherId === tch.id);
+                            const selected = sheetSelectedTeacherId === tch.id;
+                            const isQualified = tch.qualifiedSubjectIds.includes(sheetSubjectId);
+                            const hasExisting = teacherIdsWithAssignment.has(tch.id);
+                            return (
+                              <button
+                                key={tch.id}
+                                type="button"
+                                onClick={() => setSheetSelectedTeacherId(tch.id)}
+                                className={cn(
+                                  'w-full text-left rounded-lg border p-3 transition-all flex items-start gap-3',
+                                  selected
+                                    ? 'border-amber-500/60 bg-amber-500/10 shadow-sm'
+                                    : 'border-border/60 bg-card hover:border-amber-500/30 hover:bg-amber-500/5',
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    'mt-0.5 size-4 rounded-full border-2 shrink-0 flex items-center justify-center',
+                                    selected ? 'border-amber-500 bg-amber-500' : 'border-border',
+                                  )}
+                                >
+                                  {selected && <Check className="size-2.5 text-white" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium">{tch.name}</div>
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                    <Badge
+                                      variant={over ? 'destructive' : 'outline'}
+                                      className="text-[9px] px-1.5 py-0 h-4"
+                                    >
+                                      {assigned}{max != null ? `/${max}` : ''} pds/wk
+                                    </Badge>
+                                    {hasExisting && (
+                                      <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
+                                        Already teaches this
+                                      </Badge>
+                                    )}
+                                    {!isQualified && (
+                                      <Badge variant="warning" className="text-[9px] px-1.5 py-0 h-4">
+                                        Unqualified
+                                      </Badge>
+                                    )}
+                                    {conflict && (
+                                      <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 gap-0.5">
+                                        <AlertTriangle className="size-2.5" />
+                                        Conflict: {conflict.className}-{conflict.divisionLabel}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Cross-division conflict warning block */}
+                {slotConflicts && slotConflicts.length > 0 && (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 backdrop-blur-sm p-3 space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-destructive">
+                      <AlertTriangle className="size-3.5" />
+                      Teachers already booked in this slot
+                    </div>
+                    {slotConflicts.map((c) => (
+                      <div key={`${c.teacherId}-${c.className}-${c.divisionLabel}`} className="text-[11px] text-muted-foreground pl-5">
+                        {c.teacherName} — {c.className}-{c.divisionLabel} ({c.subjectName})
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer: Clear / Cancel / Save */}
+              <div className="border-t border-border/40 bg-card/40 backdrop-blur-sm px-5 py-4 flex items-center gap-2">
+                {editSlot.currentAssignmentId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1.5"
+                    disabled={savingOverride}
+                    onClick={async () => {
+                      if (!editSlot) return;
+                      setSavingOverride(true);
+                      try {
+                        await overrideSlot({ slotId: editSlot.timetableSlotId, divisionAssignmentId: null }).unwrap();
+                        toast.success('Cell cleared.');
+                        setEditSlot(null);
+                      } catch (err: any) {
+                        toast.error(err?.data?.error?.message ?? 'Failed to clear cell.');
+                      } finally {
+                        setSavingOverride(false);
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />
+                    Clear
+                  </Button>
+                )}
+                <div className="flex-1" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditSlot(null)}
+                  disabled={savingOverride}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    savingOverride ||
+                    !sheetSubjectId ||
+                    !sheetSelectedTeacherId
+                  }
+                  onClick={async () => {
+                    if (!editSlot) return;
+                    setSavingOverride(true);
+                    try {
+                      const subjectAssignments = (divisionAssignments ?? []).filter(
+                        (a) => a.subjectId === sheetSubjectId,
+                      );
+
+                      // Path 1: there's already an assignment for this exact (subject, teacher) pair
+                      const exactMatch = subjectAssignments.find((a) => a.teacherId === sheetSelectedTeacherId);
+                      let targetAssignmentId: string;
+
+                      if (exactMatch) {
+                        targetAssignmentId = exactMatch.id;
+                      } else if (subjectAssignments.length === 1) {
+                        // Path 2: exactly one assignment for this subject — update its teacher
+                        const a = subjectAssignments[0];
+                        await updateAssignment({ id: a.id, teacherId: sheetSelectedTeacherId }).unwrap();
+                        targetAssignmentId = a.id;
+                      } else if (subjectAssignments.length === 0) {
+                        toast.error('No assignment exists for this subject in this division. Add it from the Assignments page first.');
+                        setSavingOverride(false);
+                        return;
+                      } else {
+                        toast.error('Multiple assignments exist for this subject. Use the Assignments page to manage which teacher is used.');
+                        setSavingOverride(false);
+                        return;
+                      }
+
+                      await overrideSlot({
+                        slotId: editSlot.timetableSlotId,
+                        divisionAssignmentId: targetAssignmentId,
+                      }).unwrap();
+                      toast.success('Cell updated.');
+                      setEditSlot(null);
+                    } catch (err: any) {
+                      toast.error(err?.data?.error?.message ?? 'Failed to update cell.');
+                    } finally {
+                      setSavingOverride(false);
+                    }
+                  }}
+                >
+                  {savingOverride ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
             </div>
           )}
-
-          <SheetFooter>
-            <Button variant="outline" onClick={() => setEditSlot(null)} disabled={savingOverride}>Cancel</Button>
-            <Button
-              disabled={savingOverride || !editSlot}
-              onClick={async () => {
-                if (!editSlot) return;
-                setSavingOverride(true);
-                try {
-                  const divAssignmentId = sheetAssignmentId === '_clear' ? null : sheetAssignmentId;
-                  await overrideSlot({ slotId: editSlot.timetableSlotId, divisionAssignmentId: divAssignmentId }).unwrap();
-                  toast.success('Cell updated.');
-                  setEditSlot(null);
-                } catch (err: any) {
-                  toast.error(err?.data?.error?.message ?? 'Failed to update cell.');
-                } finally {
-                  setSavingOverride(false);
-                }
-              }}
-            >
-              {savingOverride ? 'Saving...' : 'Save'}
-            </Button>
-          </SheetFooter>
         </SheetContent>
       </Sheet>
     </div>

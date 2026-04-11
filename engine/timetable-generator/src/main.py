@@ -64,8 +64,13 @@ def main() -> None:
         mark_job_running(job_id)
 
         # ── Load data ─────────────────────────────────────────────────────
-        logger.info("Loading school data...")
-        data = load_school_data(school_id, academic_year_id, division_id)
+        logger.info("Loading school data... (adjacency=%s)", args.adjacency_constraint)
+        data = load_school_data(
+            school_id,
+            academic_year_id,
+            division_id,
+            adjacency_constraint_enabled=args.adjacency_constraint,
+        )
         logger.info(
             "Loaded: %d assignments, %d days, %d periods/day, %d total periods",
             len(data.assignments),
