@@ -13,6 +13,15 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.health();
   }
 
+  // Aggregate endpoints that must come BEFORE the /teachers/:id match so
+  // "load" and "conflicts" aren't swallowed by the :id wildcard.
+  if (method === 'GET' && path === '/api/teachers/load') {
+    return controller.listLoad(event);
+  }
+  if (method === 'GET' && path === '/api/teachers/conflicts') {
+    return controller.getSlotConflicts(event);
+  }
+
   // Nested routes: /teachers/:id/subjects, /teachers/:id/availability
   const subjectsMatch = path.match(/^\/api\/teachers\/([^/]+)\/subjects$/);
   if (method === 'PUT' && subjectsMatch) {

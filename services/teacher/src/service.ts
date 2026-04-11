@@ -73,6 +73,103 @@ export class TeacherService {
     };
   }
 
+  /**
+   * Returns every teacher in the school/AY with their current workload.
+   * Used by the enriched Teacher dropdown in the Assignment editor.
+   *
+   * assignedPeriods = sum of `weightage` across all active DivisionAssignment
+   * rows for this teacher (primary only, not assistant).
+   */
+  async listLoad(schoolId: string, academicYearId: string) {
+    const teachers = await prisma.teacher.findMany({
+      where: { schoolId, academicYearId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        maxPeriodsPerWeek: true,
+        teacherSubjects: { select: { subjectId: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const loads = await prisma.divisionAssignment.groupBy({
+      by: ['teacherId'],
+      where: {
+        schoolId,
+        academicYearId,
+        deletedAt: null,
+        teacherId: { not: null },
+      },
+      _sum: { weightage: true },
+    });
+
+    const loadByTeacher = new Map<string, number>();
+    for (const l of loads) {
+      if (l.teacherId) loadByTeacher.set(l.teacherId, l._sum.weightage ?? 0);
+    }
+
+    return teachers.map((t) => ({
+      id: t.id,
+      name: t.name,
+      maxPeriodsPerWeek: t.maxPeriodsPerWeek,
+      assignedPeriods: loadByTeacher.get(t.id) ?? 0,
+      qualifiedSubjectIds: t.teacherSubjects.map((ts) => ts.subjectId),
+    }));
+  }
+
+  /**
+   * Returns every teacher currently scheduled in the given (workingDay, slot)
+   * pair across the school/AY — excluding any timetable slots for the given
+   * division (so when editing a cell, we don't flag the current cell as a
+   * conflict with itself).
+   *
+   * Used by the click-to-edit sheet to surface "⚠ Conflict" tags next to
+   * teachers in the dropdown at a specific slot.
+   */
+  async getSlotConflicts(
+    schoolId: string,
+    academicYearId: string,
+    workingDayId: string,
+    slotId: string,
+    excludeDivisionId: string | null,
+  ) {
+    const slots = await prisma.timetableSlot.findMany({
+      where: {
+        schoolId,
+        workingDayId,
+        slotId,
+        timetable: {
+          academicYearId,
+          ...(excludeDivisionId ? { divisionId: { not: excludeDivisionId } } : {}),
+        },
+        divisionAssignment: { teacherId: { not: null } },
+      },
+      include: {
+        timetable: {
+          include: { division: { select: { label: true, class: { select: { name: true } } } } },
+        },
+        divisionAssignment: {
+          include: {
+            teacher: { select: { id: true, name: true } },
+            subject: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    return slots.flatMap((s) => {
+      const da = s.divisionAssignment;
+      if (!da || !da.teacher) return [];
+      return [{
+        teacherId: da.teacher.id,
+        teacherName: da.teacher.name,
+        subjectName: da.subject.name,
+        className: s.timetable.division.class.name,
+        divisionLabel: s.timetable.division.label,
+      }];
+    });
+  }
+
   async getById(schoolId: string, academicYearId: string, id: string) {
     const teacher = await prisma.teacher.findFirst({
       where: { id, schoolId, academicYearId, deletedAt: null },

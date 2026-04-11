@@ -87,6 +87,28 @@ interface DeleteTeacherRequest {
   confirm?: boolean;
 }
 
+export interface TeacherLoad {
+  id: string;
+  name: string;
+  maxPeriodsPerWeek: number | null;
+  assignedPeriods: number;
+  qualifiedSubjectIds: string[];
+}
+
+export interface TeacherSlotConflict {
+  teacherId: string;
+  teacherName: string;
+  subjectName: string;
+  className: string;
+  divisionLabel: string;
+}
+
+interface ConflictQuery {
+  workingDayId: string;
+  slotId: string;
+  excludeDivisionId?: string;
+}
+
 export const teacherApi = createApi({
   reducerPath: 'teacherApi',
   baseQuery,
@@ -172,6 +194,21 @@ export const teacherApi = createApi({
         { type: 'Teacher', id },
       ],
     }),
+
+    getTeachersLoad: builder.query<TeacherLoad[], void>({
+      query: () => 'teachers/load',
+      transformResponse: (response: { data: TeacherLoad[] }) => response.data,
+      providesTags: [{ type: 'Teacher', id: 'LOAD' }],
+    }),
+
+    getTeacherSlotConflicts: builder.query<TeacherSlotConflict[], ConflictQuery>({
+      query: ({ workingDayId, slotId, excludeDivisionId }) => {
+        const p = new URLSearchParams({ workingDayId, slotId });
+        if (excludeDivisionId) p.set('excludeDivisionId', excludeDivisionId);
+        return `teachers/conflicts?${p.toString()}`;
+      },
+      transformResponse: (response: { data: TeacherSlotConflict[] }) => response.data,
+    }),
   }),
 });
 
@@ -183,4 +220,6 @@ export const {
   useDeleteTeacherMutation,
   useSetTeacherSubjectsMutation,
   useSetTeacherAvailabilityMutation,
+  useGetTeachersLoadQuery,
+  useGetTeacherSlotConflictsQuery,
 } = teacherApi;

@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 
 import psycopg2
+import psycopg2.extras
 
 from .data_loader import SchoolData, DATABASE_URL
 from .ga.chromosome import decode_gene

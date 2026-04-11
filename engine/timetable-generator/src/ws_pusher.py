@@ -12,11 +12,13 @@ import json
 import logging
 import os
 import urllib.request
-import urllib.error
 
 logger = logging.getLogger(__name__)
 
-WS_ENDPOINT = os.getenv("WS_ENDPOINT", "http://localhost:4011")
+# Empty-string WS_ENDPOINT (the prod default) disables broadcasting entirely.
+# The engine must never crash just because WebSocket progress updates can't
+# reach a listener.
+WS_ENDPOINT = os.getenv("WS_ENDPOINT", "").strip()
 
 
 def push_progress(
@@ -81,31 +83,39 @@ def push_failed(
 
 
 def _send_broadcast(school_id: str, message: dict) -> None:
-    """Send a broadcast message via the WebSocket service REST endpoint."""
-    url = f"{WS_ENDPOINT}/ws/broadcast"
-    body = json.dumps({
-        "schoolId": school_id,
-        **message,
-    }).encode("utf-8")
+    """Send a broadcast message via the WebSocket service REST endpoint.
 
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={
-            "Content-Type": "application/json",
-            # Use internal service headers (no real auth needed for local dev)
-            "x-user-id": "engine",
-            "x-school-id": school_id,
-            "x-user-role": "system",
-        },
-        method="POST",
-    )
+    Fully best-effort: any error (missing endpoint, unreachable host, bad
+    URL, network timeout, JSON error) is swallowed with a warning so the
+    engine's generation pipeline keeps running. Timetable correctness must
+    never depend on a WebSocket broadcast succeeding.
+    """
+    if not WS_ENDPOINT:
+        return  # Broadcasting disabled
 
     try:
+        url = f"{WS_ENDPOINT.rstrip('/')}/ws/broadcast"
+        if not (url.startswith("http://") or url.startswith("https://")):
+            logger.warning("WS broadcast skipped: WS_ENDPOINT must start with http(s)://")
+            return
+
+        body = json.dumps({
+            "schoolId": school_id,
+            **message,
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "x-user-id": "engine",
+                "x-school-id": school_id,
+                "x-user-role": "system",
+            },
+            method="POST",
+        )
         with urllib.request.urlopen(req, timeout=5) as resp:
             logger.debug("WS broadcast sent: %s (status %d)", message.get("type"), resp.status)
-    except urllib.error.URLError as e:
-        # Non-fatal — don't crash the engine if WS service is unavailable
+    except Exception as e:  # noqa: BLE001 — intentionally broad
         logger.warning("WS broadcast failed: %s", e)
-    except Exception as e:
-        logger.warning("WS broadcast error: %s", e)

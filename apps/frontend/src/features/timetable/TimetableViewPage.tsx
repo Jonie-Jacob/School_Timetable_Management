@@ -13,11 +13,23 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter,
+} from '@/components/ui/sheet';
 import { PageHeader } from '@/components/shared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { useGetClassQuery } from '@/features/classes/classApi';
 import { useGetPeriodStructureQuery } from '@/features/period-structures/configApi';
+import { useGetAssignmentsQuery } from '@/features/assignments/assignmentApi';
+import {
+  useGetTeachersLoadQuery,
+  useGetTeacherSlotConflictsQuery,
+} from '@/features/teachers/teacherApi';
 import {
   useGetDivisionTimetableQuery,
   useOverrideSlotMutation,
@@ -56,7 +68,29 @@ export function Component() {
 
   const { data: classItem } = useGetClassQuery(classId!, { skip: !classId });
   const { data: grid, isLoading } = useGetDivisionTimetableQuery(divisionId!, { skip: !divisionId, refetchOnMountOrArgChange: true });
+  const { data: divisionAssignments } = useGetAssignmentsQuery(divisionId!, { skip: !divisionId });
+  const { data: teacherLoads } = useGetTeachersLoadQuery();
   const [overrideSlot] = useOverrideSlotMutation();
+
+  // Click-to-edit sheet state
+  const [editSlot, setEditSlot] = useState<{
+    timetableSlotId: string;
+    workingDayId: string;
+    slotId: string;
+    dayLabel: string;
+    periodLabel: string;
+    assignmentId: string | null;
+  } | null>(null);
+  const [sheetAssignmentId, setSheetAssignmentId] = useState<string>('');
+  const [savingOverride, setSavingOverride] = useState(false);
+
+  // Fetch conflicts for the currently-open slot
+  const { data: slotConflicts } = useGetTeacherSlotConflictsQuery(
+    editSlot
+      ? { workingDayId: editSlot.workingDayId, slotId: editSlot.slotId, excludeDivisionId: divisionId }
+      : { workingDayId: '', slotId: '' },
+    { skip: !editSlot },
+  );
 
   const division = classItem?.divisions?.find((d) => d.id === divisionId);
   const periodStructureId = division?.periodStructureId;
@@ -217,8 +251,20 @@ export function Component() {
                     const period = getPeriodForSlot(day.periods, slot.sortOrder);
                     if (!period) return <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40"><span className="text-xs text-muted-foreground/40">—</span></td>;
 
+                    const openEditor = () => {
+                      setEditSlot({
+                        timetableSlotId: period.timetableSlotId,
+                        workingDayId: day.workingDay.id,
+                        slotId: slot.id,
+                        dayLabel: DAY_LABELS[day.workingDay.dayOfWeek] ?? day.workingDay.label,
+                        periodLabel: `P${slot.slotNumber} ${formatSlotTime(slot.startTime)}–${formatSlotTime(slot.endTime)}`,
+                        assignmentId: period.assignment?.id ?? null,
+                      });
+                      setSheetAssignmentId(period.assignment?.id ?? '_clear');
+                    };
+
                     return (
-                      <td key={slot.id} className="px-1 py-1 border-r border-border/40">
+                      <td key={slot.id} className="px-1 py-1 border-r border-border/40" onClick={openEditor} style={{ cursor: 'pointer' }}>
                         {isDesktop && period.assignment ? (
                           <DraggableCell slotId={period.timetableSlotId}>
                             <DroppableCell slotId={period.timetableSlotId}>
@@ -249,6 +295,96 @@ export function Component() {
           {activeDrag && <CellContent assignment={activeDrag.assignment} isDragging />}
         </DragOverlay>
       </DndContext>
+
+      {/* Click-to-edit cell sheet */}
+      <Sheet open={!!editSlot} onOpenChange={(open) => { if (!open) setEditSlot(null); }}>
+        <SheetContent side="right" className="w-[420px] sm:w-[480px]">
+          <SheetHeader>
+            <SheetTitle>Edit cell</SheetTitle>
+            <SheetDescription>
+              {editSlot && <>{editSlot.dayLabel} · {editSlot.periodLabel}</>}
+            </SheetDescription>
+          </SheetHeader>
+
+          {editSlot && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label className="text-xs">Subject + Teacher</Label>
+                <Select value={sheetAssignmentId} onValueChange={setSheetAssignmentId}>
+                  <SelectTrigger><SelectValue placeholder="Select an assignment..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_clear">
+                      <span className="italic text-muted-foreground">(Clear — empty slot)</span>
+                    </SelectItem>
+                    {(divisionAssignments ?? []).map((a) => {
+                      const teacherId = a.teacherId;
+                      const conflictingTeacher = slotConflicts?.find((c) => c.teacherId === teacherId);
+                      const load = teacherLoads?.find((l) => l.id === teacherId);
+                      const assigned = load?.assignedPeriods ?? 0;
+                      const max = load?.maxPeriodsPerWeek;
+                      const over = max != null && assigned > max;
+                      return (
+                        <SelectItem key={a.id} value={a.id}>
+                          <span className="flex flex-col items-start gap-0.5">
+                            <span className="font-medium">{a.subject.name}</span>
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                              {a.teacher?.name ?? <em className="italic">(Unassigned)</em>}
+                              {teacherId && (
+                                <span className={over ? 'text-destructive' : ''}>
+                                  · {assigned}{max != null ? `/${max}` : ''} pds/wk
+                                </span>
+                              )}
+                              {conflictingTeacher && (
+                                <span className="text-destructive">
+                                  ⚠ Conflict: {conflictingTeacher.className}-{conflictingTeacher.divisionLabel} {conflictingTeacher.subjectName}
+                                </span>
+                              )}
+                            </span>
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {slotConflicts && slotConflicts.length > 0 && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs space-y-1">
+                  <div className="font-medium text-destructive">Teachers already booked in this slot:</div>
+                  {slotConflicts.map((c) => (
+                    <div key={c.teacherId} className="text-muted-foreground">
+                      · {c.teacherName} — {c.className}-{c.divisionLabel} ({c.subjectName})
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setEditSlot(null)} disabled={savingOverride}>Cancel</Button>
+            <Button
+              disabled={savingOverride || !editSlot}
+              onClick={async () => {
+                if (!editSlot) return;
+                setSavingOverride(true);
+                try {
+                  const divAssignmentId = sheetAssignmentId === '_clear' ? null : sheetAssignmentId;
+                  await overrideSlot({ slotId: editSlot.timetableSlotId, divisionAssignmentId: divAssignmentId }).unwrap();
+                  toast.success('Cell updated.');
+                  setEditSlot(null);
+                } catch (err: any) {
+                  toast.error(err?.data?.error?.message ?? 'Failed to update cell.');
+                } finally {
+                  setSavingOverride(false);
+                }
+              }}
+            >
+              {savingOverride ? 'Saving...' : 'Save'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

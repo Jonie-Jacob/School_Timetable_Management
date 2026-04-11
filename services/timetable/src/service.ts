@@ -3,10 +3,29 @@ import {
   TriggerGenerationDto, OverrideSlotDto,
 } from '@timetable/shared';
 import { JobStatus, TimetableStatus, SlotType } from '@prisma/client';
+import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs';
+
+// ── Fargate / GA engine config ────────────────────────────────────────────
+// In dev (STAGE=dev) we skip ECS entirely and fall back to the old mock
+// round-robin so local devs don't need AWS. In prod, every generation request
+// launches a Fargate task running the Python GA engine.
+
+const STAGE = process.env.STAGE ?? 'dev';
+const USE_FARGATE_ENGINE = STAGE !== 'dev';
+const ECS_CLUSTER_ARN = process.env.ECS_CLUSTER_ARN;
+const ECS_TASK_DEF_ARN = process.env.ECS_TASK_DEF_ARN;
+const ECS_SUBNET_IDS = (process.env.ECS_SUBNET_IDS ?? '').split(',').filter(Boolean);
+const ECS_SECURITY_GROUP_ID = process.env.ECS_SECURITY_GROUP_ID;
+const ECS_CONTAINER_NAME = process.env.ECS_CONTAINER_NAME ?? 'timetable-engine';
+const AWS_REGION = process.env.AWS_REGION ?? 'ap-south-1';
+
+const ecsClient = USE_FARGATE_ENGINE ? new ECSClient({ region: AWS_REGION }) : null;
 
 export class TimetableService {
 
-  // ── Trigger Generation (mock Fargate locally) ──
+  // ── Trigger Generation ────────────────────────────────────────────────
+  // In prod: launches the Python GA engine on Fargate (one task per division).
+  // In dev:  falls back to the in-process mock round-robin.
 
   async triggerGeneration(schoolId: string, academicYearId: string, dto: TriggerGenerationDto) {
     const { divisionIds, adjacencyConstraintEnabled } = dto;
@@ -21,9 +40,8 @@ export class TimetableService {
       throw new AppError(`Divisions not found: ${missing.join(', ')}`, 400, 'INVALID_DIVISIONS');
     }
 
-    // Create generation jobs and timetables for each division
+    // Create a generation job per division and kick off work.
     const results = await Promise.all(divisionIds.map(async (divisionId) => {
-      // Create generation job
       const job = await prisma.generationJob.create({
         data: {
           schoolId,
@@ -34,22 +52,99 @@ export class TimetableService {
         },
       });
 
-      // Mock Fargate: generate timetable inline
+      if (USE_FARGATE_ENGINE) {
+        // Kick off a Fargate task and return immediately. The task updates
+        // generation_jobs to RUNNING/COMPLETED/FAILED itself.
+        try {
+          await this.startEngineTask({
+            jobId: job.id,
+            schoolId,
+            divisionId,
+            academicYearId,
+            adjacencyConstraintEnabled: adjacencyConstraintEnabled ?? false,
+          });
+        } catch (err) {
+          // If task launch fails, mark the job FAILED so the UI doesn't spin
+          await prisma.generationJob.update({
+            where: { id: job.id },
+            data: {
+              status: JobStatus.FAILED,
+              errorMessage: err instanceof Error ? err.message : 'Failed to launch engine task',
+              completedAt: new Date(),
+            },
+          });
+          throw err;
+        }
+        // The timetable row is upserted by the engine itself on success.
+        // Look up the existing row (if any) so the response shape stays stable.
+        const existing = await prisma.timetable.findUnique({
+          where: { schoolId_divisionId_academicYearId: { schoolId, divisionId, academicYearId } },
+        });
+        return { jobId: job.id, timetableId: existing?.id ?? null, divisionId };
+      }
+
+      // ── Dev path: inline mock round-robin ─────────────────────────────
       const timetable = await this.mockGenerateTimetable(
         schoolId, divisionId, academicYearId,
         adjacencyConstraintEnabled ?? false,
       );
-
-      // Mark job completed
       await prisma.generationJob.update({
         where: { id: job.id },
         data: { status: JobStatus.COMPLETED, completedAt: new Date() },
       });
-
       return { jobId: job.id, timetableId: timetable.id, divisionId };
     }));
 
     return results.length === 1 ? results[0] : results;
+  }
+
+  private async startEngineTask(params: {
+    jobId: string;
+    schoolId: string;
+    divisionId: string;
+    academicYearId: string;
+    adjacencyConstraintEnabled: boolean;
+  }) {
+    if (!ecsClient) throw new AppError('ECS client not initialized', 500, 'ECS_UNAVAILABLE');
+    if (!ECS_CLUSTER_ARN || !ECS_TASK_DEF_ARN || ECS_SUBNET_IDS.length === 0 || !ECS_SECURITY_GROUP_ID) {
+      throw new AppError(
+        'Fargate engine not configured (missing ECS_CLUSTER_ARN, ECS_TASK_DEF_ARN, ECS_SUBNET_IDS, or ECS_SECURITY_GROUP_ID)',
+        500,
+        'ECS_NOT_CONFIGURED',
+      );
+    }
+
+    const command = [
+      '--job-id', params.jobId,
+      '--school-id', params.schoolId,
+      '--division-id', params.divisionId,
+      '--academic-year-id', params.academicYearId,
+    ];
+    if (params.adjacencyConstraintEnabled) {
+      command.push('--adjacency-constraint');
+    }
+
+    await ecsClient.send(new RunTaskCommand({
+      cluster: ECS_CLUSTER_ARN,
+      taskDefinition: ECS_TASK_DEF_ARN,
+      launchType: 'FARGATE',
+      count: 1,
+      networkConfiguration: {
+        awsvpcConfiguration: {
+          subnets: ECS_SUBNET_IDS,
+          securityGroups: [ECS_SECURITY_GROUP_ID],
+          assignPublicIp: 'DISABLED',
+        },
+      },
+      overrides: {
+        containerOverrides: [
+          {
+            name: ECS_CONTAINER_NAME,
+            command,
+          },
+        ],
+      },
+    }));
   }
 
   private async mockGenerateTimetable(

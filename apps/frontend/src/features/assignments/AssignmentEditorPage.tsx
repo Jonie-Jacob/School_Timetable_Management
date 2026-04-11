@@ -26,7 +26,7 @@ import { useReadOnly } from '@/hooks/useReadOnly';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGetClassQuery } from '@/features/classes/classApi';
 import { useGetSubjectsQuery } from '@/features/subjects/subjectApi';
-import { useGetTeachersQuery } from '@/features/teachers/teacherApi';
+import { useGetTeachersQuery, useGetTeachersLoadQuery } from '@/features/teachers/teacherApi';
 import {
   useGetElectiveGroupsQuery,
   useUpdateElectiveGroupMutation,
@@ -120,6 +120,7 @@ export function Component() {
   const { data: assignments, isLoading } = useGetAssignmentsQuery(divisionId!, { skip: !divisionId });
   const { data: subjectsData } = useGetSubjectsQuery({ pageSize: 200 });
   const { data: teachersData } = useGetTeachersQuery({ pageSize: 200 });
+  const { data: teacherLoads } = useGetTeachersLoadQuery();
   const { data: electiveGroups } = useGetElectiveGroupsQuery();
 
   const [createAssignment, { isLoading: isCreating }] = useCreateAssignmentMutation();
@@ -567,12 +568,24 @@ export function Component() {
                         <SelectItem value="_unassigned">
                           <span className="italic text-muted-foreground">(Unassigned — assign later)</span>
                         </SelectItem>
-                        {(qualifiedTeachers.length > 0 ? qualifiedTeachers : teachers).map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            {t.name}
-                            {qualifiedTeachers.length > 0 && !qualifiedTeachers.find((q) => q.id === t.id) && ' (unqualified)'}
-                          </SelectItem>
-                        ))}
+                        {(qualifiedTeachers.length > 0 ? qualifiedTeachers : teachers).map((tch) => {
+                          const load = teacherLoads?.find((l) => l.id === tch.id);
+                          const assigned = load?.assignedPeriods ?? 0;
+                          const max = load?.maxPeriodsPerWeek;
+                          const unqualified = qualifiedTeachers.length > 0 && !qualifiedTeachers.find((q) => q.id === tch.id);
+                          const over = max != null && assigned > max;
+                          return (
+                            <SelectItem key={tch.id} value={tch.id}>
+                              <span className="flex items-center gap-2">
+                                <span>{tch.name}</span>
+                                <span className={`text-[10px] ${over ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                  · {assigned}{max != null ? `/${max}` : ''} pds/wk
+                                </span>
+                                {unqualified && <span className="text-[10px] text-amber-600">(unqualified)</span>}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                     {form.formState.errors.teacherId && (

@@ -37,11 +37,29 @@ class Assignment:
     division_id: str
     subject_id: str
     subject_name: str
-    teacher_id: str
-    teacher_name: str
+    teacher_id: Optional[str]     # NULL = unassigned — still gets scheduled
+    teacher_name: Optional[str]
     assistant_teacher_id: Optional[str]
     weightage: int
     elective_group_id: Optional[str]
+    # Scheduling preferences loaded from the JSONB column.
+    # Fields (all optional):
+    #   constraintType: 'HARD' | 'SOFT'
+    #   preferredDays: list[int]        (0=Mon..6=Sun)
+    #   excludedDays:  list[int]
+    #   preferredPeriodRange: {min,max} (1-based, inclusive)
+    #   excludedPeriodRange:  {min,max}
+    #   preferAdjacentPeriods: bool
+    #   minPeriodsPerDay: int
+    #   maxPeriodsPerDay: int
+    scheduling_preferences: Optional[dict] = None
+
+
+@dataclass
+class TeacherInfo:
+    id: str
+    name: str
+    max_periods_per_week: Optional[int]
 
 
 @dataclass
@@ -80,8 +98,17 @@ class SchoolData:
     # Assignments for this division
     assignments: list[Assignment] = field(default_factory=list)
 
+    # Teacher metadata (id → TeacherInfo). Used to enforce maxPeriodsPerWeek.
+    teachers: dict[str, TeacherInfo] = field(default_factory=dict)
+
     # Teacher unavailability set: (teacher_id, working_day_id, slot_id)
     teacher_unavailable: set[tuple[str, str, str]] = field(default_factory=set)
+
+    # Teacher slots already occupied in OTHER divisions' existing timetables
+    # within this school+AY. Used by the fitness function to prevent
+    # cross-division teacher double-booking when we generate one division at
+    # a time. Each tuple is (teacher_id, working_day_id, slot_id).
+    existing_teacher_slots: set[tuple[str, str, str]] = field(default_factory=set)
 
     # Elective groups relevant to this division
     elective_groups: dict[str, ElectiveGroupInfo] = field(default_factory=dict)
@@ -128,8 +155,10 @@ def load_school_data(
             _load_period_slots(cur, data)
             _load_assignments(cur, data)
             _load_all_division_assignments(cur, data)
+            _load_teachers(cur, data)
             _load_teacher_unavailability(cur, data)
             _load_elective_groups(cur, data)
+            _load_existing_teacher_slots(cur, data)
 
             return data
     finally:
@@ -137,17 +166,20 @@ def load_school_data(
 
 
 def _load_period_slots(cur, data: SchoolData) -> None:
-    """Load period slots (excluding intervals/lunch) for the division's period structure."""
-    # Find the period structure for this division's class
+    """Load period slots (excluding intervals/lunch) for the division's period structure.
+
+    Period structures are assigned at the DIVISION level via
+    divisions.period_structure_id — the old period_structure_classes join table
+    was removed.
+    """
     cur.execute("""
-        SELECT psc.period_structure_id
-        FROM period_structure_classes psc
-        JOIN divisions d ON d.class_id = psc.class_id
-        WHERE d.id = %s
+        SELECT d.period_structure_id
+        FROM divisions d
+        WHERE d.id = %s AND d.deleted_at IS NULL
     """, (data.division_id,))
     row = cur.fetchone()
-    if not row:
-        raise ValueError(f"No period structure found for division {data.division_id}")
+    if not row or not row["period_structure_id"]:
+        raise ValueError(f"No period structure assigned to division {data.division_id}")
     period_structure_id = row["period_structure_id"]
 
     # Load working days + period-type slots
@@ -188,7 +220,12 @@ def _load_period_slots(cur, data: SchoolData) -> None:
 
 
 def _load_assignments(cur, data: SchoolData) -> None:
-    """Load division assignments (subject-teacher pairs with weightage)."""
+    """Load division assignments (subject-teacher pairs with weightage).
+
+    LEFT JOIN teachers so that null-teacher ("unassigned") assignments still
+    get scheduled — the GA fitness skips teacher-conflict checks when
+    teacher_id is None.
+    """
     cur.execute("""
         SELECT
             da.id,
@@ -199,10 +236,11 @@ def _load_assignments(cur, data: SchoolData) -> None:
             t.name AS teacher_name,
             da.assistant_teacher_id,
             da.weightage,
-            da.elective_group_id
+            da.elective_group_id,
+            da.scheduling_preferences
         FROM division_assignments da
         JOIN subjects sub ON sub.id = da.subject_id
-        JOIN teachers t ON t.id = da.teacher_id
+        LEFT JOIN teachers t ON t.id = da.teacher_id
         WHERE da.division_id = %s
           AND da.academic_year_id = %s
           AND da.deleted_at IS NULL
@@ -220,11 +258,16 @@ def _load_assignments(cur, data: SchoolData) -> None:
             assistant_teacher_id=row["assistant_teacher_id"],
             weightage=row["weightage"],
             elective_group_id=row["elective_group_id"],
+            scheduling_preferences=row["scheduling_preferences"],
         ))
 
 
 def _load_all_division_assignments(cur, data: SchoolData) -> None:
-    """Load assignments for ALL divisions in the school/AY (for teacher conflict detection)."""
+    """Load assignments for ALL divisions in the school/AY (for teacher conflict detection).
+
+    LEFT JOIN teachers so null-teacher rows still appear; the fitness function
+    skips them during teacher-conflict checks.
+    """
     cur.execute("""
         SELECT
             da.id,
@@ -235,10 +278,11 @@ def _load_all_division_assignments(cur, data: SchoolData) -> None:
             t.name AS teacher_name,
             da.assistant_teacher_id,
             da.weightage,
-            da.elective_group_id
+            da.elective_group_id,
+            da.scheduling_preferences
         FROM division_assignments da
         JOIN subjects sub ON sub.id = da.subject_id
-        JOIN teachers t ON t.id = da.teacher_id
+        LEFT JOIN teachers t ON t.id = da.teacher_id
         WHERE da.school_id = %s
           AND da.academic_year_id = %s
           AND da.deleted_at IS NULL
@@ -258,6 +302,57 @@ def _load_all_division_assignments(cur, data: SchoolData) -> None:
             assistant_teacher_id=row["assistant_teacher_id"],
             weightage=row["weightage"],
             elective_group_id=row["elective_group_id"],
+            scheduling_preferences=row["scheduling_preferences"],
+        ))
+
+
+def _load_teachers(cur, data: SchoolData) -> None:
+    """Load teacher metadata (id, name, maxPeriodsPerWeek) for the school/AY.
+
+    Used by the fitness function to soft-enforce teacher workload caps.
+    """
+    cur.execute("""
+        SELECT id, name, max_periods_per_week
+        FROM teachers
+        WHERE school_id = %s
+          AND academic_year_id = %s
+          AND deleted_at IS NULL
+    """, (data.school_id, data.academic_year_id))
+
+    for row in cur.fetchall():
+        data.teachers[row["id"]] = TeacherInfo(
+            id=row["id"],
+            name=row["name"],
+            max_periods_per_week=row["max_periods_per_week"],
+        )
+
+
+def _load_existing_teacher_slots(cur, data: SchoolData) -> None:
+    """Load teacher slot occupations from OTHER divisions' existing timetables.
+
+    When we generate one division at a time, we must avoid scheduling a
+    teacher into a (day, slot) where they are already booked in another
+    division's already-generated timetable. This reads every
+    (teacher_id, working_day_id, slot_id) triple currently occupied in the
+    school+AY *except* the division we're generating, and the fitness
+    function treats these as forbidden placements.
+    """
+    cur.execute("""
+        SELECT da.teacher_id, ts.working_day_id, ts.slot_id
+        FROM timetable_slots ts
+        JOIN timetables tt ON tt.id = ts.timetable_id
+        JOIN division_assignments da ON da.id = ts.division_assignment_id
+        WHERE tt.school_id = %s
+          AND tt.academic_year_id = %s
+          AND tt.division_id <> %s
+          AND da.teacher_id IS NOT NULL
+    """, (data.school_id, data.academic_year_id, data.division_id))
+
+    for row in cur.fetchall():
+        data.existing_teacher_slots.add((
+            row["teacher_id"],
+            row["working_day_id"],
+            row["slot_id"],
         ))
 
 
@@ -314,10 +409,11 @@ def _load_elective_groups(cur, data: SchoolData) -> None:
         SELECT
             da.id, da.division_id, da.subject_id, sub.name AS subject_name,
             da.teacher_id, t.name AS teacher_name,
-            da.assistant_teacher_id, da.weightage, da.elective_group_id
+            da.assistant_teacher_id, da.weightage, da.elective_group_id,
+            da.scheduling_preferences
         FROM division_assignments da
         JOIN subjects sub ON sub.id = da.subject_id
-        JOIN teachers t ON t.id = da.teacher_id
+        LEFT JOIN teachers t ON t.id = da.teacher_id
         WHERE da.elective_group_id IN ({placeholders})
           AND da.academic_year_id = %s
           AND da.deleted_at IS NULL
@@ -336,5 +432,6 @@ def _load_elective_groups(cur, data: SchoolData) -> None:
                 assistant_teacher_id=row["assistant_teacher_id"],
                 weightage=row["weightage"],
                 elective_group_id=eg_id,
+                scheduling_preferences=row["scheduling_preferences"],
             )
             data.elective_groups[eg_id].division_assignments[row["division_id"]] = a

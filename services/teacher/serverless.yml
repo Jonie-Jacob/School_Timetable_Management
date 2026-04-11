@@ -45,6 +45,16 @@ functions:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
+          path: /api/teachers/load
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
+          path: /api/teachers/conflicts
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
           path: /api/teachers/{id}
           authorizer:
             name: cognitoAuthorizer

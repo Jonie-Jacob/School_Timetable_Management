@@ -38,6 +38,29 @@ export class TeacherController {
     return paginated(result.data, result.meta);
   }
 
+  async listLoad(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const result = await service.listLoad(ctx.schoolId, ctx.academicYearId);
+    return success(result);
+  }
+
+  async getSlotConflicts(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const q = event.queryStringParameters ?? {};
+    const workingDayId = q.workingDayId;
+    const slotId = q.slotId;
+    const excludeDivisionId = q.excludeDivisionId ?? null;
+    if (!workingDayId || !slotId) {
+      return success({ error: 'workingDayId and slotId are required' }) as any;
+    }
+    const result = await service.getSlotConflicts(
+      ctx.schoolId, ctx.academicYearId, workingDayId, slotId, excludeDivisionId,
+    );
+    return success(result);
+  }
+
   async getById(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
     const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
