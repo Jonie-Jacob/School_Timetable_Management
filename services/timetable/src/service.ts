@@ -331,7 +331,7 @@ export class TimetableService {
         slot: true,
         timetable: {
           include: {
-            division: { select: { id: true, label: true, classId: true } },
+            division: { select: { id: true, label: true, classId: true, periodStructureId: true } },
           },
         },
         divisionAssignment: {
@@ -346,31 +346,114 @@ export class TimetableService {
       ],
     });
 
-    // Group by day
-    const grid: Record<string, {
+    // Pick canonical period structures for this teacher:
+    // 1. Every structure used by any division where the teacher has assignments.
+    // 2. Fallback (teacher has zero assignments) — any structure in the school
+    //    so the grid still shows Mon–Fri × P1..PN.
+    const assignmentPeriodStructureIds = new Set<string>();
+    for (const s of slots) {
+      const psid = s.timetable.division.periodStructureId;
+      if (psid) assignmentPeriodStructureIds.add(psid);
+    }
+
+    if (assignmentPeriodStructureIds.size === 0) {
+      const assigned = await prisma.divisionAssignment.findMany({
+        where: { schoolId, academicYearId, teacherId, deletedAt: null },
+        select: { division: { select: { periodStructureId: true } } },
+      });
+      for (const a of assigned) {
+        if (a.division?.periodStructureId) assignmentPeriodStructureIds.add(a.division.periodStructureId);
+      }
+    }
+
+    if (assignmentPeriodStructureIds.size === 0) {
+      // Teacher has no assignments anywhere → use any active structure.
+      const anyStructure = await prisma.division.findFirst({
+        where: { schoolId, academicYearId, deletedAt: null, periodStructureId: { not: null } },
+        select: { periodStructureId: true },
+      });
+      if (anyStructure?.periodStructureId) assignmentPeriodStructureIds.add(anyStructure.periodStructureId);
+    }
+
+    const structureIds = Array.from(assignmentPeriodStructureIds);
+
+    // Fetch full working-day + slot lists for all candidate structures.
+    const workingDays = structureIds.length > 0
+      ? await prisma.workingDay.findMany({
+          where: { schoolId, periodStructureId: { in: structureIds } },
+          include: { slots: { orderBy: { sortOrder: 'asc' } } },
+          orderBy: { sortOrder: 'asc' },
+        })
+      : [];
+
+    // Build per-day grid skeleton keyed by dayOfWeek (so multiple structures
+    // with the same day collapse into one row). Shape matches the division
+    // timetable response (TimetablePeriod) so the frontend renders cells via
+    // period.assignment just like the division view. For teacher view, the
+    // "teacher" label in each cell is the class-division label (since the
+    // teacher is always the one being viewed).
+    const grid: Record<number, {
       workingDay: { id: string; dayOfWeek: number; label: string; sortOrder: number };
       periods: Array<{
         timetableSlotId: string;
         slot: { id: string; slotType: string; slotNumber: number | null; startTime: Date; endTime: Date; sortOrder: number };
-        division: { id: string; label: string; classId: string };
-        subject: { id: string; name: string } | null;
+        assignment: {
+          id: string;
+          subject: { id: string; name: string };
+          teacher: { id: string; name: string } | null;
+        } | null;
       }>;
     }> = {};
 
-    for (const s of slots) {
-      const dayKey = s.workingDayId;
-      if (!grid[dayKey]) {
-        grid[dayKey] = {
+    for (const wd of workingDays) {
+      if (!grid[wd.dayOfWeek]) {
+        grid[wd.dayOfWeek] = {
           workingDay: {
-            id: s.workingDay.id,
-            dayOfWeek: s.workingDay.dayOfWeek,
-            label: s.workingDay.label,
-            sortOrder: s.workingDay.sortOrder,
+            id: wd.id,
+            dayOfWeek: wd.dayOfWeek,
+            label: wd.label,
+            sortOrder: wd.sortOrder,
           },
           periods: [],
         };
       }
-      grid[dayKey].periods.push({
+      // Union of slots across structures with the same dayOfWeek
+      const dayBucket = grid[wd.dayOfWeek];
+      const seen = new Set(dayBucket.periods.map((p) => p.slot.sortOrder));
+      for (const sl of wd.slots) {
+        if (seen.has(sl.sortOrder)) continue;
+        dayBucket.periods.push({
+          timetableSlotId: `${wd.id}:${sl.id}`,
+          slot: {
+            id: sl.id,
+            slotType: sl.slotType,
+            slotNumber: sl.slotNumber,
+            startTime: sl.startTime,
+            endTime: sl.endTime,
+            sortOrder: sl.sortOrder,
+          },
+          assignment: null,
+        });
+      }
+      dayBucket.periods.sort((a, b) => a.slot.sortOrder - b.slot.sortOrder);
+    }
+
+    // Overlay the teacher's actual assignments into the skeleton.
+    // Need class names for the display label — batch fetch.
+    const classIds = Array.from(new Set(slots.map((s) => s.timetable.division.classId)));
+    const classes = classIds.length > 0
+      ? await prisma.class.findMany({ where: { id: { in: classIds } }, select: { id: true, name: true } })
+      : [];
+    const classNameById = new Map(classes.map((c) => [c.id, c.name]));
+
+    for (const s of slots) {
+      const dayBucket = grid[s.workingDay.dayOfWeek];
+      if (!dayBucket) continue;
+      const idx = dayBucket.periods.findIndex((p) => p.slot.sortOrder === s.slot.sortOrder);
+      if (idx === -1) continue;
+      const className = classNameById.get(s.timetable.division.classId) ?? '';
+      const divLabel = `${className}-${s.timetable.division.label}`.replace(/^-/, '');
+      dayBucket.periods[idx] = {
         timetableSlotId: s.id,
         slot: {
           id: s.slot.id,
@@ -380,9 +463,16 @@ export class TimetableService {
           endTime: s.slot.endTime,
           sortOrder: s.slot.sortOrder,
         },
-        division: s.timetable.division,
-        subject: s.divisionAssignment?.subject ?? null,
-      });
+        assignment: s.divisionAssignment
+          ? {
+              id: s.divisionAssignment.id,
+              subject: s.divisionAssignment.subject,
+              // Reuse "teacher" field to carry the class-division label for
+              // the UI cell — the cell renders `assignment.teacher?.name`.
+              teacher: { id: s.timetable.division.id, name: divLabel },
+            }
+          : null,
+      };
     }
 
     return {
