@@ -22,6 +22,7 @@ interface DayColumn {
 interface TimetableGrid {
   title: string;
   subtitle: string;
+  classTeacherName?: string | null;
   slots: SlotInfo[];
   days: DayColumn[];
 }
@@ -46,7 +47,10 @@ export class ExportService {
       where: { schoolId_divisionId_academicYearId: { schoolId, divisionId, academicYearId } },
       include: {
         division: {
-          include: { class: { select: { name: true } } },
+          include: {
+            class: { select: { name: true } },
+            classTeacher: { select: { name: true } },
+          },
         },
       },
     });
@@ -134,6 +138,7 @@ export class ExportService {
     return {
       title: `${className} - ${divLabel}`,
       subtitle: `Division Timetable`,
+      classTeacherName: timetable.division.classTeacher?.name ?? null,
       slots: orderedSlots,
       days: orderedDays,
     };
@@ -247,45 +252,47 @@ export class ExportService {
   }
 
   // ── HTML Rendering ──
+  // Layout: Y-axis (rows) = weekdays, X-axis (columns) = periods.
+  // This matches the on-screen grid in the app.
 
   private renderHtml(grid: TimetableGrid): string {
-    const rows: string[] = [];
-
-    for (const slot of grid.slots) {
+    // Header row: Day | P1 (time) | Break | P2 (time) | ...
+    const slotHeaderCells = grid.slots.map((slot) => {
       const isBreak = slot.slotType !== SlotType.PERIOD;
       const label = isBreak
-        ? (slot.slotType === SlotType.LUNCH_BREAK ? 'Lunch Break' : 'Break')
-        : `P${slot.slotNumber}`;
+        ? (slot.slotType === SlotType.LUNCH_BREAK ? 'Lunch' : 'Break')
+        : `P${slot.slotNumber ?? ''}`;
       const time = `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`;
+      const cls = isBreak ? 'slot-header break-col' : 'slot-header';
+      return `<th class="${cls}">
+        <div class="slot-name">${label}</div>
+        <div class="slot-time">${time}</div>
+      </th>`;
+    }).join('');
 
-      if (isBreak) {
-        rows.push(`
-          <tr class="break-row">
-            <td class="slot-label">${label}</td>
-            <td class="slot-time">${time}</td>
-            <td colspan="${grid.days.length}" class="break-cell">Break</td>
-          </tr>`);
-      } else {
-        const cells = grid.days.map(day => {
-          const period = day.periods.get(slot.sortOrder);
-          if (!period) return `<td class="empty-cell">-</td>`;
-          // For division export: show subject + teacher
-          // For teacher export: "teacher" field contains the division label
-          return `<td class="period-cell">
-            <div class="subject">${this.escapeHtml(period.subject)}</div>
-            <div class="teacher">${this.escapeHtml(period.teacher)}</div>
-          </td>`;
-        }).join('');
-        rows.push(`
-          <tr>
-            <td class="slot-label">${label}</td>
-            <td class="slot-time">${time}</td>
-            ${cells}
-          </tr>`);
-      }
-    }
+    // Data rows: one per weekday
+    const rows = grid.days.map((day) => {
+      const cells = grid.slots.map((slot) => {
+        const isBreak = slot.slotType !== SlotType.PERIOD;
+        if (isBreak) {
+          return `<td class="break-cell">—</td>`;
+        }
+        const period = day.periods.get(slot.sortOrder);
+        if (!period) return `<td class="empty-cell">-</td>`;
+        return `<td class="period-cell">
+          <div class="subject">${this.escapeHtml(period.subject)}</div>
+          <div class="teacher">${this.escapeHtml(period.teacher)}</div>
+        </td>`;
+      }).join('');
+      return `<tr>
+        <td class="day-label">${this.escapeHtml(day.label)}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
 
-    const dayHeaders = grid.days.map(d => `<th>${this.escapeHtml(d.label)}</th>`).join('');
+    const classTeacherLine = grid.classTeacherName
+      ? `<div class="class-teacher">Class Teacher: ${this.escapeHtml(grid.classTeacherName)}</div>`
+      : '';
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -296,34 +303,36 @@ export class ExportService {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; }
   h1 { text-align: center; font-size: 22px; margin-bottom: 4px; }
-  h2 { text-align: center; font-size: 14px; color: #555; margin-bottom: 16px; font-weight: normal; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { border: 1px solid #333; padding: 6px 8px; text-align: center; }
+  h2 { text-align: center; font-size: 14px; color: #555; margin-bottom: 6px; font-weight: normal; }
+  .class-teacher { text-align: center; font-size: 12px; color: #333; margin-bottom: 14px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  th, td { border: 1px solid #333; padding: 6px 6px; text-align: center; vertical-align: middle; }
   th { background: #2c3e50; color: #fff; font-weight: 600; }
-  .slot-label { background: #ecf0f1; font-weight: 600; width: 50px; }
-  .slot-time { background: #ecf0f1; font-size: 10px; width: 90px; white-space: nowrap; }
+  .slot-header .slot-name { font-size: 12px; }
+  .slot-header .slot-time { font-size: 9px; font-weight: normal; color: #cfd8dc; white-space: nowrap; }
+  .slot-header.break-col { background: #7f8c8d; }
+  .day-label { background: #ecf0f1; font-weight: 700; width: 90px; text-align: left; padding-left: 10px; }
   .period-cell { vertical-align: middle; }
   .subject { font-weight: 600; font-size: 11px; }
   .teacher { font-size: 10px; color: #555; }
-  .break-row { background: #ffeaa7; }
-  .break-cell { font-style: italic; color: #636e72; }
+  .break-cell { background: #fff4d6; color: #8a6d3b; font-style: italic; }
   .empty-cell { color: #b2bec3; }
-  tr:nth-child(even):not(.break-row) td:not(.slot-label):not(.slot-time) { background: #f8f9fa; }
+  tr:nth-child(even) td:not(.day-label):not(.break-cell) { background: #f8f9fa; }
 </style>
 </head>
 <body>
   <h1>${this.escapeHtml(grid.title)}</h1>
   <h2>${this.escapeHtml(grid.subtitle)}</h2>
+  ${classTeacherLine}
   <table>
     <thead>
       <tr>
-        <th>Period</th>
-        <th>Time</th>
-        ${dayHeaders}
+        <th class="day-label">Day</th>
+        ${slotHeaderCells}
       </tr>
     </thead>
     <tbody>
-      ${rows.join('')}
+      ${rows}
     </tbody>
   </table>
 </body>
@@ -497,79 +506,131 @@ export class ExportService {
     workbook.created = new Date();
 
     for (const grid of grids) {
-      const sheetName = grid.title.substring(0, 31); // Excel sheet name max 31 chars
+      const sheetName = grid.title.substring(0, 31);
       const sheet = workbook.addWorksheet(sheetName);
-
-      // Title
-      const titleRow = sheet.addRow([grid.title]);
-      titleRow.font = { size: 16, bold: true };
-      sheet.mergeCells(1, 1, 1, grid.days.length + 2);
-      titleRow.alignment = { horizontal: 'center' };
-
-      const subtitleRow = sheet.addRow([grid.subtitle]);
-      subtitleRow.font = { size: 12, color: { argb: 'FF666666' } };
-      sheet.mergeCells(2, 1, 2, grid.days.length + 2);
-      subtitleRow.alignment = { horizontal: 'center' };
-
-      sheet.addRow([]);
-
-      // Headers
-      const headers = ['Period', 'Time', ...grid.days.map(d => d.label)];
-      const headerRow = sheet.addRow(headers);
-      headerRow.eachCell(cell => {
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
-        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-      });
-
-      sheet.getColumn(1).width = 10;
-      sheet.getColumn(2).width = 16;
-      for (let i = 3; i <= grid.days.length + 2; i++) sheet.getColumn(i).width = 20;
-
-      // Data
-      let rowIdx = 0;
-      for (const slot of grid.slots) {
-        const isBreak = slot.slotType !== SlotType.PERIOD;
-        const label = isBreak ? (slot.slotType === SlotType.LUNCH_BREAK ? 'Lunch Break' : 'Break') : `P${slot.slotNumber}`;
-        const time = `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`;
-
-        if (isBreak) {
-          const row = sheet.addRow([label, time, 'Break']);
-          const lastRow = sheet.rowCount;
-          if (grid.days.length > 1) sheet.mergeCells(lastRow, 3, lastRow, grid.days.length + 2);
-          row.eachCell(cell => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEAA7' } };
-            cell.font = { italic: true, color: { argb: 'FF636E72' } };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-            cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-          });
-        } else {
-          const dayCells = grid.days.map(day => {
-            const period = day.periods.get(slot.sortOrder);
-            if (!period) return '-';
-            return `${period.subject}\n${period.teacher}`;
-          });
-          const row = sheet.addRow([label, time, ...dayCells]);
-          row.height = 32;
-          row.eachCell((cell, colNumber) => {
-            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-            cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-            if (rowIdx % 2 === 0 && colNumber >= 3) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
-            if (colNumber <= 2) {
-              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECF0F1' } };
-              cell.font = { bold: colNumber === 1, size: colNumber === 2 ? 9 : 11 };
-            }
-          });
-          rowIdx++;
-        }
-      }
+      this.writeSheet(sheet, grid);
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
     const base64 = Buffer.from(buffer as ArrayBuffer).toString('base64');
 
     return { format: 'excel', base64, filename: `${prefix}.xlsx`, sheetsIncluded: grids.length };
+  }
+
+  /**
+   * Write a single timetable grid to an Excel sheet using the UI axis layout:
+   * rows = weekdays, columns = (Day, P1, break, P2, ...).
+   */
+  private writeSheet(sheet: ExcelJS.Worksheet, grid: TimetableGrid) {
+    const totalCols = grid.slots.length + 1; // +1 for Day column
+
+    // Title row
+    const titleRow = sheet.addRow([grid.title]);
+    titleRow.font = { size: 16, bold: true };
+    sheet.mergeCells(1, 1, 1, totalCols);
+    titleRow.alignment = { horizontal: 'center' };
+
+    // Subtitle row
+    const subtitleRow = sheet.addRow([grid.subtitle]);
+    subtitleRow.font = { size: 12, color: { argb: 'FF666666' } };
+    sheet.mergeCells(2, 1, 2, totalCols);
+    subtitleRow.alignment = { horizontal: 'center' };
+
+    let currentRowIdx = 3;
+
+    // Optional class teacher line
+    if (grid.classTeacherName) {
+      const ctRow = sheet.addRow([`Class Teacher: ${grid.classTeacherName}`]);
+      ctRow.font = { size: 11, bold: true, color: { argb: 'FF333333' } };
+      sheet.mergeCells(currentRowIdx, 1, currentRowIdx, totalCols);
+      ctRow.alignment = { horizontal: 'center' };
+      currentRowIdx++;
+    }
+
+    sheet.addRow([]); // spacer
+    currentRowIdx++;
+
+    // Header row: Day | P1 \n time | Break | P2 \n time | ...
+    const headerCells: string[] = ['Day'];
+    for (const slot of grid.slots) {
+      const isBreak = slot.slotType !== SlotType.PERIOD;
+      const label = isBreak
+        ? (slot.slotType === SlotType.LUNCH_BREAK ? 'Lunch' : 'Break')
+        : `P${slot.slotNumber ?? ''}`;
+      const time = `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`;
+      headerCells.push(`${label}\n${time}`);
+    }
+    const headerRow = sheet.addRow(headerCells);
+    headerRow.height = 32;
+    headerRow.eachCell((cell, colNumber) => {
+      const slot = colNumber === 1 ? null : grid.slots[colNumber - 2];
+      const isBreak = slot && slot.slotType !== SlotType.PERIOD;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: isBreak ? 'FF7F8C8D' : 'FF2C3E50' },
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = {
+        top: { style: 'thin' }, bottom: { style: 'thin' },
+        left: { style: 'thin' }, right: { style: 'thin' },
+      };
+    });
+
+    // Column widths
+    sheet.getColumn(1).width = 14;
+    for (let i = 2; i <= totalCols; i++) sheet.getColumn(i).width = 18;
+
+    // Data rows — one per weekday
+    let dayIdx = 0;
+    for (const day of grid.days) {
+      const values: string[] = [day.label];
+      for (const slot of grid.slots) {
+        const isBreak = slot.slotType !== SlotType.PERIOD;
+        if (isBreak) {
+          values.push('—');
+          continue;
+        }
+        const period = day.periods.get(slot.sortOrder);
+        if (!period) {
+          values.push('-');
+          continue;
+        }
+        values.push(`${period.subject}\n${period.teacher}`);
+      }
+      const row = sheet.addRow(values);
+      row.height = 36;
+      row.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border = {
+          top: { style: 'thin' }, bottom: { style: 'thin' },
+          left: { style: 'thin' }, right: { style: 'thin' },
+        };
+
+        if (colNumber === 1) {
+          // Day label
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECF0F1' } };
+          cell.font = { bold: true };
+          cell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+          return;
+        }
+
+        const slot = grid.slots[colNumber - 2];
+        const isBreak = slot && slot.slotType !== SlotType.PERIOD;
+        if (isBreak) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF4D6' } };
+          cell.font = { italic: true, color: { argb: 'FF8A6D3B' } };
+          return;
+        }
+
+        // Alternating row colour for period cells
+        if (dayIdx % 2 === 1) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+        }
+      });
+      dayIdx++;
+    }
   }
 
   // ─��� Excel Export ──
@@ -590,94 +651,7 @@ export class ExportService {
     workbook.created = new Date();
 
     const sheet = workbook.addWorksheet('Timetable');
-
-    // ── Title row ──
-    const titleRow = sheet.addRow([grid.title]);
-    titleRow.font = { size: 16, bold: true };
-    sheet.mergeCells(1, 1, 1, grid.days.length + 2);
-    titleRow.alignment = { horizontal: 'center' };
-
-    const subtitleRow = sheet.addRow([grid.subtitle]);
-    subtitleRow.font = { size: 12, color: { argb: 'FF666666' } };
-    sheet.mergeCells(2, 1, 2, grid.days.length + 2);
-    subtitleRow.alignment = { horizontal: 'center' };
-
-    sheet.addRow([]); // spacer
-
-    // ── Header row ──
-    const headers = ['Period', 'Time', ...grid.days.map(d => d.label)];
-    const headerRow = sheet.addRow(headers);
-    headerRow.eachCell(cell => {
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = {
-        top: { style: 'thin' }, bottom: { style: 'thin' },
-        left: { style: 'thin' }, right: { style: 'thin' },
-      };
-    });
-
-    // ── Column widths ──
-    sheet.getColumn(1).width = 10;
-    sheet.getColumn(2).width = 16;
-    for (let i = 3; i <= grid.days.length + 2; i++) {
-      sheet.getColumn(i).width = 20;
-    }
-
-    // ── Data rows ──
-    let rowIdx = 0;
-    for (const slot of grid.slots) {
-      const isBreak = slot.slotType !== SlotType.PERIOD;
-      const label = isBreak ? (slot.slotType === SlotType.LUNCH_BREAK ? 'Lunch Break' : 'Break') : `P${slot.slotNumber}`;
-      const time = `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`;
-
-      if (isBreak) {
-        const cells = ['Break'];
-        const row = sheet.addRow([label, time, ...cells]);
-        // Merge break cells across all day columns
-        const lastRow = sheet.rowCount;
-        if (grid.days.length > 1) {
-          sheet.mergeCells(lastRow, 3, lastRow, grid.days.length + 2);
-        }
-        row.eachCell(cell => {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEAA7' } };
-          cell.font = { italic: true, color: { argb: 'FF636E72' } };
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          cell.border = {
-            top: { style: 'thin' }, bottom: { style: 'thin' },
-            left: { style: 'thin' }, right: { style: 'thin' },
-          };
-        });
-      } else {
-        const dayCells = grid.days.map(day => {
-          const period = day.periods.get(slot.sortOrder);
-          if (!period) return '-';
-          return `${period.subject}\n${period.teacher}`;
-        });
-        const row = sheet.addRow([label, time, ...dayCells]);
-        row.height = 32;
-
-        row.eachCell((cell, colNumber) => {
-          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-          cell.border = {
-            top: { style: 'thin' }, bottom: { style: 'thin' },
-            left: { style: 'thin' }, right: { style: 'thin' },
-          };
-
-          // Alternating row color
-          if (rowIdx % 2 === 0 && colNumber >= 3) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
-          }
-
-          // Slot label + time columns
-          if (colNumber <= 2) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECF0F1' } };
-            cell.font = { bold: colNumber === 1, size: colNumber === 2 ? 9 : 11 };
-          }
-        });
-        rowIdx++;
-      }
-    }
+    this.writeSheet(sheet, grid);
 
     const buffer = await workbook.xlsx.writeBuffer();
     const base64 = Buffer.from(buffer as ArrayBuffer).toString('base64');

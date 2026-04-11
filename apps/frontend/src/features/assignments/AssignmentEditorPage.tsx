@@ -41,13 +41,72 @@ import {
   type Assignment,
 } from './assignmentApi';
 
+const rangeSchema = z.object({
+  min: z.union([z.number().int().min(1), z.nan()]).optional(),
+  max: z.union([z.number().int().min(1), z.nan()]).optional(),
+});
+
+const schedulingPrefsSchema = z.object({
+  constraintType: z.enum(['HARD', 'SOFT']).default('SOFT'),
+  preferredDays: z.array(z.number().int().min(0).max(6)).default([]),
+  excludedDays: z.array(z.number().int().min(0).max(6)).default([]),
+  preferAdjacentPeriods: z.boolean().default(false),
+  minPeriodsPerDay: z.union([z.number().int().min(1).max(20), z.nan()]).optional(),
+  maxPeriodsPerDay: z.union([z.number().int().min(1).max(20), z.nan()]).optional(),
+  preferredPeriodRange: rangeSchema.optional(),
+  excludedPeriodRange: rangeSchema.optional(),
+});
+
 const assignmentSchema = z.object({
   subjectId: z.string().min(1, 'Subject is required'),
   teacherId: z.string().optional(), // empty string = unassigned
   assistantTeacherId: z.string().optional(),
   weightage: z.number().int().min(1, 'At least 1 period required'),
   electiveGroupId: z.string().optional(),
+  schedulingPreferences: schedulingPrefsSchema,
 });
+
+const DEFAULT_PREFS = {
+  constraintType: 'SOFT' as const,
+  preferredDays: [] as number[],
+  excludedDays: [] as number[],
+  preferAdjacentPeriods: false,
+  minPeriodsPerDay: undefined,
+  maxPeriodsPerDay: undefined,
+  preferredPeriodRange: undefined,
+  excludedPeriodRange: undefined,
+};
+
+// Strip NaNs / empty ranges / defaults before sending to API so the backend
+// only stores real preferences. Returns undefined if nothing meaningful is set.
+function normalizePrefs(p: AssignmentFormValues['schedulingPreferences']) {
+  if (!p) return undefined;
+  const cleanNumber = (n: number | undefined): number | undefined =>
+    typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
+  const cleanRange = (r: { min?: number; max?: number } | undefined) => {
+    if (!r) return undefined;
+    const min = cleanNumber(r.min);
+    const max = cleanNumber(r.max);
+    if (min === undefined && max === undefined) return undefined;
+    if (min === undefined || max === undefined) return undefined;
+    return { min, max };
+  };
+  const result: any = { constraintType: p.constraintType ?? 'SOFT' };
+  if (p.preferredDays?.length) result.preferredDays = p.preferredDays;
+  if (p.excludedDays?.length) result.excludedDays = p.excludedDays;
+  if (p.preferAdjacentPeriods) result.preferAdjacentPeriods = true;
+  const minDay = cleanNumber(p.minPeriodsPerDay as number | undefined);
+  const maxDay = cleanNumber(p.maxPeriodsPerDay as number | undefined);
+  if (minDay !== undefined) result.minPeriodsPerDay = minDay;
+  if (maxDay !== undefined) result.maxPeriodsPerDay = maxDay;
+  const pr = cleanRange(p.preferredPeriodRange);
+  const er = cleanRange(p.excludedPeriodRange);
+  if (pr) result.preferredPeriodRange = pr;
+  if (er) result.excludedPeriodRange = er;
+  // If ONLY constraintType was kept (nothing else), we still send it because
+  // it is a legitimate selection; backend persists as a flag.
+  return result;
+}
 
 type AssignmentFormValues = z.infer<typeof assignmentSchema>;
 
@@ -85,7 +144,14 @@ export function Component() {
 
   const form = useForm<AssignmentFormValues>({
     resolver: zodResolver(assignmentSchema),
-    defaultValues: { subjectId: '', teacherId: '', assistantTeacherId: '', weightage: 1, electiveGroupId: '' },
+    defaultValues: {
+      subjectId: '',
+      teacherId: '',
+      assistantTeacherId: '',
+      weightage: 1,
+      electiveGroupId: '',
+      schedulingPreferences: DEFAULT_PREFS,
+    },
   });
 
   const watchedSubjectId = form.watch('subjectId');
@@ -153,6 +219,7 @@ export function Component() {
   const handleCreate = async (values: AssignmentFormValues) => {
     if (!divisionId) return;
     try {
+      const prefs = normalizePrefs(values.schedulingPreferences);
       if (values.electiveGroupId) {
         await createElectiveAssignment({
           divisionId,
@@ -161,6 +228,7 @@ export function Component() {
           teacherId: values.teacherId || null,
           assistantTeacherId: values.assistantTeacherId || null,
           weightage: values.weightage,
+          schedulingPreferences: prefs,
         }).unwrap();
       } else {
         await createAssignment({
@@ -169,6 +237,7 @@ export function Component() {
           teacherId: values.teacherId || null,
           assistantTeacherId: values.assistantTeacherId || null,
           weightage: values.weightage,
+          schedulingPreferences: prefs,
         }).unwrap();
       }
       toast.success(t('createSuccess'));
@@ -187,6 +256,7 @@ export function Component() {
         teacherId: values.teacherId || null,
         assistantTeacherId: values.assistantTeacherId || null,
         weightage: values.weightage,
+        schedulingPreferences: normalizePrefs(values.schedulingPreferences) ?? null,
       }).unwrap();
       toast.success(t('updateSuccess'));
       setEditTarget(null);
@@ -207,12 +277,23 @@ export function Component() {
   };
 
   const openEditForm = (assignment: Assignment) => {
+    const savedPrefs = assignment.schedulingPreferences ?? null;
     form.reset({
       subjectId: assignment.subjectId,
       teacherId: assignment.teacherId ?? '',
       assistantTeacherId: assignment.assistantTeacherId ?? '',
       weightage: assignment.weightage,
       electiveGroupId: assignment.electiveGroupId ?? '',
+      schedulingPreferences: {
+        constraintType: savedPrefs?.constraintType ?? 'SOFT',
+        preferredDays: savedPrefs?.preferredDays ?? [],
+        excludedDays: savedPrefs?.excludedDays ?? [],
+        preferAdjacentPeriods: savedPrefs?.preferAdjacentPeriods ?? false,
+        minPeriodsPerDay: savedPrefs?.minPeriodsPerDay,
+        maxPeriodsPerDay: savedPrefs?.maxPeriodsPerDay,
+        preferredPeriodRange: savedPrefs?.preferredPeriodRange,
+        excludedPeriodRange: savedPrefs?.excludedPeriodRange,
+      },
     });
     setElectiveEditOpen(false);
     setEditTarget(assignment);
@@ -279,7 +360,7 @@ export function Component() {
               Back
             </Button>
             {!isReadOnly && (
-              <Button onClick={() => { form.reset({ subjectId: '', teacherId: '', assistantTeacherId: '', weightage: 1, electiveGroupId: '' }); setFormOpen(true); }}>
+              <Button onClick={() => { form.reset({ subjectId: '', teacherId: '', assistantTeacherId: '', weightage: 1, electiveGroupId: '', schedulingPreferences: DEFAULT_PREFS }); setFormOpen(true); }}>
                 <Plus className="size-4" />
                 {t('addAssignment')}
               </Button>
@@ -652,96 +733,9 @@ export function Component() {
 
             <Separator />
 
-            {/* Scheduling Preferences — collapsible */}
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground text-xs" type="button">
-                  <span className="flex items-center gap-2">
-                    <Settings2 className="size-3.5" />
-                    Scheduling Preferences (Optional)
-                  </span>
-                  <ChevronDown className="size-3.5" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-4 pt-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-xs">Constraint Type</Label>
-                    <p className="text-[10px] text-muted-foreground">Hard = must be respected, Soft = best effort</p>
-                  </div>
-                  <Select defaultValue="SOFT">
-                    <SelectTrigger className="w-24 h-7 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SOFT" className="text-xs">Soft</SelectItem>
-                      <SelectItem value="HARD" className="text-xs">Hard</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Preferred Days */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Preferred Days</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
-                      <label key={day} className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[10px] cursor-pointer hover:bg-emerald-500/10 has-[:checked]:bg-emerald-500/15 has-[:checked]:border-emerald-500/40 has-[:checked]:text-emerald-700 transition-colors">
-                        <input type="checkbox" value={i} className="size-3 accent-emerald-500" />
-                        {day}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Excluded Days */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Excluded Days</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
-                      <label key={day} className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[10px] cursor-pointer hover:bg-destructive/10 has-[:checked]:bg-destructive/15 has-[:checked]:border-destructive/40 has-[:checked]:text-destructive transition-colors">
-                        <input type="checkbox" value={i} className="size-3 accent-red-500" />
-                        {day}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Prefer Adjacent Periods</Label>
-                  <Switch />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Min Periods/Day</Label>
-                    <Input type="number" min={1} className="h-7 text-xs" placeholder="—" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Max Periods/Day</Label>
-                    <Input type="number" min={1} className="h-7 text-xs" placeholder="—" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Preferred Period Range</Label>
-                    <div className="flex items-center gap-1">
-                      <Input type="number" min={1} className="h-7 text-xs" placeholder="Min" />
-                      <span className="text-xs text-muted-foreground">–</span>
-                      <Input type="number" min={1} className="h-7 text-xs" placeholder="Max" />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Excluded Period Range</Label>
-                    <div className="flex items-center gap-1">
-                      <Input type="number" min={1} className="h-7 text-xs" placeholder="Min" />
-                      <span className="text-xs text-muted-foreground">–</span>
-                      <Input type="number" min={1} className="h-7 text-xs" placeholder="Max" />
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-muted-foreground">Preferences are applied during timetable generation. They do not affect existing timetables.</p>
-              </CollapsibleContent>
-            </Collapsible>
+            {/* Scheduling Preferences — collapsible, fully wired to form */}
+            <SchedulingPreferencesSection form={form} />
+            <p className="text-[10px] text-muted-foreground">Preferences are applied during timetable generation. They do not affect existing timetables.</p>
 
             <DialogFooter>
               <Button
@@ -772,5 +766,228 @@ export function Component() {
         onCancel={() => setDeleteTarget(null)}
       />
     </div>
+  );
+}
+
+// ── Scheduling Preferences subform ──
+// Wires the (previously dead) UI block to react-hook-form. Backend persists
+// schedulingPreferences as JSONB on DivisionAssignment; the GA engine (Phase 2)
+// will consume them.
+
+const DAY_CHIPS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function SchedulingPreferencesSection({
+  form,
+}: {
+  form: ReturnType<typeof useForm<AssignmentFormValues>>;
+}) {
+  const prefs = form.watch('schedulingPreferences') ?? DEFAULT_PREFS;
+
+  const toggleDay = (kind: 'preferredDays' | 'excludedDays', day: number) => {
+    const current = (prefs[kind] ?? []) as number[];
+    const has = current.includes(day);
+    const next = has ? current.filter((d) => d !== day) : [...current, day].sort();
+    form.setValue(`schedulingPreferences.${kind}`, next, { shouldDirty: true });
+    // Mutual exclusion: a day cannot be in both lists.
+    const other = kind === 'preferredDays' ? 'excludedDays' : 'preferredDays';
+    const otherList = (prefs[other] ?? []) as number[];
+    if (!has && otherList.includes(day)) {
+      form.setValue(
+        `schedulingPreferences.${other}`,
+        otherList.filter((d) => d !== day),
+        { shouldDirty: true },
+      );
+    }
+  };
+
+  const setNum = (path: string, v: string) => {
+    const n = v === '' ? undefined : Number(v);
+    form.setValue(path as any, n as any, { shouldDirty: true });
+  };
+
+  const setRangeNum = (
+    kind: 'preferredPeriodRange' | 'excludedPeriodRange',
+    field: 'min' | 'max',
+    v: string,
+  ) => {
+    const existing = prefs[kind] ?? {};
+    const n = v === '' ? undefined : Number(v);
+    form.setValue(
+      `schedulingPreferences.${kind}` as any,
+      { ...existing, [field]: n } as any,
+      { shouldDirty: true },
+    );
+  };
+
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground text-xs" type="button">
+          <span className="flex items-center gap-2">
+            <Settings2 className="size-3.5" />
+            Scheduling Preferences (Optional)
+          </span>
+          <ChevronDown className="size-3.5" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-4 pt-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-xs">Constraint Type</Label>
+            <p className="text-[10px] text-muted-foreground">Hard = must be respected, Soft = best effort</p>
+          </div>
+          <Select
+            value={prefs.constraintType ?? 'SOFT'}
+            onValueChange={(v) =>
+              form.setValue('schedulingPreferences.constraintType', v as 'HARD' | 'SOFT', { shouldDirty: true })
+            }
+          >
+            <SelectTrigger className="w-24 h-7 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="SOFT" className="text-xs">Soft</SelectItem>
+              <SelectItem value="HARD" className="text-xs">Hard</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Preferred Days */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Preferred Days</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {DAY_CHIPS.map((day, i) => {
+              const checked = (prefs.preferredDays ?? []).includes(i);
+              return (
+                <label
+                  key={day}
+                  className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] cursor-pointer transition-colors ${
+                    checked
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-700'
+                      : 'border-border/60 hover:bg-emerald-500/10'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-3 accent-emerald-500"
+                    checked={checked}
+                    onChange={() => toggleDay('preferredDays', i)}
+                  />
+                  {day}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Excluded Days */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Excluded Days</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {DAY_CHIPS.map((day, i) => {
+              const checked = (prefs.excludedDays ?? []).includes(i);
+              return (
+                <label
+                  key={day}
+                  className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] cursor-pointer transition-colors ${
+                    checked
+                      ? 'bg-destructive/15 border-destructive/40 text-destructive'
+                      : 'border-border/60 hover:bg-destructive/10'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-3 accent-red-500"
+                    checked={checked}
+                    onChange={() => toggleDay('excludedDays', i)}
+                  />
+                  {day}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Prefer Adjacent Periods</Label>
+          <Switch
+            checked={prefs.preferAdjacentPeriods ?? false}
+            onCheckedChange={(v) =>
+              form.setValue('schedulingPreferences.preferAdjacentPeriods', v, { shouldDirty: true })
+            }
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Min Periods/Day</Label>
+            <Input
+              type="number"
+              min={1}
+              className="h-7 text-xs"
+              placeholder="—"
+              value={prefs.minPeriodsPerDay ?? ''}
+              onChange={(e) => setNum('schedulingPreferences.minPeriodsPerDay', e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Max Periods/Day</Label>
+            <Input
+              type="number"
+              min={1}
+              className="h-7 text-xs"
+              placeholder="—"
+              value={prefs.maxPeriodsPerDay ?? ''}
+              onChange={(e) => setNum('schedulingPreferences.maxPeriodsPerDay', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Preferred Period Range</Label>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min={1}
+                className="h-7 text-xs"
+                placeholder="Min"
+                value={prefs.preferredPeriodRange?.min ?? ''}
+                onChange={(e) => setRangeNum('preferredPeriodRange', 'min', e.target.value)}
+              />
+              <span className="text-xs text-muted-foreground">–</span>
+              <Input
+                type="number"
+                min={1}
+                className="h-7 text-xs"
+                placeholder="Max"
+                value={prefs.preferredPeriodRange?.max ?? ''}
+                onChange={(e) => setRangeNum('preferredPeriodRange', 'max', e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Excluded Period Range</Label>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min={1}
+                className="h-7 text-xs"
+                placeholder="Min"
+                value={prefs.excludedPeriodRange?.min ?? ''}
+                onChange={(e) => setRangeNum('excludedPeriodRange', 'min', e.target.value)}
+              />
+              <span className="text-xs text-muted-foreground">–</span>
+              <Input
+                type="number"
+                min={1}
+                className="h-7 text-xs"
+                placeholder="Max"
+                value={prefs.excludedPeriodRange?.max ?? ''}
+                onChange={(e) => setRangeNum('excludedPeriodRange', 'max', e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
