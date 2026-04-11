@@ -15,9 +15,7 @@ import {
   downloadHtmlAsPdf, downloadExcel,
 } from '@/features/export/exportApi';
 
-const DAY_LABELS: Record<number, string> = {
-  0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat',
-};
+import { DAY_LABELS_SHORT as DAY_LABELS } from '@/lib/days';
 
 const SUBJECT_COLORS = [
   'bg-blue-300 text-blue-950',

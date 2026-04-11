@@ -16,6 +16,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DAY_LABELS_SHORT as DAY_LABELS } from '@/lib/days';
 
 interface UnavailableSlot {
   workingDayId: string;
@@ -27,10 +28,6 @@ interface AvailabilityGridProps {
   onChange: (value: UnavailableSlot[]) => void;
   disabled?: boolean;
 }
-
-const DAY_LABELS: Record<number, string> = {
-  0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat',
-};
 
 function isUnavailable(
   value: UnavailableSlot[],

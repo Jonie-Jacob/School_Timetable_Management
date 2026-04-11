@@ -26,10 +26,7 @@ import {
 } from './timetableApi';
 import { DraggableCell, DroppableCell, CellContent } from './TimetableCells';
 
-const DAY_LABELS: Record<number, string> = {
-  0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday',
-  4: 'Thursday', 5: 'Friday', 6: 'Saturday',
-};
+import { DAY_LABELS_FULL as DAY_LABELS } from '@/lib/days';
 
 function parseTimeToMinutes(time: string): number {
   const match = time.match(/(\d{2}):(\d{2})/);
