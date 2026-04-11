@@ -99,10 +99,13 @@ export class TimetableService {
       orderBy: { sortOrder: 'asc' },
     });
 
-    // Get division assignments — exclude unassigned-teacher entries since
-    // they cannot be scheduled until an admin assigns a teacher.
+    // Get division assignments — INCLUDING unassigned-teacher entries.
+    // The current round-robin placer has no teacher-conflict logic anyway,
+    // so null-teacher rows can occupy slots just like any other row. When
+    // the GA engine lands (Phase 2), null-teacher assignments will still be
+    // placed but skipped in teacher-conflict checks.
     const assignments = await prisma.divisionAssignment.findMany({
-      where: { schoolId, divisionId, academicYearId, deletedAt: null, teacherId: { not: null } },
+      where: { schoolId, divisionId, academicYearId, deletedAt: null },
     });
 
     // Build slot matrix and do round-robin assignment
