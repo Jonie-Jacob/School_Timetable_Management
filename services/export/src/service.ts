@@ -29,12 +29,22 @@ interface TimetableGrid {
 
 // ── Helpers ──
 
-function formatTime(d: Date): string {
+// Compact form for export headers where space is tight.
+// Strips the AM/PM when both start+end share it, and drops leading zeros.
+function formatTimeCompact(d: Date): string {
   const hours24 = d.getUTCHours();
   const minutes = d.getUTCMinutes().toString().padStart(2, '0');
-  const period = hours24 >= 12 ? 'PM' : 'AM';
   const hours12 = hours24 % 12 || 12;
-  return `${hours12}:${minutes} ${period}`;
+  return `${hours12}:${minutes}`;
+}
+
+function formatSlotRange(start: Date, end: Date): string {
+  const startAmPm = start.getUTCHours() >= 12 ? 'PM' : 'AM';
+  const endAmPm = end.getUTCHours() >= 12 ? 'PM' : 'AM';
+  if (startAmPm === endAmPm) {
+    return `${formatTimeCompact(start)}-${formatTimeCompact(end)} ${endAmPm}`;
+  }
+  return `${formatTimeCompact(start)}${startAmPm}-${formatTimeCompact(end)}${endAmPm}`;
 }
 
 export class ExportService {
@@ -262,7 +272,7 @@ export class ExportService {
       const label = isBreak
         ? (slot.slotType === SlotType.LUNCH_BREAK ? 'Lunch' : 'Break')
         : `P${slot.slotNumber ?? ''}`;
-      const time = `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`;
+      const time = formatSlotRange(slot.startTime, slot.endTime);
       const cls = isBreak ? 'slot-header break-col' : 'slot-header';
       return `<th class="${cls}">
         <div class="slot-name">${label}</div>
@@ -305,13 +315,14 @@ export class ExportService {
   h1 { text-align: center; font-size: 22px; margin-bottom: 4px; }
   h2 { text-align: center; font-size: 14px; color: #555; margin-bottom: 6px; font-weight: normal; }
   .class-teacher { text-align: center; font-size: 12px; color: #333; margin-bottom: 14px; font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
-  th, td { border: 1px solid #333; padding: 6px 6px; text-align: center; vertical-align: middle; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th, td { border: 1px solid #333; padding: 5px 4px; text-align: center; vertical-align: middle; word-wrap: break-word; overflow-wrap: anywhere; }
   th { background: #2c3e50; color: #fff; font-weight: 600; }
-  .slot-header .slot-name { font-size: 12px; }
-  .slot-header .slot-time { font-size: 9px; font-weight: normal; color: #cfd8dc; white-space: nowrap; }
-  .slot-header.break-col { background: #7f8c8d; }
-  .day-label { background: #ecf0f1; font-weight: 700; width: 90px; text-align: left; padding-left: 10px; }
+  .slot-header { padding: 4px 3px; }
+  .slot-header .slot-name { font-size: 11px; }
+  .slot-header .slot-time { font-size: 8px; font-weight: normal; color: #cfd8dc; white-space: nowrap; margin-top: 2px; }
+  .slot-header.break-col { background: #7f8c8d; min-width: 42px; }
+  .day-label { background: #ecf0f1; font-weight: 700; width: 80px; text-align: left; padding-left: 8px; white-space: nowrap; }
   .period-cell { vertical-align: middle; }
   .subject { font-weight: 600; font-size: 11px; }
   .teacher { font-size: 10px; color: #555; }
@@ -557,7 +568,7 @@ export class ExportService {
       const label = isBreak
         ? (slot.slotType === SlotType.LUNCH_BREAK ? 'Lunch' : 'Break')
         : `P${slot.slotNumber ?? ''}`;
-      const time = `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`;
+      const time = formatSlotRange(slot.startTime, slot.endTime);
       headerCells.push(`${label}\n${time}`);
     }
     const headerRow = sheet.addRow(headerCells);
