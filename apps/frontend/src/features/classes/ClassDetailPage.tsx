@@ -341,7 +341,7 @@ export function Component() {
 
 // ── Class Teacher inline field with swap modal ──
 
-function ClassTeacherField({
+export function ClassTeacherField({
   classId,
   division,
   isReadOnly,

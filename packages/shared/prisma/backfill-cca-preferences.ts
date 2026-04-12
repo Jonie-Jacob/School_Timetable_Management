@@ -34,6 +34,7 @@ const PREFERENCES = {
   excludedDays: [0, 1, 2, 4, 5, 6],
   preferredPeriodRange: { min: 7, max: 8 },
   excludedPeriodRange: { min: 1, max: 6 },
+  preferAdjacentPeriods: true,
 };
 
 async function main() {

@@ -43,6 +43,11 @@ export const router = createBrowserRouter([
         errorElement: <RouteErrorBoundary />,
       },
       {
+        path: 'class-teachers',
+        lazy: () => import('@/features/class-teachers/ClassTeachersPage'),
+        errorElement: <RouteErrorBoundary />,
+      },
+      {
         path: 'classes/:id',
         lazy: () => import('@/features/classes/ClassDetailPage'),
         errorElement: <RouteErrorBoundary />,
@@ -100,6 +105,11 @@ export const router = createBrowserRouter([
       {
         path: 'teacher-timetable',
         lazy: () => import('@/features/teacher-timetable/TeacherTimetablePage'),
+        errorElement: <RouteErrorBoundary />,
+      },
+      {
+        path: 'teacher-timetable/:teacherId',
+        lazy: () => import('@/features/teacher-timetable/TeacherTimetableDetailPage'),
         errorElement: <RouteErrorBoundary />,
       },
       {

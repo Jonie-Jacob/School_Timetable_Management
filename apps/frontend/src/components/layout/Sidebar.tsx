@@ -12,6 +12,7 @@ import {
   Clock,
   CalendarCheck,
   UserPlus,
+  UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { SidebarLink } from './SidebarLink';
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { key: 'dashboard', to: '/', icon: LayoutDashboard, color: 'text-amber-400' },
   { key: 'academicYears', to: '/academic-years', icon: CalendarRange, color: 'text-sky-400' },
   { key: 'classes', to: '/classes', icon: School, color: 'text-violet-400' },
+  { key: 'classTeachers', to: '/class-teachers', icon: UserCheck, color: 'text-fuchsia-400' },
   { key: 'periodStructures', to: '/period-structures', icon: Clock, color: 'text-teal-400' },
   { key: 'subjects', to: '/subjects', icon: BookOpen, color: 'text-rose-400' },
   { key: 'teachers', to: '/teachers', icon: Users, color: 'text-emerald-400' },

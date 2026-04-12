@@ -1,208 +1,254 @@
 import { useState, useMemo } from 'react';
-import { Eye, CalendarDays, Coffee, UtensilsCrossed } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Eye, Search, FileText, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/shared';
-import { ExportButton } from '@/components/shared/ExportButton';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useGetTeachersQuery } from '@/features/teachers/teacherApi';
-import { useGetTeacherTimetableQuery } from '@/features/timetable/timetableApi';
 import {
-  useExportTeacherPdfMutation, useExportTeacherExcelMutation,
-  downloadHtmlAsPdf, downloadExcel,
+  useGetTeachersQuery,
+  useGetTeachersLoadQuery,
+  type TeacherLoad,
+} from '@/features/teachers/teacherApi';
+import {
+  useExportTeacherPdfMutation,
+  useExportTeacherExcelMutation,
+  useExportTeachersPdfMutation,
+  useExportTeachersExcelMutation,
+  downloadHtmlAsPdf,
+  downloadExcel,
 } from '@/features/export/exportApi';
 
-import { DAY_LABELS_SHORT as DAY_LABELS } from '@/lib/days';
-
-const SUBJECT_COLORS = [
-  'bg-blue-300 text-blue-950',
-  'bg-emerald-300 text-emerald-950',
-  'bg-violet-300 text-violet-950',
-  'bg-orange-300 text-orange-950',
-  'bg-pink-300 text-pink-950',
-  'bg-cyan-300 text-cyan-950',
-  'bg-amber-300 text-amber-950',
-  'bg-rose-300 text-rose-950',
-];
-
-function getSubjectColor(name: string): string {
-  const hash = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return SUBJECT_COLORS[hash % SUBJECT_COLORS.length];
-}
-
-function formatSlotTime(time: string): string {
-  const match = time.match(/(\d{2}:\d{2})/);
-  return match ? match[1] : time.slice(0, 5);
-}
-
-function parseTimeToMinutes(time: string): number {
-  const match = time.match(/(\d{2}):(\d{2})/);
-  if (!match) return 0;
-  return parseInt(match[1]) * 60 + parseInt(match[2]);
-}
+type SortKey = 'name' | 'load-asc' | 'load-desc';
 
 export function Component() {
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+  const navigate = useNavigate();
 
   const { data: teachersData, isLoading: teachersLoading } = useGetTeachersQuery({ pageSize: 200 });
-  const { data: grid, isLoading: gridLoading } = useGetTeacherTimetableQuery(selectedTeacherId, { skip: !selectedTeacherId });
+  const { data: teacherLoads, isLoading: loadsLoading } = useGetTeachersLoadQuery();
+
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [exportingAll, setExportingAll] = useState(false);
+
   const [exportPdf] = useExportTeacherPdfMutation();
   const [exportExcel] = useExportTeacherExcelMutation();
+  const [exportAllPdf] = useExportTeachersPdfMutation();
+  const [exportAllExcel] = useExportTeachersExcelMutation();
 
-  const teachers = teachersData?.data ?? [];
-  const selectedTeacher = teachers.find((t) => t.id === selectedTeacherId);
+  // Index loads by id for quick lookup, then merge with the teacher list so
+  // teachers without any assignments still show up (with 0 periods).
+  const loadById = useMemo(() => {
+    const map = new Map<string, TeacherLoad>();
+    for (const l of teacherLoads ?? []) map.set(l.id, l);
+    return map;
+  }, [teacherLoads]);
 
-  // Build slot headers with breaks
-  const headerSlots = useMemo(() => {
-    const ttSlots = [...(grid?.days?.[0]?.periods ?? [])].map((p) => p.slot).sort((a, b) => a.sortOrder - b.sortOrder);
-    if (ttSlots.length === 0) return [];
-    const result: typeof ttSlots = [];
-    for (let i = 0; i < ttSlots.length; i++) {
-      if (i > 0) {
-        const gap = parseTimeToMinutes(ttSlots[i].startTime) - parseTimeToMinutes(ttSlots[i - 1].endTime);
-        if (gap >= 5) {
-          result.push({
-            id: `break-${i}`, slotType: gap >= 20 ? 'LUNCH_BREAK' : 'INTERVAL',
-            slotNumber: null, startTime: ttSlots[i - 1].endTime, endTime: ttSlots[i].startTime, sortOrder: ttSlots[i].sortOrder - 0.5,
-          });
-        }
-      }
-      result.push(ttSlots[i]);
+  const rows = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const list = (teachersData?.data ?? []).map((t) => {
+      const load = loadById.get(t.id);
+      return {
+        id: t.id,
+        name: t.name,
+        assignedPeriods: load?.assignedPeriods ?? 0,
+        maxPeriodsPerWeek: t.maxPeriodsPerWeek ?? load?.maxPeriodsPerWeek ?? null,
+      };
+    });
+
+    const filtered = term ? list.filter((t) => t.name.toLowerCase().includes(term)) : list;
+
+    return [...filtered].sort((a, b) => {
+      if (sortKey === 'name') return a.name.localeCompare(b.name);
+      if (sortKey === 'load-asc') return a.assignedPeriods - b.assignedPeriods || a.name.localeCompare(b.name);
+      return b.assignedPeriods - a.assignedPeriods || a.name.localeCompare(b.name);
+    });
+  }, [teachersData, loadById, search, sortKey]);
+
+  const handleExportRowPdf = async (teacherId: string) => {
+    setExportingId(teacherId);
+    try {
+      const result = await exportPdf({ teacherId }).unwrap();
+      downloadHtmlAsPdf(result.html, result.filename);
+      toast.success('Export ready — use browser print dialog to save as PDF');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setExportingId(null);
     }
-    return result;
-  }, [grid]);
+  };
 
-  const sortedDays = useMemo(() =>
-    [...(grid?.days ?? [])].sort((a, b) => a.workingDay.sortOrder - b.workingDay.sortOrder),
-  [grid]);
+  const handleExportRowExcel = async (teacherId: string) => {
+    setExportingId(teacherId);
+    try {
+      const result = await exportExcel({ teacherId }).unwrap();
+      downloadExcel(result.base64, result.filename);
+      toast.success('Excel downloaded');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setExportingId(null);
+    }
+  };
 
-  const totalPeriods = sortedDays.reduce((sum, day) => sum + day.periods.filter((p) => p.assignment).length, 0);
+  const handleExportAllPdf = async () => {
+    setExportingAll(true);
+    try {
+      // Empty teacherIds array → backend returns every teacher in the AY
+      const result = await exportAllPdf({ teacherIds: [] }).unwrap();
+      downloadHtmlAsPdf(result.html, result.filename);
+      toast.success('All-teachers export ready — use browser print dialog to save as PDF');
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message ?? 'Export failed');
+    } finally {
+      setExportingAll(false);
+    }
+  };
+
+  const handleExportAllExcel = async () => {
+    setExportingAll(true);
+    try {
+      const result = await exportAllExcel({ teacherIds: [] }).unwrap();
+      downloadExcel(result.base64, result.filename);
+      toast.success('All-teachers Excel downloaded');
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message ?? 'Export failed');
+    } finally {
+      setExportingAll(false);
+    }
+  };
+
+  const isLoading = teachersLoading || loadsLoading;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Teacher Timetable"
-        description="View weekly timetable for a selected teacher."
+        title="Teacher Timetables"
+        description="View and export weekly timetables for every teacher."
         actions={
           <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground whitespace-nowrap">Select Teacher</Label>
-            <Select value={selectedTeacherId} onValueChange={setSelectedTeacherId}>
-              <SelectTrigger className="w-48 h-8 text-sm">
-                <SelectValue placeholder="Choose teacher..." />
-              </SelectTrigger>
-              <SelectContent>
-                {teachers.map((teacher) => (
-                  <SelectItem key={teacher.id} value={teacher.id} className="text-sm">{teacher.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedTeacherId && grid && (
-              <ExportButton
-                onExportPdf={async () => {
-                  try {
-                    const result = await exportPdf({ teacherId: selectedTeacherId }).unwrap();
-                    downloadHtmlAsPdf(result.html, result.filename);
-                    toast.success('Export ready — use browser print dialog to save as PDF');
-                  } catch { toast.error('Export failed'); }
-                }}
-                onExportExcel={async () => {
-                  try {
-                    const result = await exportExcel({ teacherId: selectedTeacherId }).unwrap();
-                    downloadExcel(result.base64, result.filename);
-                    toast.success('Excel downloaded');
-                  } catch { toast.error('Export failed'); }
-                }}
-              />
-            )}
+            <Button variant="outline" size="sm" onClick={handleExportAllPdf} disabled={exportingAll}>
+              <FileText className="size-3.5" />
+              Export All (PDF)
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportAllExcel} disabled={exportingAll}>
+              <FileSpreadsheet className="size-3.5" />
+              Export All (Excel)
+            </Button>
           </div>
         }
       />
 
-      {teachersLoading && <Skeleton className="h-64 rounded-xl" />}
+      {/* Filter + sort bar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search teachers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
+          />
+        </div>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+          className="text-xs rounded-md border border-border/60 bg-card px-2 py-1 text-foreground/80 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+        >
+          <option value="name">Sort: Name</option>
+          <option value="load-asc">Sort: Periods ↑</option>
+          <option value="load-desc">Sort: Periods ↓</option>
+        </select>
+        <span className="text-xs text-muted-foreground ml-auto">{rows.length} teacher{rows.length === 1 ? '' : 's'}</span>
+      </div>
 
-      {!teachersLoading && !selectedTeacherId && (
+      {/* Table */}
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+        </div>
+      ) : rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
           <div className="flex size-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-600 mb-4">
             <Eye className="size-7" />
           </div>
-          <h3 className="text-lg font-semibold">Select a teacher</h3>
-          <p className="mt-1 text-sm text-muted-foreground max-w-md">Choose a teacher from the dropdown above to view their weekly timetable.</p>
+          <h3 className="text-lg font-semibold">No teachers found</h3>
+          <p className="mt-1 text-sm text-muted-foreground max-w-md">
+            {search ? 'Try a different search term.' : 'Add teachers from the Teachers page first.'}
+          </p>
         </div>
-      )}
-
-      {selectedTeacherId && gridLoading && <Skeleton className="h-64 rounded-xl" />}
-
-      {selectedTeacherId && !gridLoading && (!grid || sortedDays.length === 0) && (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
-          <CalendarDays className="size-7 text-teal-500 mb-4" />
-          <h3 className="text-lg font-semibold">{selectedTeacher?.name ?? 'Teacher'}</h3>
-          <p className="mt-2 text-sm text-muted-foreground">No timetable data available. Generate timetables for the divisions this teacher is assigned to.</p>
-        </div>
-      )}
-
-      {selectedTeacherId && !gridLoading && sortedDays.length > 0 && (
-        <>
-          {/* Summary bar */}
-          <div className="flex items-center gap-4 rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm px-5 py-3">
-            <span className="text-sm font-medium">{selectedTeacher?.name}</span>
-            <span className="text-xs text-muted-foreground">{totalPeriods} periods/week</span>
-          </div>
-
-          {/* Grid */}
-          <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-x-auto shadow-sm">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800">
-                  <th className="h-12 px-3 text-left text-xs uppercase tracking-wider font-medium text-white/90 min-w-[70px] border-r border-white/10 sticky left-0 bg-stone-800 z-10">Day</th>
-                  {headerSlots.map((slot) => {
-                    const isBreak = slot.slotType !== 'PERIOD';
-                    return (
-                      <th key={slot.id} className={`h-12 px-2 text-center text-[10px] uppercase tracking-wider font-medium border-r border-white/10 ${isBreak ? 'min-w-[45px] text-white/40 bg-stone-900/50' : 'min-w-[100px] text-white/90'}`}>
-                        <div>{slot.slotType === 'PERIOD' ? `P${slot.slotNumber}` : slot.slotType === 'LUNCH_BREAK' ? 'Lunch' : 'Break'}</div>
-                        <div className="text-[9px] font-normal">{formatSlotTime(slot.startTime)}–{formatSlotTime(slot.endTime)}</div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedDays.map((day) => (
-                  <tr key={day.workingDay.id} className="border-b border-border/40 hover:bg-amber-500/5 transition-colors">
-                    <td className="px-3 py-2 font-medium text-xs bg-muted/30 border-r border-border/40 sticky left-0 z-10">
-                      {DAY_LABELS[day.workingDay.dayOfWeek] ?? day.workingDay.label}
+      ) : (
+        <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white/90">
+                <th className="text-left text-[11px] uppercase tracking-wider font-semibold px-4 py-3">Teacher</th>
+                <th className="text-left text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-44">Periods / Week</th>
+                <th className="text-right text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-72">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, idx) => {
+                const max = row.maxPeriodsPerWeek;
+                const over = max != null && row.assignedPeriods > max;
+                return (
+                  <tr
+                    key={row.id}
+                    className={`border-t border-border/30 hover:bg-amber-500/5 transition-colors ${idx % 2 === 1 ? 'bg-muted/20' : ''}`}
+                  >
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/teacher-timetable/${row.id}`)}
+                        className="text-sm font-medium hover:text-amber-600 transition-colors"
+                      >
+                        {row.name}
+                      </button>
                     </td>
-                    {headerSlots.map((slot) => {
-                      if (slot.slotType !== 'PERIOD') {
-                        return (
-                          <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40 bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(120,113,108,0.08)_4px,rgba(120,113,108,0.08)_8px)]">
-                            {slot.slotType === 'LUNCH_BREAK' ? <UtensilsCrossed className="size-3 text-orange-400 mx-auto" /> : <Coffee className="size-3 text-stone-400 mx-auto" />}
-                          </td>
-                        );
-                      }
-                      const period = day.periods.find((p) => p.slot.sortOrder === slot.sortOrder);
-                      const assignment = period?.assignment;
-                      if (!assignment) {
-                        return <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40"><span className="text-[10px] text-muted-foreground/40">—</span></td>;
-                      }
-                      const colorClass = getSubjectColor(assignment.subject.name);
-                      return (
-                        <td key={slot.id} className="px-1 py-1 border-r border-border/40">
-                          <div className={`rounded-lg px-1.5 py-1 text-center ${colorClass}`}>
-                            <div className="text-[10px] font-bold truncate">{assignment.subject.name}</div>
-                            <div className="text-[8px] opacity-75 truncate">{assignment.teacher?.name ?? '(Unassigned)'}</div>
-                          </div>
-                        </td>
-                      );
-                    })}
+                    <td className="px-4 py-3">
+                      <Badge variant={over ? 'destructive' : 'outline'} className="text-[10px]">
+                        {row.assignedPeriods}{max != null ? ` / ${max}` : ''}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => navigate(`/teacher-timetable/${row.id}`)}
+                        >
+                          <Eye className="size-3" />
+                          View
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          disabled={exportingId === row.id}
+                          onClick={() => handleExportRowPdf(row.id)}
+                        >
+                          <FileText className="size-3" />
+                          PDF
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          disabled={exportingId === row.id}
+                          onClick={() => handleExportRowExcel(row.id)}
+                        >
+                          <FileSpreadsheet className="size-3" />
+                          Excel
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
