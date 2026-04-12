@@ -71,7 +71,10 @@ export function TeacherTimetableGrid({ teacherId, teacherName }: Props) {
     [grid],
   );
 
-  const totalPeriods = sortedDays.reduce((sum, day) => sum + day.periods.filter((p) => p.assignment).length, 0);
+  const totalPeriods = sortedDays.reduce(
+    (sum, day) => sum + day.periods.filter((p) => p.assignments.length > 0).length,
+    0,
+  );
 
   if (isLoading) return <Skeleton className="h-64 rounded-xl" />;
 
@@ -141,7 +144,7 @@ export function TeacherTimetableGrid({ teacherId, teacherName }: Props) {
                     );
                   }
                   const period = day.periods.find((p) => p.slot.sortOrder === slot.sortOrder);
-                  const assignment = period?.assignment;
+                  const assignment = period?.assignments[0];
                   if (!assignment) {
                     return (
                       <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40">
@@ -149,10 +152,16 @@ export function TeacherTimetableGrid({ teacherId, teacherName }: Props) {
                       </td>
                     );
                   }
-                  const colorClass = getSubjectColor(assignment.subject.name);
+                  // For an elective slot in the teacher view, show the elective
+                  // group name above the subject so it's clear at a glance.
+                  const electiveName = period?.isElective ? assignment.electiveGroup?.name : null;
+                  const colorClass = getSubjectColor(electiveName ?? assignment.subject.name);
                   return (
                     <td key={slot.id} className="px-1 py-1 border-r border-border/40">
                       <div className={`rounded-lg px-1.5 py-1 text-center ${colorClass}`}>
+                        {electiveName && (
+                          <div className="text-[8px] uppercase tracking-wider opacity-80 truncate">{electiveName}</div>
+                        )}
                         <div className="text-[10px] font-bold truncate">{assignment.subject.name}</div>
                         <div className="text-[8px] opacity-75 truncate">{assignment.teacher?.name ?? '(Unassigned)'}</div>
                       </div>

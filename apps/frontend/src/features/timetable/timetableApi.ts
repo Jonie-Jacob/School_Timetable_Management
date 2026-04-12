@@ -15,10 +15,17 @@ export interface TimetableSlotAssignment {
   id: string;
   subject: { id: string; name: string };
   teacher: { id: string; name: string } | null;
+  electiveGroup: { id: string; name: string } | null;
 }
 
 export interface TimetablePeriod {
+  // The first underlying timetable_slot row id, used by drag-drop and the
+  // legacy single-row override path. For elective cells, prefer slotIds[]
+  // when you need to address every member row.
   timetableSlotId: string;
+  // Every timetable_slot row id at this (day, slot) cell. Length 1 for
+  // ordinary subjects; >1 for elective groups with parallel sections.
+  slotIds: string[];
   slot: {
     id: string;
     slotType: string;
@@ -27,7 +34,13 @@ export interface TimetablePeriod {
     endTime: string;
     sortOrder: number;
   };
-  assignment: TimetableSlotAssignment | null;
+  // List of assignments occupying this cell. Empty array = empty cell.
+  assignments: TimetableSlotAssignment[];
+  // True iff any assignment in this cell belongs to an elective group.
+  // The frontend uses this to render the stacked elective cell and to
+  // disable click-to-edit (electives must be regenerated, not single-cell
+  // edited).
+  isElective: boolean;
 }
 
 export interface TimetableDay {

@@ -44,6 +44,59 @@ export function CellContent({ assignment, isDragging }: CellContentProps) {
   );
 }
 
+interface ElectiveCellContentProps {
+  assignments: TimetableSlotAssignment[];
+}
+
+/**
+ * Strip the "Class XX " prefix from an elective group name for in-cell display.
+ * Elective groups are named like "Class IX Mal / Hin" — but inside a Class IX-A
+ * cell that prefix is redundant noise. Backend keeps the full name; we strip
+ * only at the render edge.
+ */
+function stripClassPrefix(name: string): string {
+  return name.replace(/^Class\s+[IVX]+\s+/i, '');
+}
+
+/**
+ * Stacked rendering for an elective-group cell.
+ *
+ * Shows the elective group name (with "Class XX " prefix stripped) as the
+ * header and lists every member assignment underneath as "Subject — Teacher"
+ * rows. Drag-drop is disabled because the override endpoint won't accept
+ * elective rows; click is wired by the parent to open a read-only info sheet
+ * that links to /elective-groups for actual editing.
+ */
+export function ElectiveCellContent({ assignments }: ElectiveCellContentProps) {
+  const fullName = assignments.find((a) => a.electiveGroup)?.electiveGroup?.name ?? 'Elective';
+  const displayName = stripClassPrefix(fullName);
+  // Color the cell by the elective group name so all the elective's slots
+  // share the same color across the week.
+  const colorClass = getSubjectColor(fullName);
+
+  return (
+    <div
+      className={cn(
+        'rounded-lg px-1.5 py-1 select-none ring-1 ring-amber-500/40 cursor-pointer hover:ring-amber-500/70 hover:shadow-sm transition-all',
+        colorClass,
+      )}
+      title={`${fullName} — click for details`}
+    >
+      <div className="text-[9px] font-bold uppercase tracking-wider opacity-90 truncate">
+        {displayName}
+      </div>
+      <div className="mt-0.5 space-y-0.5">
+        {assignments.map((a) => (
+          <div key={a.id} className="text-[9px] leading-tight truncate">
+            <span className="font-semibold">{a.subject.name}</span>
+            <span className="opacity-70"> — {a.teacher?.name ?? '(Unassigned)'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface DraggableCellProps {
   slotId: string;
   children: ReactNode;

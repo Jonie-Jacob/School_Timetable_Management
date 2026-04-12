@@ -479,7 +479,11 @@ model TimetableSlot {
   slot               Slot                @relation(fields: [slotId], references: [id])
   divisionAssignment DivisionAssignment? @relation(fields: [divisionAssignmentId], references: [id])
 
-  @@unique([timetableId, workingDayId, slotId])
+  // NOTE: a unique constraint on (timetableId, workingDayId, slotId) was
+  // dropped in migration 20260411120000_allow_multi_assignment_slot to support
+  // elective groups with parallel sections — multiple division_assignments
+  // (one per parallel teacher) now share the same (day, slot) cell.
+  @@index([timetableId, workingDayId, slotId])
   @@index([divisionAssignmentId])
   @@map("timetable_slots")
 }

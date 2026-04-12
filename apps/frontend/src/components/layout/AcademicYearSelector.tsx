@@ -29,9 +29,13 @@ export function AcademicYearSelector() {
 
   if (years.length === 0) {
     return (
-      <Button variant="outline" size="sm" className="gap-2" disabled>
+      <Button
+        size="sm"
+        disabled
+        className="gap-2 h-8 rounded-lg border border-white/15 bg-white/5 text-white/40"
+      >
         <CalendarRange className="size-4" />
-        <span className="hidden sm:inline text-muted-foreground">No Academic Year</span>
+        <span className="hidden sm:inline">No Academic Year</span>
       </Button>
     );
   }
@@ -44,13 +48,16 @@ export function AcademicYearSelector() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <CalendarRange className="size-4" />
-          <span className="hidden sm:inline">{selected?.label ?? '—'}</span>
+        <Button
+          size="sm"
+          className="gap-2 h-8 rounded-lg border border-white/15 bg-white/10 text-white/80 hover:bg-white/15 hover:text-white"
+        >
+          <CalendarRange className="size-4 text-white/60" />
+          <span className="hidden sm:inline font-semibold">{selected?.label ?? '—'}</span>
           {selected && (
             <Badge
               variant={selected.status === 'ACTIVE' ? 'success' : 'secondary'}
-              className="h-5 px-1.5 text-[10px]"
+              className="h-5 px-1.5 text-[10px] shadow-sm"
             >
               {selected.status === 'ACTIVE' ? 'Active' : 'Archived'}
             </Badge>

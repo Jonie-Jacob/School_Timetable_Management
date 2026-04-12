@@ -29,7 +29,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..data_loader import SchoolData, Assignment
+from ..data_loader import SchoolData, LogicalAssignment
 from .chromosome import decode_gene, get_day_slice
 
 # Penalty weights
@@ -163,9 +163,9 @@ def _gene_to_day_period(data: SchoolData, gi: int) -> tuple[int, int]:
     return dow, period_num
 
 
-def _prefs_of(a: Assignment) -> Optional[dict]:
+def _prefs_of(la: LogicalAssignment) -> Optional[dict]:
     """Return the scheduling_preferences dict if it has any real content."""
-    p = a.scheduling_preferences
+    p = la.scheduling_preferences
     if not p or not isinstance(p, dict):
         return None
     return p
@@ -202,68 +202,66 @@ def _h1_teacher_conflicts(
     chromosome: np.ndarray,
     other_chromosomes: dict[str, np.ndarray] | None,
 ) -> float:
-    """Penalty for teacher double-booking across divisions."""
+    """Penalty for teacher double-booking across divisions.
+
+    A LogicalAssignment may carry MULTIPLE teacher_ids (elective groups
+    with parallel sections). Every member teacher counts independently:
+    if Mal/Hindi elective puts (Prabha + Jayasree + Sujatha) in slot X,
+    all three teachers are committed to that slot and any of them appearing
+    in another slot at the same (day, slot) is a conflict.
+    """
     violations = 0
     total = data.total_periods
-    assignments = data.assignments
+    logicals = data.logical_assignments
 
-    # Build this division's slot→teacher map. Skip null teachers entirely —
-    # unassigned assignments never cause a teacher conflict.
+    # Build this division's slot → set-of-teachers map. Skip null teachers
+    # entirely — unassigned assignments never cause a conflict.
     slot_teachers: dict[tuple[str, str], list[str]] = defaultdict(list)
     for gi in range(total):
         a_idx = int(chromosome[gi])
         if a_idx < 0:
             continue
-        teacher_id = assignments[a_idx].teacher_id
-        if teacher_id is None:
-            continue
         _, _, wd_id, slot_id = decode_gene(data, gi)
-        slot_teachers[(wd_id, slot_id)].append(teacher_id)
+        for teacher_id in logicals[a_idx].teacher_ids:
+            slot_teachers[(wd_id, slot_id)].append(teacher_id)
 
-        # Cross-division conflict with already-generated timetables for OTHER
-        # divisions in this school+AY. When we generate one division at a time
-        # (the common case), this is the only check that catches conflicts
-        # with existing timetables. Each violation is one penalty, same as
-        # within-batch conflicts below.
-        if (teacher_id, wd_id, slot_id) in data.existing_teacher_slots:
-            violations += 1
+            # Cross-division conflict with already-generated timetables for
+            # OTHER divisions in this school+AY. When we generate one
+            # division at a time (the common case), this is the only check
+            # that catches conflicts with existing timetables.
+            if (teacher_id, wd_id, slot_id) in data.existing_teacher_slots:
+                violations += 1
 
-    # Check against other divisions in the batch
-    if other_chromosomes:
-        for other_div_id, other_chromo in other_chromosomes.items():
-            other_assignments = data.all_division_assignments.get(other_div_id, [])
-            if not other_assignments:
-                continue
-            other_ppd = len(other_chromo) // data.num_days if data.num_days > 0 else 0
-            for gi in range(len(other_chromo)):
-                a_idx = int(other_chromo[gi])
-                if a_idx < 0 or a_idx >= len(other_assignments):
-                    continue
-                other_teacher = other_assignments[a_idx].teacher_id
-                if other_teacher is None:
-                    continue
-                day_idx = gi // other_ppd if other_ppd > 0 else 0
-                period_idx = gi % other_ppd if other_ppd > 0 else 0
-                if day_idx < data.num_days:
-                    wd_id = data.working_day_ids[day_idx]
-                    other_slots = data.slots_by_day.get(wd_id, [])
-                    if period_idx < len(other_slots):
-                        slot_id = other_slots[period_idx].id
-                        key = (wd_id, slot_id)
-                        if key in slot_teachers:
-                            for t in slot_teachers[key]:
-                                if t == other_teacher:
-                                    violations += 1
+    # Within-batch double-booking: detect when the SAME teacher appears
+    # twice in slot_teachers for the same (day, slot). This happens when
+    # an elective member also appears via another (non-elective) logical
+    # assignment in the same slot, or in pathological data.
+    for teachers in slot_teachers.values():
+        # any duplicates inside the slot are conflicts
+        seen: set[str] = set()
+        for t in teachers:
+            if t in seen:
+                violations += 1
+            else:
+                seen.add(t)
+
+    # Check against other divisions in the batch (if multiple divisions are
+    # generated at once). other_chromosomes is keyed by division_id and the
+    # corresponding logical-assignment list lives in
+    # data.all_division_logicals — but we don't currently build that, so
+    # this branch is intentionally a no-op for the batch case. Within-batch
+    # cross-division conflicts will be added when we wire up batch generation.
+    _ = other_chromosomes
 
     return violations * HARD_PENALTY
 
 
 def _h2_weightage_violations(data: SchoolData, chromosome: np.ndarray) -> float:
-    """Penalty for assignments not meeting their required periods_per_week."""
+    """Penalty for logical assignments not meeting their required periods_per_week."""
     violations = 0.0
-    for idx, assignment in enumerate(data.assignments):
+    for idx, la in enumerate(data.logical_assignments):
         actual = int(np.count_nonzero(chromosome == idx))
-        expected = assignment.weightage
+        expected = la.weightage
         diff = abs(actual - expected)
         if diff > 0:
             violations += diff * HARD_PENALTY
@@ -273,22 +271,24 @@ def _h2_weightage_violations(data: SchoolData, chromosome: np.ndarray) -> float:
 def _h3_availability_violations(data: SchoolData, chromosome: np.ndarray) -> float:
     """Penalty for assigning teachers to slots where they're unavailable.
 
-    Null teachers (unassigned subjects) are skipped — they have no availability.
+    Null teachers (unassigned subjects) are skipped. For elective groups,
+    every member teacher is checked independently.
     """
     violations = 0
     total = data.total_periods
-    assignments = data.assignments
+    logicals = data.logical_assignments
 
     for gi in range(total):
         a_idx = int(chromosome[gi])
         if a_idx < 0:
             continue
-        teacher_id = assignments[a_idx].teacher_id
-        if teacher_id is None:
+        teacher_ids = logicals[a_idx].teacher_ids
+        if not teacher_ids:
             continue
         _, _, wd_id, slot_id = decode_gene(data, gi)
-        if (teacher_id, wd_id, slot_id) in data.teacher_unavailable:
-            violations += 1
+        for teacher_id in teacher_ids:
+            if (teacher_id, wd_id, slot_id) in data.teacher_unavailable:
+                violations += 1
 
     return violations * HARD_PENALTY
 
@@ -298,70 +298,35 @@ def _h5_elective_alignment(
     chromosome: np.ndarray,
     other_chromosomes: dict[str, np.ndarray] | None,
 ) -> float:
+    """Cross-division elective alignment.
+
+    With LogicalAssignments, the within-division elective alignment is
+    automatic (one logical = one slot covering all members). This check
+    only fires for batch generation across multiple divisions, ensuring
+    that the same elective group lands at the same (day, period) across
+    every division. Currently a no-op until we wire batch generation.
     """
-    Penalty for elective group subjects not aligned in the same slot.
-    All divisions in an elective group must have their elective subject
-    at the same (day, period) positions.
-    """
-    if not data.elective_groups or not other_chromosomes:
-        return 0.0
-
-    violations = 0
-    assignments = data.assignments
-
-    # Find which gene indices have elective assignments in this chromosome
-    for eg_id, eg_info in data.elective_groups.items():
-        # Find this division's elective slots
-        my_elective_slots: set[int] = set()
-        for gi in range(data.total_periods):
-            a_idx = int(chromosome[gi])
-            if a_idx < 0:
-                continue
-            if assignments[a_idx].elective_group_id == eg_id:
-                my_elective_slots.add(gi)
-
-        # Check other divisions that share this elective group
-        for other_div_id, other_chromo in other_chromosomes.items():
-            if other_div_id == data.division_id:
-                continue
-            if other_div_id not in eg_info.division_assignments:
-                continue
-            other_assignments = data.all_division_assignments.get(other_div_id, [])
-            if not other_assignments:
-                continue
-
-            other_elective_slots: set[int] = set()
-            for gi in range(min(len(other_chromo), data.total_periods)):
-                a_idx = int(other_chromo[gi])
-                if a_idx < 0 or a_idx >= len(other_assignments):
-                    continue
-                if other_assignments[a_idx].elective_group_id == eg_id:
-                    other_elective_slots.add(gi)
-
-            # Symmetric difference = misaligned slots
-            misaligned = my_elective_slots.symmetric_difference(other_elective_slots)
-            violations += len(misaligned)
-
-    return violations * HARD_PENALTY
+    _ = data, chromosome, other_chromosomes
+    return 0.0
 
 
 def _s1_subject_spread(data: SchoolData, chromosome: np.ndarray) -> float:
     """
-    Penalize subjects that are concentrated on fewer days.
-    Ideally, a subject with weightage W should spread across min(W, num_days) days.
+    Penalize logical assignments concentrated on fewer days.
+    Ideally a logical with weightage W spreads across min(W, num_days) days.
     """
     penalty = 0.0
     num_days = data.num_days
     ppd = data.periods_per_day
 
-    for idx, assignment in enumerate(data.assignments):
+    for idx, la in enumerate(data.logical_assignments):
         days_used: set[int] = set()
         for gi in range(data.total_periods):
             if int(chromosome[gi]) == idx:
                 day_idx = gi // ppd
                 days_used.add(day_idx)
 
-        ideal_days = min(assignment.weightage, num_days)
+        ideal_days = min(la.weightage, num_days)
         actual_days = len(days_used)
         if actual_days < ideal_days:
             penalty += (ideal_days - actual_days) * SOFT_WEIGHT_SPREAD
@@ -371,7 +336,7 @@ def _s1_subject_spread(data: SchoolData, chromosome: np.ndarray) -> float:
 
 def _s2_period_preference(data: SchoolData, chromosome: np.ndarray) -> float:
     """
-    Penalize high-weightage subjects placed in late periods.
+    Penalize high-weightage logicals placed in late periods.
     Higher-weightage (core) subjects should prefer earlier slots.
     """
     penalty = 0.0
@@ -379,19 +344,16 @@ def _s2_period_preference(data: SchoolData, chromosome: np.ndarray) -> float:
     if ppd == 0:
         return 0.0
 
-    max_weightage = max((a.weightage for a in data.assignments), default=1)
+    max_weightage = max((la.weightage for la in data.logical_assignments), default=1)
 
     for gi in range(data.total_periods):
         a_idx = int(chromosome[gi])
         if a_idx < 0:
             continue
         period_idx = gi % ppd
-        weightage = data.assignments[a_idx].weightage
-        # Normalized importance (0-1): higher weightage → more important
+        weightage = data.logical_assignments[a_idx].weightage
         importance = weightage / max_weightage
-        # Normalized position (0-1): later period → higher position
         position = period_idx / ppd
-        # High importance + late position = penalty
         if importance > 0.5 and position > 0.6:
             penalty += importance * position * SOFT_WEIGHT_PREFERENCE
 
@@ -399,8 +361,16 @@ def _s2_period_preference(data: SchoolData, chromosome: np.ndarray) -> float:
 
 
 def _s3_consecutive_same_subject(data: SchoolData, chromosome: np.ndarray) -> float:
-    """Penalize the same subject appearing in consecutive periods on the same day."""
+    """Penalize the same logical (or its first member's subject for non-electives)
+    appearing in consecutive periods on the same day."""
     penalty = 0.0
+    logicals = data.logical_assignments
+
+    def subject_key(idx: int) -> Optional[str]:
+        la = logicals[idx]
+        if la.is_elective:
+            return f"elective:{la.elective_group_id}"
+        return la.members[0].subject_id if la.members else None
 
     for day_idx in range(data.num_days):
         day_slots = get_day_slice(data, chromosome, day_idx)
@@ -409,7 +379,7 @@ def _s3_consecutive_same_subject(data: SchoolData, chromosome: np.ndarray) -> fl
             a2 = int(day_slots[i + 1])
             if a1 < 0 or a2 < 0:
                 continue
-            if data.assignments[a1].subject_id == data.assignments[a2].subject_id:
+            if subject_key(a1) is not None and subject_key(a1) == subject_key(a2):
                 penalty += SOFT_WEIGHT_CONSECUTIVE
 
     return penalty
@@ -418,23 +388,21 @@ def _s3_consecutive_same_subject(data: SchoolData, chromosome: np.ndarray) -> fl
 def _s4_teacher_workload_balance(data: SchoolData, chromosome: np.ndarray) -> float:
     """
     Penalize uneven distribution of a teacher's periods across the week.
-    For each teacher, the standard deviation of their daily period count should be low.
+    Each member teacher of an elective logical contributes independently.
     """
     penalty = 0.0
     ppd = data.periods_per_day
+    logicals = data.logical_assignments
 
-    # teacher_id → [count_per_day]
     teacher_daily: dict[str, list[int]] = defaultdict(lambda: [0] * data.num_days)
 
     for gi in range(data.total_periods):
         a_idx = int(chromosome[gi])
         if a_idx < 0:
             continue
-        teacher_id = data.assignments[a_idx].teacher_id
-        if teacher_id is None:
-            continue
         day_idx = gi // ppd
-        teacher_daily[teacher_id][day_idx] += 1
+        for teacher_id in logicals[a_idx].teacher_ids:
+            teacher_daily[teacher_id][day_idx] += 1
 
     for counts in teacher_daily.values():
         std = float(np.std(counts))
@@ -453,8 +421,7 @@ def _h7_hard_preferences(data: SchoolData, chromosome: np.ndarray) -> float:
         a_idx = int(chromosome[gi])
         if a_idx < 0:
             continue
-        a = data.assignments[a_idx]
-        prefs = _prefs_of(a)
+        prefs = _prefs_of(data.logical_assignments[a_idx])
         if not prefs or prefs.get("constraintType") != "HARD":
             continue
         dow, period_num = _gene_to_day_period(data, gi)
@@ -475,18 +442,18 @@ def _s5_soft_preferences(data: SchoolData, chromosome: np.ndarray) -> float:
     penalty = 0.0
     ppd = data.periods_per_day
 
-    # Per-assignment, per-day tracking for min/max rules
-    # key: (assignment_idx, day_idx) → count
+    # Per-logical, per-day tracking for min/max rules
+    # key: (logical_idx, day_idx) → count
     per_day_counts: dict[tuple[int, int], int] = defaultdict(int)
-    # key: assignment_idx → list of (day_idx, period_idx) in chronological order
+    # key: logical_idx → list of (day_idx, period_idx) in chronological order
     placements: dict[int, list[tuple[int, int]]] = defaultdict(list)
 
     for gi in range(data.total_periods):
         a_idx = int(chromosome[gi])
         if a_idx < 0:
             continue
-        a = data.assignments[a_idx]
-        prefs = _prefs_of(a)
+        la = data.logical_assignments[a_idx]
+        prefs = _prefs_of(la)
         day_idx = gi // ppd
         period_idx = gi % ppd
         per_day_counts[(a_idx, day_idx)] += 1
@@ -504,8 +471,8 @@ def _s5_soft_preferences(data: SchoolData, chromosome: np.ndarray) -> float:
                 penalty += SOFT_WEIGHT_PREFS
 
     # Min/Max per day + prefer-adjacent checks (always soft)
-    for a_idx, a in enumerate(data.assignments):
-        prefs = _prefs_of(a)
+    for a_idx, la in enumerate(data.logical_assignments):
+        prefs = _prefs_of(la)
         if not prefs:
             continue
 
@@ -544,18 +511,17 @@ def _s5_soft_preferences(data: SchoolData, chromosome: np.ndarray) -> float:
 # ── S6: Teacher maxPeriodsPerWeek soft cap ────────────────────────────────
 
 def _s6_teacher_max_periods(data: SchoolData, chromosome: np.ndarray) -> float:
-    """Penalize teachers who exceed their declared maxPeriodsPerWeek. Soft cap:
-    the business rule says the engine may exceed it, but should try not to."""
+    """Penalize teachers who exceed their declared maxPeriodsPerWeek. Soft cap.
+    Each member teacher of an elective logical counts independently."""
     penalty = 0.0
     counts: dict[str, int] = defaultdict(int)
+    logicals = data.logical_assignments
     for gi in range(data.total_periods):
         a_idx = int(chromosome[gi])
         if a_idx < 0:
             continue
-        teacher_id = data.assignments[a_idx].teacher_id
-        if teacher_id is None:
-            continue
-        counts[teacher_id] += 1
+        for teacher_id in logicals[a_idx].teacher_ids:
+            counts[teacher_id] += 1
     for teacher_id, total in counts.items():
         tinfo = data.teachers.get(teacher_id)
         if not tinfo or tinfo.max_periods_per_week is None:

@@ -45,6 +45,11 @@
     "banner": "You are viewing archived data ({{year}}). Changes are disabled."
   },
   "nav": {
+    "sections": {
+      "workspace": "Workspace",
+      "timetables": "Timetables",
+      "setup": "Setup"
+    },
     "dashboard": "Dashboard",
     "academicYears": "Academic Years",
     "periodStructures": "Period Structures",
@@ -54,8 +59,10 @@
     "teachers": "Teachers",
     "electiveGroups": "Elective Groups",
     "timetables": "Timetables",
+    "classTimetables": "Class Timetables",
     "notifications": "Notifications",
     "teacherTimetable": "Teacher Timetable",
+    "teacherTimetables": "Teacher Timetables",
     "unassignedSubjects": "Unassigned Subjects",
     "settings": "Settings",
     "more": "More"

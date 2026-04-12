@@ -13,10 +13,27 @@ interface SlotInfo {
   sortOrder: number;
 }
 
+/**
+ * One assignment that occupies a cell. For an elective group cell there
+ * are multiple of these stacked together; for a normal cell exactly one.
+ */
+interface CellEntry {
+  subject: string;
+  teacher: string;
+}
+
+interface CellContent {
+  entries: CellEntry[];
+  // When set, the renderer prepends an "ELECTIVE: <name>" header above
+  // the entries to make the stack visually distinct from a normal cell.
+  electiveGroupName?: string;
+}
+
 interface DayColumn {
   label: string;
   sortOrder: number;
-  periods: Map<number, { subject: string; teacher: string } | null>; // keyed by slot sortOrder
+  // keyed by slot sortOrder. Empty entries[] (or missing key) = empty cell.
+  periods: Map<number, CellContent>;
 }
 
 interface TimetableGrid {
@@ -75,6 +92,7 @@ export class ExportService {
           include: {
             subject: { select: { name: true } },
             teacher: { select: { name: true } },
+            electiveGroup: { select: { name: true } },
           },
         },
       },
@@ -122,7 +140,10 @@ export class ExportService {
 
     const orderedSlots = Array.from(slotMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 
-    // Group by day
+    // Group by day, then by slot sortOrder. Multiple timetable_slots may
+    // share the same (day, slot) when an elective group has parallel
+    // sections — we accumulate them into one CellContent with multiple
+    // entries and remember the elective group name for the header line.
     const dayMap = new Map<string, DayColumn>();
     for (const s of slots) {
       const dayKey = s.workingDayId;
@@ -134,10 +155,17 @@ export class ExportService {
         });
       }
       const day = dayMap.get(dayKey)!;
-      day.periods.set(s.slot.sortOrder, s.divisionAssignment ? {
-        subject: s.divisionAssignment.subject.name,
-        teacher: s.divisionAssignment.teacher?.name ?? '(Unassigned)',
-      } : null);
+      const da = s.divisionAssignment;
+      if (!da) continue; // Empty cells stay missing from the map
+      const cell = day.periods.get(s.slot.sortOrder) ?? { entries: [] };
+      cell.entries.push({
+        subject: da.subject.name,
+        teacher: da.teacher?.name ?? '(Unassigned)',
+      });
+      if (da.electiveGroup?.name) {
+        cell.electiveGroupName = da.electiveGroup.name;
+      }
+      day.periods.set(s.slot.sortOrder, cell);
     }
 
     const orderedDays = Array.from(dayMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
@@ -231,7 +259,9 @@ export class ExportService {
 
     const orderedSlots = Array.from(slotMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 
-    // Group by day
+    // Group by day. The query is filtered to this teacher only, so each
+    // (day, slot) cell holds at most one entry — but we still use the
+    // CellContent shape for consistency with the division grid renderer.
     const dayMap = new Map<string, DayColumn>();
     for (const s of timetableSlots) {
       const dayKey = s.workingDayId;
@@ -245,10 +275,12 @@ export class ExportService {
       const day = dayMap.get(dayKey)!;
       const className = s.timetable.division.class.name;
       const divLabel = s.timetable.division.label;
-      day.periods.set(s.slot.sortOrder, {
+      const cell = day.periods.get(s.slot.sortOrder) ?? { entries: [] };
+      cell.entries.push({
         subject: s.divisionAssignment?.subject?.name ?? '-',
         teacher: `${className}-${divLabel}`,
       });
+      day.periods.set(s.slot.sortOrder, cell);
     }
 
     const orderedDays = Array.from(dayMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
@@ -280,7 +312,8 @@ export class ExportService {
       </th>`;
     }).join('');
 
-    // Data rows: one per weekday
+    // Data rows: one per weekday. A cell may hold multiple stacked entries
+    // when an elective group occupies it (Mal/Hindi with parallel teachers).
     const rows = grid.days.map((day) => {
       const cells = grid.slots.map((slot) => {
         const isBreak = slot.slotType !== SlotType.PERIOD;
@@ -288,11 +321,21 @@ export class ExportService {
           return `<td class="break-cell">—</td>`;
         }
         const period = day.periods.get(slot.sortOrder);
-        if (!period) return `<td class="empty-cell">-</td>`;
-        return `<td class="period-cell">
-          <div class="subject">${this.escapeHtml(period.subject)}</div>
-          <div class="teacher">${this.escapeHtml(period.teacher)}</div>
-        </td>`;
+        if (!period || period.entries.length === 0) {
+          return `<td class="empty-cell">-</td>`;
+        }
+        const isElective = !!period.electiveGroupName;
+        const header = isElective
+          ? `<div class="elective-header">${this.escapeHtml(period.electiveGroupName!)}</div>`
+          : '';
+        const stacked = period.entries.map((e) => `
+          <div class="entry">
+            <div class="subject">${this.escapeHtml(e.subject)}</div>
+            <div class="teacher">${this.escapeHtml(e.teacher)}</div>
+          </div>
+        `).join('');
+        const cls = isElective ? 'period-cell elective-cell' : 'period-cell';
+        return `<td class="${cls}">${header}${stacked}</td>`;
       }).join('');
       return `<tr>
         <td class="day-label">${this.escapeHtml(day.label)}</td>
@@ -326,6 +369,10 @@ export class ExportService {
   .period-cell { vertical-align: middle; }
   .subject { font-weight: 600; font-size: 11px; }
   .teacher { font-size: 10px; color: #555; }
+  .elective-cell { background: #fffbeb; }
+  .elective-cell .elective-header { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: #b45309; font-weight: 700; padding-bottom: 2px; border-bottom: 1px dashed #f59e0b; margin-bottom: 2px; }
+  .elective-cell .entry { padding: 2px 0; border-top: 1px dotted #fcd34d; }
+  .elective-cell .entry:first-of-type { border-top: none; }
   .break-cell { background: #fff4d6; color: #8a6d3b; font-style: italic; }
   .empty-cell { color: #b2bec3; }
   tr:nth-child(even) td:not(.day-label):not(.break-cell) { background: #f8f9fa; }
@@ -593,7 +640,8 @@ export class ExportService {
     sheet.getColumn(1).width = 14;
     for (let i = 2; i <= totalCols; i++) sheet.getColumn(i).width = 18;
 
-    // Data rows — one per weekday
+    // Data rows — one per weekday. Elective cells stack their entries
+    // separated by blank lines and prepend an "ELECTIVE: <name>" header.
     let dayIdx = 0;
     for (const day of grid.days) {
       const values: string[] = [day.label];
@@ -604,14 +652,27 @@ export class ExportService {
           continue;
         }
         const period = day.periods.get(slot.sortOrder);
-        if (!period) {
+        if (!period || period.entries.length === 0) {
           values.push('-');
           continue;
         }
-        values.push(`${period.subject}\n${period.teacher}`);
+        const lines: string[] = [];
+        if (period.electiveGroupName) {
+          lines.push(`[${period.electiveGroupName.toUpperCase()}]`);
+        }
+        for (const e of period.entries) {
+          lines.push(`${e.subject}\n${e.teacher}`);
+        }
+        values.push(lines.join('\n'));
       }
       const row = sheet.addRow(values);
-      row.height = 36;
+      // Slightly taller row when this day has any elective cells, so the
+      // stacked entries are readable.
+      const hasElective = grid.slots.some((s) => {
+        const p = day.periods.get(s.sortOrder);
+        return p && p.entries.length > 1;
+      });
+      row.height = hasElective ? 60 : 36;
       row.eachCell((cell, colNumber) => {
         cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
         cell.border = {
@@ -635,8 +696,12 @@ export class ExportService {
           return;
         }
 
-        // Alternating row colour for period cells
-        if (dayIdx % 2 === 1) {
+        // Highlight elective cells with a soft amber tint
+        const period = slot ? day.periods.get(slot.sortOrder) : undefined;
+        if (period?.electiveGroupName) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
+        } else if (dayIdx % 2 === 1) {
+          // Alternating row colour for period cells
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
         }
       });

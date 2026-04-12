@@ -26,6 +26,7 @@ import {
   useGetAssignmentsQuery,
   useUpdateAssignmentMutation,
 } from '@/features/assignments/assignmentApi';
+import { useGetElectiveGroupsQuery } from '@/features/elective-groups/electiveGroupApi';
 import {
   useGetTeachersLoadQuery,
   useGetTeacherSlotConflictsQuery,
@@ -36,7 +37,7 @@ import {
   type TimetablePeriod,
   type TimetableSlotAssignment,
 } from './timetableApi';
-import { DraggableCell, DroppableCell, CellContent } from './TimetableCells';
+import { DraggableCell, DroppableCell, CellContent, ElectiveCellContent } from './TimetableCells';
 
 import { DAY_LABELS_FULL as DAY_LABELS } from '@/lib/days';
 
@@ -70,8 +71,15 @@ export function Component() {
   const { data: grid, isLoading } = useGetDivisionTimetableQuery(divisionId!, { skip: !divisionId, refetchOnMountOrArgChange: true });
   const { data: divisionAssignments } = useGetAssignmentsQuery(divisionId!, { skip: !divisionId });
   const { data: teacherLoads } = useGetTeachersLoadQuery();
+  const { data: electiveGroups } = useGetElectiveGroupsQuery();
   const [overrideSlot] = useOverrideSlotMutation();
   const [updateAssignment] = useUpdateAssignmentMutation();
+
+  // Read-only info sheet for elective cells.
+  // The override endpoint refuses elective rows, so click-to-edit can't
+  // mutate them. Instead we show a sheet with the full elective group
+  // details and a deep-link to /elective-groups for actual editing.
+  const [electiveInfoGroupId, setElectiveInfoGroupId] = useState<string | null>(null);
 
   // Click-to-edit sheet state
   const [editSlot, setEditSlot] = useState<{
@@ -164,13 +172,21 @@ export function Component() {
     const sourcePeriod = allPeriods.find((p) => p.timetableSlotId === sourceSlotId);
     const targetPeriod = allPeriods.find((p) => p.timetableSlotId === targetSlotId);
 
-    if (!sourcePeriod?.assignment) return;
+    // Refuse to drag elective cells (the backend would reject the override)
+    if (sourcePeriod?.isElective || targetPeriod?.isElective) {
+      toast.error('Elective cells cannot be moved. Use the Assignments page or regenerate the timetable.');
+      return;
+    }
+
+    const sourceAssignment = sourcePeriod?.assignments[0];
+    if (!sourceAssignment) return;
 
     try {
+      const targetAssignment = targetPeriod?.assignments[0];
       // Swap: put source's assignment in target, target's in source
-      await overrideSlot({ slotId: targetSlotId, divisionAssignmentId: sourcePeriod.assignment.id }).unwrap();
-      if (targetPeriod?.assignment) {
-        await overrideSlot({ slotId: sourceSlotId, divisionAssignmentId: targetPeriod.assignment.id }).unwrap();
+      await overrideSlot({ slotId: targetSlotId, divisionAssignmentId: sourceAssignment.id }).unwrap();
+      if (targetAssignment) {
+        await overrideSlot({ slotId: sourceSlotId, divisionAssignmentId: targetAssignment.id }).unwrap();
       } else {
         await overrideSlot({ slotId: sourceSlotId, divisionAssignmentId: null }).unwrap();
       }
@@ -232,7 +248,10 @@ export function Component() {
       <DndContext sensors={sensors} onDragStart={(e) => {
         const allP = grid.days.flatMap((d) => d.periods);
         const p = allP.find((pp) => pp.timetableSlotId === e.active.id);
-        if (p?.assignment) setActiveDrag({ slotId: p.timetableSlotId, assignment: p.assignment });
+        // Don't initiate drag for elective cells — backend rejects override
+        if (p?.isElective) return;
+        const a = p?.assignments[0];
+        if (a) setActiveDrag({ slotId: p!.timetableSlotId, assignment: a });
       }} onDragEnd={handleDragEnd} onDragCancel={() => setActiveDrag(null)}>
         <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-x-auto shadow-sm">
           <table className="w-full text-sm border-collapse">
@@ -267,10 +286,29 @@ export function Component() {
                     const period = getPeriodForSlot(day.periods, slot.sortOrder);
                     if (!period) return <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40"><span className="text-xs text-muted-foreground/40">—</span></td>;
 
+                    const firstAssignment = period.assignments[0];
+
+                    // Elective cells: render the stacked elective view.
+                    // Click opens the read-only info sheet. Drag-drop stays
+                    // disabled because the override endpoint refuses these.
+                    if (period.isElective) {
+                      const electiveGroupId = period.assignments.find((a) => a.electiveGroup)?.electiveGroup?.id;
+                      return (
+                        <td
+                          key={slot.id}
+                          className="px-1 py-1 border-r border-border/40"
+                          onClick={() => { if (electiveGroupId) setElectiveInfoGroupId(electiveGroupId); }}
+                        >
+                          <ElectiveCellContent assignments={period.assignments} />
+                        </td>
+                      );
+                    }
+
                     const openEditor = () => {
+                      if (period.isElective) return;
                       // Look up the underlying assignment to capture subjectId
                       const fullAssignment = (divisionAssignments ?? []).find(
-                        (a) => a.id === period.assignment?.id,
+                        (a) => a.id === firstAssignment?.id,
                       );
                       setEditSlot({
                         timetableSlotId: period.timetableSlotId,
@@ -280,11 +318,11 @@ export function Component() {
                         periodNumber: slot.slotNumber,
                         startTime: slot.startTime,
                         endTime: slot.endTime,
-                        currentAssignmentId: period.assignment?.id ?? null,
-                        currentSubjectName: period.assignment?.subject.name ?? null,
-                        currentTeacherName: period.assignment?.teacher?.name ?? null,
+                        currentAssignmentId: firstAssignment?.id ?? null,
+                        currentSubjectName: firstAssignment?.subject.name ?? null,
+                        currentTeacherName: firstAssignment?.teacher?.name ?? null,
                       });
-                      setSheetSubjectId(fullAssignment?.subjectId ?? period.assignment?.subject.id ?? '');
+                      setSheetSubjectId(fullAssignment?.subjectId ?? firstAssignment?.subject.id ?? '');
                       setSheetSelectedTeacherId(fullAssignment?.teacherId ?? '');
                       setTeacherPool('relevant');
                       setHideConflicts(false);
@@ -293,15 +331,15 @@ export function Component() {
 
                     return (
                       <td key={slot.id} className="px-1 py-1 border-r border-border/40" onClick={openEditor} style={{ cursor: 'pointer' }}>
-                        {isDesktop && period.assignment ? (
+                        {isDesktop && firstAssignment ? (
                           <DraggableCell slotId={period.timetableSlotId}>
                             <DroppableCell slotId={period.timetableSlotId}>
-                              <CellContent assignment={period.assignment} />
+                              <CellContent assignment={firstAssignment} />
                             </DroppableCell>
                           </DraggableCell>
-                        ) : period.assignment ? (
+                        ) : firstAssignment ? (
                           <DroppableCell slotId={period.timetableSlotId}>
-                            <CellContent assignment={period.assignment} />
+                            <CellContent assignment={firstAssignment} />
                           </DroppableCell>
                         ) : (
                           <DroppableCell slotId={period.timetableSlotId}>
@@ -683,6 +721,122 @@ export function Component() {
               </div>
             </div>
           )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Read-only info sheet for elective cells */}
+      <Sheet
+        open={!!electiveInfoGroupId}
+        onOpenChange={(open) => { if (!open) setElectiveInfoGroupId(null); }}
+      >
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="w-full sm:max-w-md p-0 bg-background border-l border-amber-500/20 shadow-2xl"
+        >
+          {electiveInfoGroupId && (() => {
+            const group = (electiveGroups ?? []).find((g) => g.id === electiveInfoGroupId);
+            if (!group) return null;
+            // Gather this division's assignments for this elective group so
+            // we can show actual teacher names (the group's global subjects
+            // list doesn't carry teachers).
+            const assignmentsForGroup = (divisionAssignments ?? []).filter(
+              (a) => a.electiveGroupId === electiveInfoGroupId,
+            );
+            // Group by subjectId → teachers[]
+            const subjectBuckets = new Map<string, { subjectName: string; teacherNames: string[] }>();
+            for (const a of assignmentsForGroup) {
+              const key = a.subjectId;
+              const existing = subjectBuckets.get(key) ?? { subjectName: a.subject.name, teacherNames: [] };
+              existing.teacherNames.push(a.teacher?.name ?? '(Unassigned)');
+              subjectBuckets.set(key, existing);
+            }
+            return (
+              <div className="flex h-full flex-col">
+                {/* Dark gradient header */}
+                <div className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 px-5 py-4 text-white relative">
+                  <button
+                    type="button"
+                    onClick={() => setElectiveInfoGroupId(null)}
+                    className="absolute top-3 right-3 size-7 rounded-md bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    aria-label="Close"
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                  <div className="text-[10px] uppercase tracking-widest text-amber-300/80 font-semibold">
+                    Elective Group
+                  </div>
+                  <div className="mt-1 text-lg font-bold">{group.name}</div>
+                  <div className="mt-0.5 text-xs text-white/70">
+                    {group.periodsPerWeek} period{group.periodsPerWeek === 1 ? '' : 's'}/week
+                  </div>
+                </div>
+
+                {/* Scrollable body */}
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                      Subjects &amp; Teachers
+                    </div>
+                    <div className="space-y-2">
+                      {Array.from(subjectBuckets.values()).map((bucket) => (
+                        <div
+                          key={bucket.subjectName}
+                          className="rounded-xl border border-border/40 bg-card px-4 py-3"
+                        >
+                          <div className="text-sm font-semibold">{bucket.subjectName}</div>
+                          <div className="mt-1 space-y-0.5">
+                            {bucket.teacherNames.map((name, i) => (
+                              <div key={`${name}-${i}`} className="text-xs text-muted-foreground">
+                                · {name}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {subjectBuckets.size === 0 && (
+                        <div className="rounded-lg border border-dashed border-border/40 p-3 text-xs text-muted-foreground italic text-center">
+                          No assignments found for this elective in this division.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-900 space-y-1">
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <AlertTriangle className="size-3.5" />
+                      Why can't I edit here?
+                    </div>
+                    <p className="opacity-90">
+                      Elective groups are scheduled as a single block with all parallel teachers sharing the slot. To change which subjects or teachers run during this elective, edit the group on the Elective Groups page and regenerate the timetable.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-border/40 bg-card/40 backdrop-blur-sm px-5 py-4 flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setElectiveInfoGroupId(null)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setElectiveInfoGroupId(null);
+                      navigate('/elective-groups');
+                    }}
+                  >
+                    Manage in Elective Groups
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </SheetContent>
       </Sheet>
     </div>

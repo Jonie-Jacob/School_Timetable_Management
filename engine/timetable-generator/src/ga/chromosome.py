@@ -3,12 +3,16 @@ Chromosome encoding for the timetable GA.
 
 A chromosome represents a complete timetable for a single division.
 Each gene corresponds to one (working_day, period_slot) pair and holds
-the index of the assigned DivisionAssignment (or -1 for a free period).
+the index of the assigned LogicalAssignment (or -1 for a free period).
 
 Layout:
-    chromosome[day_index * periods_per_day + period_index] = assignment_index
+    chromosome[day_index * periods_per_day + period_index] = logical_index
 
-The assignment_index maps into SchoolData.assignments.
+`logical_index` maps into SchoolData.logical_assignments.
+
+A LogicalAssignment may wrap a single ordinary DivisionAssignment OR an
+entire elective group (multiple parallel teachers all sharing the slot).
+The output writer expands one elective placement into N TimetableSlot rows.
 """
 
 from __future__ import annotations
@@ -22,17 +26,19 @@ def create_random_chromosome(data: SchoolData, rng: np.random.Generator) -> np.n
     """
     Create a random chromosome that respects weightage constraints.
 
-    Each assignment's weightage tells us how many periods per week it should occupy.
-    We fill the chromosome by distributing assignments according to their weightage,
-    then shuffle within the week to add randomness.
+    Each LOGICAL assignment's weightage tells us how many periods per week it
+    should occupy (for an elective group this is `ElectiveGroup.periods_per_week`,
+    NOT the sum of member weightages). We fill the chromosome by distributing
+    logical assignments according to their weightage, then shuffle within the
+    week to add randomness.
     """
     total = data.total_periods
     chromosome = np.full(total, -1, dtype=np.int32)
 
-    # Build a pool of assignment indices repeated by weightage
+    # Build a pool of logical-assignment indices repeated by weightage
     pool: list[int] = []
-    for idx, assignment in enumerate(data.assignments):
-        pool.extend([idx] * assignment.weightage)
+    for idx, la in enumerate(data.logical_assignments):
+        pool.extend([idx] * la.weightage)
 
     # If pool is smaller than total periods, pad with -1 (free/unassigned)
     # If larger (shouldn't happen with correct data), truncate

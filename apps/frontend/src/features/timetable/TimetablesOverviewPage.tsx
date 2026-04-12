@@ -6,7 +6,9 @@ import { toast } from 'sonner';
 import { useAppDispatch } from '@/app/hooks';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PageHeader, ConfirmDialog } from '@/components/shared';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { PageHeader } from '@/components/shared';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { Skeleton } from '@/components/ui/skeleton';
 import { classApi, useGetClassesQuery } from '@/features/classes/classApi';
@@ -16,6 +18,17 @@ import {
   useExportClassesPdfMutation, useExportClassesExcelMutation,
   downloadHtmlAsPdf, downloadExcel,
 } from '@/features/export/exportApi';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { cn } from '@/lib/cn';
+
+type GenerateScope = 'all' | 'outdated' | 'pending';
 
 export function Component() {
   useTranslation();
@@ -23,12 +36,14 @@ export function Component() {
   const dispatch = useAppDispatch();
 
   const { data: classes, isLoading } = useGetClassesQuery(undefined, { refetchOnMountOrArgChange: true });
-  const [generateAll, { isLoading: isGeneratingAll }] = useGenerateTimetableMutation();
+  const [generateMutation, { isLoading: isGeneratingAll }] = useGenerateTimetableMutation();
   const [exportDivPdf] = useExportDivisionPdfMutation();
   const [exportDivExcel] = useExportDivisionExcelMutation();
   const [exportClassesPdf] = useExportClassesPdfMutation();
   const [exportClassesExcel] = useExportClassesExcelMutation();
-  const [confirmGenerateAll, setConfirmGenerateAll] = useState(false);
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [adjacencyEnabled, setAdjacencyEnabled] = useState(false);
+  const [generateScope, setGenerateScope] = useState<GenerateScope>('all');
 
   // Flatten all divisions across classes
   const allDivisions = (classes ?? []).flatMap((cls) =>
@@ -42,21 +57,33 @@ export function Component() {
   const generated = allDivisions.filter((d) => d.timetable?.status === 'GENERATED').length;
   const outdated = allDivisions.filter((d) => d.timetable?.status === 'OUTDATED').length;
   const pending = allDivisions.filter((d) => !d.timetable).length;
-  const pendingIds = allDivisions.filter((d) => !d.timetable || d.timetable.status === 'OUTDATED').map((d) => d.id);
 
-  const handleGenerateAll = async () => {
-    setConfirmGenerateAll(false);
-    if (pendingIds.length === 0) {
-      toast.info('All timetables are already generated.');
+  const getDivisionIdsForScope = (scope: GenerateScope) => {
+    switch (scope) {
+      case 'all':
+        return allDivisions.map((d) => d.id);
+      case 'outdated':
+        return allDivisions.filter((d) => d.timetable?.status === 'OUTDATED').map((d) => d.id);
+      case 'pending':
+        return allDivisions.filter((d) => !d.timetable).map((d) => d.id);
+    }
+  };
+
+  const scopeCount = getDivisionIdsForScope(generateScope).length;
+  const anyGeneratable = outdated + pending > 0;
+
+  const handleGenerate = async () => {
+    const ids = getDivisionIdsForScope(generateScope);
+    setShowGenerateDialog(false);
+    if (ids.length === 0) {
+      toast.info('No divisions to generate for the selected scope.');
       return;
     }
     try {
-      await generateAll({ divisionIds: pendingIds }).unwrap();
-      // Invalidate classes cache so timetable statuses refresh
+      await generateMutation({ divisionIds: ids, adjacencyConstraintEnabled: adjacencyEnabled }).unwrap();
       dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
-      toast.success(`Generated timetables for ${pendingIds.length} division(s).`);
+      toast.success(`Queued generation for ${ids.length} division(s).`);
     } catch {
-      // Even on partial failure, refresh to show what succeeded
       dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
       toast.error('Some timetables failed to generate. Check individual divisions.');
     }
@@ -90,15 +117,15 @@ export function Component() {
                 }}
               />
             )}
-            {pendingIds.length > 0 && (
+            {allDivisions.length > 0 && (
               <Button
                 variant="gradient"
-                onClick={() => setConfirmGenerateAll(true)}
+                onClick={() => setShowGenerateDialog(true)}
                 disabled={isGeneratingAll}
                 className="gap-2"
               >
                 {isGeneratingAll ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
-                {isGeneratingAll ? 'Generating...' : `Generate All (${pendingIds.length})`}
+                {isGeneratingAll ? 'Generating...' : 'Generate'}
               </Button>
             )}
           </div>
@@ -238,15 +265,79 @@ export function Component() {
         </div>
       )}
 
-      <ConfirmDialog
-        open={confirmGenerateAll}
-        title="Generate All Timetables"
-        description={`This will generate timetables for ${pendingIds.length} division(s) that are pending or outdated. Existing outdated timetables will be regenerated. This may take a few minutes.`}
-        confirmLabel={`Generate ${pendingIds.length} Timetable(s)`}
-        loading={isGeneratingAll}
-        onConfirm={handleGenerateAll}
-        onCancel={() => setConfirmGenerateAll(false)}
-      />
+      <Dialog open={showGenerateDialog} onOpenChange={(v) => !v && setShowGenerateDialog(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generate Timetables</DialogTitle>
+            <DialogDescription>
+              Choose which divisions to generate and configure options.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Scope selector */}
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Scope</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: 'all' as const, label: 'All', count: allDivisions.length, icon: Zap, color: 'text-amber-500' },
+                  { value: 'outdated' as const, label: 'Outdated', count: outdated, icon: AlertTriangle, color: 'text-amber-500' },
+                  { value: 'pending' as const, label: 'Pending', count: pending, icon: Clock, color: 'text-muted-foreground' },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setGenerateScope(opt.value)}
+                    disabled={opt.count === 0}
+                    className={cn(
+                      'flex flex-col items-center gap-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all',
+                      generateScope === opt.value
+                        ? 'border-amber-500 bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/30'
+                        : 'border-border/40 bg-muted/20 hover:bg-muted/40 text-foreground',
+                      opt.count === 0 && 'opacity-40 cursor-not-allowed',
+                    )}
+                  >
+                    <opt.icon className={cn('size-4', generateScope === opt.value ? 'text-amber-500' : opt.color)} />
+                    <span>{opt.label}</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {opt.count}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Adjacency toggle */}
+            <div className="flex items-center justify-between rounded-lg border border-border/40 bg-muted/30 px-4 py-3">
+              <Label htmlFor="adjacency-toggle" className="text-sm cursor-pointer">
+                Enable adjacency constraint
+                <span className="block text-xs text-muted-foreground font-normal mt-0.5">
+                  Groups same-subject periods into consecutive slots
+                </span>
+              </Label>
+              <Switch
+                id="adjacency-toggle"
+                checked={adjacencyEnabled}
+                onCheckedChange={setAdjacencyEnabled}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowGenerateDialog(false)} disabled={isGeneratingAll}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGenerate}
+              loading={isGeneratingAll}
+              disabled={scopeCount === 0}
+            >
+              <Zap className="mr-1.5 size-3.5" />
+              Generate {scopeCount} Division{scopeCount !== 1 ? 's' : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -10,9 +10,10 @@ import {
   BookOpen,
   Users,
   Link2,
-  Bell,
   Eye,
   Settings,
+  CalendarCheck,
+  UserCheck,
 } from 'lucide-react';
 import {
   Sheet,
@@ -32,17 +33,40 @@ interface MobileDrawerProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const NAV_ITEMS = [
-  { key: 'dashboard', to: '/', icon: LayoutDashboard },
-  { key: 'academicYears', to: '/academic-years', icon: CalendarRange },
-  { key: 'periodStructures', to: '/period-structures', icon: Clock },
-  { key: 'classes', to: '/classes', icon: School },
-  { key: 'subjects', to: '/subjects', icon: BookOpen },
-  { key: 'teachers', to: '/teachers', icon: Users },
-  { key: 'electiveGroups', to: '/elective-groups', icon: Link2 },
-  { key: 'notifications', to: '/notifications', icon: Bell },
-  { key: 'teacherTimetable', to: '/teacher-timetable', icon: Eye },
-  { key: 'settings', to: '/settings', icon: Settings },
+// Same grouping as the desktop sidebar — Workspace / Timetables / Setup.
+// Notifications live in the topbar bell, not here.
+const NAV_SECTIONS = [
+  {
+    heading: null as string | null,
+    items: [
+      { key: 'dashboard', to: '/', icon: LayoutDashboard },
+    ],
+  },
+  {
+    heading: 'workspace',
+    items: [
+      { key: 'classes', to: '/classes', icon: School },
+      { key: 'classTeachers', to: '/class-teachers', icon: UserCheck },
+      { key: 'subjects', to: '/subjects', icon: BookOpen },
+      { key: 'teachers', to: '/teachers', icon: Users },
+      { key: 'electiveGroups', to: '/elective-groups', icon: Link2 },
+    ],
+  },
+  {
+    heading: 'timetables',
+    items: [
+      { key: 'classTimetables', to: '/timetables', icon: CalendarCheck },
+      { key: 'teacherTimetables', to: '/teacher-timetable', icon: Eye },
+    ],
+  },
+  {
+    heading: 'setup',
+    items: [
+      { key: 'academicYears', to: '/academic-years', icon: CalendarRange },
+      { key: 'periodStructures', to: '/period-structures', icon: Clock },
+      { key: 'settings', to: '/settings', icon: Settings },
+    ],
+  },
 ] as const;
 
 export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
@@ -74,23 +98,35 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
         </SheetHeader>
 
         <nav className="flex-1 space-y-1 px-3 py-2">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.key}
-              to={item.to}
-              onClick={() => onOpenChange(false)}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-white/20 text-white'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                )
-              }
+          {NAV_SECTIONS.map((section, sectionIdx) => (
+            <div
+              key={section.heading ?? `section-${sectionIdx}`}
+              className={sectionIdx > 0 ? 'pt-3 mt-2 border-t border-white/15' : undefined}
             >
-              <item.icon className="size-5 shrink-0" />
-              <span>{t(`nav.${item.key}`)}</span>
-            </NavLink>
+              {section.heading && (
+                <div className="px-3 pb-1 text-[10px] uppercase tracking-widest font-semibold text-white/50">
+                  {t(`nav.sections.${section.heading}`)}
+                </div>
+              )}
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.key}
+                  to={item.to}
+                  onClick={() => onOpenChange(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : 'text-white/70 hover:bg-white/10 hover:text-white',
+                    )
+                  }
+                >
+                  <item.icon className="size-5 shrink-0" />
+                  <span>{t(`nav.${item.key}`)}</span>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 

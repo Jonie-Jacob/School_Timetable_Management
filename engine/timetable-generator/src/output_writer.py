@@ -169,28 +169,64 @@ def _insert_slots(
     timetable_id: str,
     now: datetime,
 ) -> None:
-    """Insert timetable_slot rows from the chromosome."""
-    assignments = data.assignments
+    """Insert timetable_slot rows from the chromosome.
+
+    For an ordinary LogicalAssignment we write ONE row per slot.
+    For an elective LogicalAssignment we distribute members across slots
+    based on parallelSections:
+      - Subjects with parallelSections >= num_teachers: all teachers appear
+        in every slot (they teach different student groups simultaneously).
+      - Subjects with parallelSections < num_teachers: teachers split the
+        load — each teacher appears in `weightage` slots out of the total.
+    Empty slots get a single row with division_assignment_id = NULL.
+    """
+    logicals = data.logical_assignments
     rows = []
+
+    # ── First pass: collect slot positions per logical assignment index ──
+    # la_slot_positions[la_idx] → list of (wd_id, slot_id) in chromosome order
+    la_slot_positions: dict[int, list[tuple[str, str]]] = {}
+    empty_positions: list[tuple[str, str]] = []
 
     for gi in range(data.total_periods):
         a_idx = int(chromosome[gi])
         _, _, wd_id, slot_id = decode_gene(data, gi)
 
-        assignment_id = None
-        if a_idx >= 0 and a_idx < len(assignments):
-            assignment_id = assignments[a_idx].id
+        if a_idx < 0 or a_idx >= len(logicals):
+            empty_positions.append((wd_id, slot_id))
+        else:
+            la_slot_positions.setdefault(a_idx, []).append((wd_id, slot_id))
 
+    # ── Empty slots ──
+    for wd_id, slot_id in empty_positions:
         rows.append((
-            str(uuid.uuid4()),
-            data.school_id,
-            timetable_id,
-            wd_id,
-            slot_id,
-            assignment_id,
-            now,
-            now,
+            str(uuid.uuid4()), data.school_id, timetable_id,
+            wd_id, slot_id, None, now, now,
         ))
+
+    # ── Filled slots ──
+    for a_idx, positions in la_slot_positions.items():
+        la = logicals[a_idx]
+
+        if not la.is_elective:
+            # Non-elective: one member, write to each slot position
+            for wd_id, slot_id in positions:
+                for member in la.members:
+                    rows.append((
+                        str(uuid.uuid4()), data.school_id, timetable_id,
+                        wd_id, slot_id, member.id, now, now,
+                    ))
+        else:
+            # Elective: distribute split-teacher assignments
+            members_per_slot = _distribute_elective_members(
+                data, la, len(positions),
+            )
+            for (wd_id, slot_id), members in zip(positions, members_per_slot):
+                for member in members:
+                    rows.append((
+                        str(uuid.uuid4()), data.school_id, timetable_id,
+                        wd_id, slot_id, member.id, now, now,
+                    ))
 
     # Batch insert
     psycopg2.extras.execute_values(
@@ -201,3 +237,55 @@ def _insert_slots(
            VALUES %s""",
         rows,
     )
+
+
+def _distribute_elective_members(
+    data: SchoolData,
+    la,
+    num_slots: int,
+) -> list[list]:
+    """Determine which member assignments appear in each slot.
+
+    Groups members by subject, then for each subject:
+    - If num_teachers ≤ parallelSections → all teachers in every slot
+      (they teach different student groups simultaneously, e.g. Mal×2 in
+      Mal/Hindi where both Mal teachers are in class at once).
+    - If num_teachers > parallelSections → teachers split the load. Each
+      teacher is assigned to `teacher.weightage` consecutive slots
+      (e.g. Maths in Maths/IP/Psy: Julie gets 4 slots, Amrutha gets 4).
+    """
+    eg = data.elective_groups.get(la.elective_group_id or '')
+    if not eg:
+        # Fallback: all members in every slot
+        return [list(la.members)] * num_slots
+
+    # Group members by subject_id
+    by_subject: dict[str, list] = {}
+    for m in la.members:
+        by_subject.setdefault(m.subject_id, []).append(m)
+
+    # Build per-slot member lists
+    slot_members: list[list] = [[] for _ in range(num_slots)]
+
+    for subject_id, teachers in by_subject.items():
+        parallel = eg.subject_parallel_sections.get(subject_id, 1)
+
+        if len(teachers) <= parallel:
+            # Parallel sections: all teachers appear in every slot
+            for i in range(num_slots):
+                slot_members[i].extend(teachers)
+        else:
+            # Split-teacher: distribute across slots by weightage.
+            # Sort deterministically by name so the distribution is stable.
+            teachers_sorted = sorted(
+                teachers,
+                key=lambda t: (t.teacher_name or '', t.id),
+            )
+            slot_cursor = 0
+            for teacher in teachers_sorted:
+                count = min(teacher.weightage, num_slots - slot_cursor)
+                for i in range(slot_cursor, slot_cursor + count):
+                    slot_members[i].append(teacher)
+                slot_cursor += count
+
+    return slot_members

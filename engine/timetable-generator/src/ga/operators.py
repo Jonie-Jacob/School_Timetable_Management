@@ -80,29 +80,30 @@ def repair_chromosome(
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
-    Repair a chromosome to ensure each assignment appears exactly `weightage` times.
+    Repair a chromosome to ensure each LOGICAL assignment appears exactly
+    `weightage` times.
 
-    After crossover, assignment counts may be wrong. This repair step:
-    1. Counts actual occurrences of each assignment.
-    2. Identifies over-represented and under-represented assignments.
+    After crossover, counts may be wrong. This repair step:
+    1. Counts actual occurrences of each logical assignment.
+    2. Identifies over-represented and under-represented ones.
     3. Randomly converts excess occurrences to needed ones.
     """
-    assignments = data.assignments
+    logicals = data.logical_assignments
     total = len(chromosome)
 
     # Count current occurrences
     counts: dict[int, int] = {}
-    for idx in range(len(assignments)):
+    for idx in range(len(logicals)):
         counts[idx] = int(np.count_nonzero(chromosome == idx))
 
     # Build deficit/surplus lists
     surplus_genes: list[int] = []  # gene indices to reassign
-    deficit: list[tuple[int, int]] = []  # (assignment_idx, needed_count)
+    deficit: list[tuple[int, int]] = []  # (logical_idx, needed_count)
 
-    for idx, assignment in enumerate(assignments):
-        diff = counts.get(idx, 0) - assignment.weightage
+    for idx, la in enumerate(logicals):
+        diff = counts.get(idx, 0) - la.weightage
         if diff > 0:
-            # Find gene indices with this assignment and mark excess for replacement
+            # Find gene indices with this logical and mark excess for replacement
             gene_indices = [gi for gi in range(total) if int(chromosome[gi]) == idx]
             rng.shuffle(gene_indices)
             surplus_genes.extend(gene_indices[:diff])

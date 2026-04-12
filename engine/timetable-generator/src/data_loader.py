@@ -63,6 +63,46 @@ class TeacherInfo:
 
 
 @dataclass
+class LogicalAssignment:
+    """A unit of scheduling.
+
+    For an ordinary subject this wraps exactly one DivisionAssignment.
+    For an elective group it wraps EVERY DivisionAssignment that belongs
+    to the group within this division — all of those assignments must
+    occupy the same (day, slot) cell at the same time.
+
+    The chromosome encoding indexes into a list of LogicalAssignments
+    rather than raw DivisionAssignments. The output writer expands one
+    placement of an elective LogicalAssignment into N TimetableSlot rows
+    (one per member assignment).
+    """
+    members: list[Assignment]
+    weightage: int                 # for non-elective: members[0].weightage
+                                   # for elective:     ElectiveGroup.periodsPerWeek
+    elective_group_id: Optional[str]
+    elective_group_name: Optional[str]
+    # Scheduling preferences. For an elective group we take the prefs
+    # from the first member that has them set (members should agree, but
+    # we don't enforce that here).
+    scheduling_preferences: Optional[dict] = None
+
+    @property
+    def is_elective(self) -> bool:
+        return self.elective_group_id is not None
+
+    @property
+    def teacher_ids(self) -> list[str]:
+        """Every non-null teacher_id from the underlying members."""
+        return [m.teacher_id for m in self.members if m.teacher_id is not None]
+
+    @property
+    def display_name(self) -> str:
+        if self.is_elective and self.elective_group_name:
+            return self.elective_group_name
+        return self.members[0].subject_name if self.members else "?"
+
+
+@dataclass
 class TeacherUnavailability:
     """A slot where a teacher is NOT available."""
     teacher_id: str
@@ -74,7 +114,10 @@ class TeacherUnavailability:
 class ElectiveGroupInfo:
     id: str
     name: str
+    periods_per_week: int = 0
     subject_ids: list[str] = field(default_factory=list)
+    # subject_id → number of parallel sections (e.g. 2 for Malayalam in Mal/Hindi)
+    subject_parallel_sections: dict[str, int] = field(default_factory=dict)
     # division_id → assignment mapping for divisions that have this elective
     division_assignments: dict[str, Assignment] = field(default_factory=dict)
 
@@ -107,6 +150,11 @@ class SchoolData:
 
     # Assignments for this division
     assignments: list[Assignment] = field(default_factory=list)
+
+    # Logical assignments — what the GA chromosome actually encodes.
+    # One per non-elective Assignment, plus one per elective_group_id present
+    # in this division (collapsing all member assignments into one slot).
+    logical_assignments: list['LogicalAssignment'] = field(default_factory=list)
 
     # Teacher metadata (id → TeacherInfo). Used to enforce maxPeriodsPerWeek.
     teachers: dict[str, TeacherInfo] = field(default_factory=dict)
@@ -171,6 +219,7 @@ def load_school_data(
             _load_teacher_unavailability(cur, data)
             _load_elective_groups(cur, data)
             _load_existing_teacher_slots(cur, data)
+            _build_logical_assignments(data)
 
             return data
     finally:
@@ -418,6 +467,77 @@ def _load_teacher_unavailability(cur, data: SchoolData) -> None:
         ))
 
 
+def _build_logical_assignments(data: SchoolData) -> None:
+    """Collapse raw Assignments into LogicalAssignments.
+
+    Each non-elective Assignment becomes its own LogicalAssignment with
+    weightage carried through.
+
+    All Assignments belonging to the same elective_group_id collapse into
+    a SINGLE LogicalAssignment whose weightage is `ElectiveGroup.periods_per_week`
+    (NOT the sum of member weightages — every member shares the same N slots).
+
+    Member ordering inside an elective LogicalAssignment is alphabetical by
+    subject then teacher so the resulting cell rendering is stable across runs.
+    """
+    by_group: dict[str, list[Assignment]] = {}
+    standalone: list[Assignment] = []
+
+    for a in data.assignments:
+        if a.elective_group_id:
+            by_group.setdefault(a.elective_group_id, []).append(a)
+        else:
+            standalone.append(a)
+
+    logical: list[LogicalAssignment] = []
+
+    for a in standalone:
+        logical.append(LogicalAssignment(
+            members=[a],
+            weightage=a.weightage,
+            elective_group_id=None,
+            elective_group_name=None,
+            scheduling_preferences=a.scheduling_preferences,
+        ))
+
+    for eg_id, members in by_group.items():
+        eg = data.elective_groups.get(eg_id)
+        if eg is None or eg.periods_per_week <= 0:
+            # Group metadata missing or zero — fall back to treating each
+            # member as its own logical assignment so we don't drop them.
+            for m in members:
+                logical.append(LogicalAssignment(
+                    members=[m],
+                    weightage=m.weightage,
+                    elective_group_id=None,
+                    elective_group_name=None,
+                    scheduling_preferences=m.scheduling_preferences,
+                ))
+            continue
+
+        # Sort members deterministically: subject name, then teacher name.
+        members_sorted = sorted(
+            members,
+            key=lambda m: (m.subject_name or '', m.teacher_name or ''),
+        )
+
+        # Pick the first non-null preferences from any member.
+        prefs = next(
+            (m.scheduling_preferences for m in members_sorted if m.scheduling_preferences),
+            None,
+        )
+
+        logical.append(LogicalAssignment(
+            members=members_sorted,
+            weightage=eg.periods_per_week,
+            elective_group_id=eg.id,
+            elective_group_name=eg.name,
+            scheduling_preferences=prefs,
+        ))
+
+    data.logical_assignments = logical
+
+
 def _load_elective_groups(cur, data: SchoolData) -> None:
     """Load elective groups and their cross-division assignment mappings."""
     # Find elective groups referenced by this division's assignments
@@ -429,19 +549,23 @@ def _load_elective_groups(cur, data: SchoolData) -> None:
 
     placeholders = ",".join(["%s"] * len(elective_ids))
     cur.execute(f"""
-        SELECT eg.id, eg.name
+        SELECT eg.id, eg.name, eg.periods_per_week
         FROM elective_groups eg
         WHERE eg.id IN ({placeholders})
           AND eg.deleted_at IS NULL
     """, tuple(elective_ids))
 
     for row in cur.fetchall():
-        eg = ElectiveGroupInfo(id=row["id"], name=row["name"])
+        eg = ElectiveGroupInfo(
+            id=row["id"],
+            name=row["name"],
+            periods_per_week=row["periods_per_week"] or 0,
+        )
         data.elective_groups[eg.id] = eg
 
-    # Load subjects per elective group
+    # Load subjects per elective group (including parallel_sections)
     cur.execute(f"""
-        SELECT elective_group_id, subject_id
+        SELECT elective_group_id, subject_id, parallel_sections
         FROM elective_group_subjects
         WHERE elective_group_id IN ({placeholders})
     """, tuple(elective_ids))
@@ -449,6 +573,7 @@ def _load_elective_groups(cur, data: SchoolData) -> None:
         eg_id = row["elective_group_id"]
         if eg_id in data.elective_groups:
             data.elective_groups[eg_id].subject_ids.append(row["subject_id"])
+            data.elective_groups[eg_id].subject_parallel_sections[row["subject_id"]] = row["parallel_sections"] or 1
 
     # Load all assignments across divisions that reference these elective groups
     cur.execute(f"""

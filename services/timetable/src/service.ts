@@ -41,7 +41,9 @@ export class TimetableService {
     }
 
     // Create a generation job per division and kick off work.
-    const results = await Promise.all(divisionIds.map(async (divisionId) => {
+    // Use allSettled so a single division's failure to launch doesn't
+    // cancel the whole batch — the successful ones should still run.
+    const settled = await Promise.allSettled(divisionIds.map(async (divisionId) => {
       const job = await prisma.generationJob.create({
         data: {
           schoolId,
@@ -95,7 +97,29 @@ export class TimetableService {
       return { jobId: job.id, timetableId: timetable.id, divisionId };
     }));
 
-    return results.length === 1 ? results[0] : results;
+    // Collect the per-division outcomes. Successful ones go in results;
+    // failed ones surface in errors so the UI can show a partial failure.
+    const results = settled
+      .filter((r): r is PromiseFulfilledResult<{ jobId: string; timetableId: string | null; divisionId: string }> => r.status === 'fulfilled')
+      .map((r) => r.value);
+    const errors = settled
+      .map((r, i) => (r.status === 'rejected' ? { divisionId: divisionIds[i], message: r.reason instanceof Error ? r.reason.message : String(r.reason) } : null))
+      .filter((e): e is { divisionId: string; message: string } => e !== null);
+
+    if (errors.length > 0 && results.length === 0) {
+      // Every division failed — surface the first error so the HTTP layer
+      // returns a 5xx with the real reason.
+      throw new AppError(
+        `Failed to launch engine task(s): ${errors.map((e) => e.message).join('; ')}`,
+        500,
+        'ECS_RUN_TASK_FAILED',
+      );
+    }
+
+    if (divisionIds.length === 1) {
+      return results[0];
+    }
+    return { results, errors };
   }
 
   private async startEngineTask(params: {
@@ -124,7 +148,7 @@ export class TimetableService {
       command.push('--adjacency-constraint');
     }
 
-    await ecsClient.send(new RunTaskCommand({
+    const response = await ecsClient.send(new RunTaskCommand({
       cluster: ECS_CLUSTER_ARN,
       taskDefinition: ECS_TASK_DEF_ARN,
       launchType: 'FARGATE',
@@ -145,6 +169,23 @@ export class TimetableService {
         ],
       },
     }));
+
+    // ecs:RunTask returns 200 with a failures[] array even when it fails to
+    // schedule the task (capacity, ENI limit, quota, throttling, etc). If
+    // we don't inspect this, per-task failures silently leave the job
+    // hanging in PENDING forever. Turn any failure into a thrown error so
+    // the outer try/catch in triggerGeneration can mark the job FAILED.
+    const failures = response.failures ?? [];
+    if (failures.length > 0 || !response.tasks || response.tasks.length === 0) {
+      const reasons = failures
+        .map((f) => `${f.reason ?? 'unknown'}${f.detail ? ` — ${f.detail}` : ''}`)
+        .join('; ');
+      throw new AppError(
+        `ECS RunTask failed to schedule the engine task: ${reasons || 'no tasks returned'}`,
+        500,
+        'ECS_RUN_TASK_FAILED',
+      );
+    }
   }
 
   private async mockGenerateTimetable(
@@ -248,6 +289,10 @@ export class TimetableService {
     });
     if (!timetable) throw new NotFoundError('Timetable');
 
+    // After elective-group support: multiple timetable_slots may share the
+    // same (workingDayId, slotId). We group them into a single "period" with
+    // an `assignments[]` array. For ordinary subjects assignments.length === 1;
+    // for an elective group it equals the number of parallel teachers.
     const slots = await prisma.timetableSlot.findMany({
       where: { timetableId: timetable.id },
       include: {
@@ -257,6 +302,7 @@ export class TimetableService {
           include: {
             subject: { select: { id: true, name: true } },
             teacher: { select: { id: true, name: true } },
+            electiveGroup: { select: { id: true, name: true } },
           },
         },
       },
@@ -266,18 +312,31 @@ export class TimetableService {
       ],
     });
 
-    // Group by day
+    type AssignmentDto = {
+      id: string;
+      subject: { id: string; name: string };
+      teacher: { id: string; name: string } | null;
+      electiveGroup: { id: string; name: string } | null;
+    };
+
+    type PeriodDto = {
+      // We expose ONE timetableSlotId per (day, slot) cell — the first row's id —
+      // so existing override/drag handlers keep working for non-elective cells.
+      // The full set of underlying slot rows is also returned via slotIds.
+      timetableSlotId: string;
+      slotIds: string[];
+      slot: { id: string; slotType: string; slotNumber: number | null; startTime: Date; endTime: Date; sortOrder: number };
+      assignments: AssignmentDto[];
+      // Convenience flag — true iff any assignment in this cell belongs to
+      // an elective group. The frontend uses this to render a stacked cell
+      // and to disable the click-to-edit dialog.
+      isElective: boolean;
+    };
+
     const grid: Record<string, {
       workingDay: { id: string; dayOfWeek: number; label: string; sortOrder: number };
-      periods: Array<{
-        timetableSlotId: string;
-        slot: { id: string; slotType: string; slotNumber: number | null; startTime: Date; endTime: Date; sortOrder: number };
-        assignment: {
-          id: string;
-          subject: { id: string; name: string };
-          teacher: { id: string; name: string } | null;
-        } | null;
-      }>;
+      // (workingDayId, slotId) → PeriodDto
+      periodsByKey: Map<string, PeriodDto>;
     }> = {};
 
     for (const s of slots) {
@@ -290,26 +349,53 @@ export class TimetableService {
             label: s.workingDay.label,
             sortOrder: s.workingDay.sortOrder,
           },
-          periods: [],
+          periodsByKey: new Map(),
         };
       }
-      grid[dayKey].periods.push({
-        timetableSlotId: s.id,
-        slot: {
-          id: s.slot.id,
-          slotType: s.slot.slotType,
-          slotNumber: s.slot.slotNumber,
-          startTime: s.slot.startTime,
-          endTime: s.slot.endTime,
-          sortOrder: s.slot.sortOrder,
-        },
-        assignment: s.divisionAssignment ? {
+      const dayBucket = grid[dayKey];
+      const periodKey = s.slotId;
+      let period = dayBucket.periodsByKey.get(periodKey);
+      if (!period) {
+        period = {
+          timetableSlotId: s.id,
+          slotIds: [],
+          slot: {
+            id: s.slot.id,
+            slotType: s.slot.slotType,
+            slotNumber: s.slot.slotNumber,
+            startTime: s.slot.startTime,
+            endTime: s.slot.endTime,
+            sortOrder: s.slot.sortOrder,
+          },
+          assignments: [],
+          isElective: false,
+        };
+        dayBucket.periodsByKey.set(periodKey, period);
+      }
+      period.slotIds.push(s.id);
+
+      if (s.divisionAssignment) {
+        period.assignments.push({
           id: s.divisionAssignment.id,
           subject: s.divisionAssignment.subject,
           teacher: s.divisionAssignment.teacher,
-        } : null,
-      });
+          electiveGroup: s.divisionAssignment.electiveGroup,
+        });
+        if (s.divisionAssignment.electiveGroupId) {
+          period.isElective = true;
+        }
+      }
     }
+
+    // Materialise the grid into the response shape (sorted lists, no Maps)
+    const days = Object.values(grid)
+      .sort((a, b) => a.workingDay.sortOrder - b.workingDay.sortOrder)
+      .map((bucket) => ({
+        workingDay: bucket.workingDay,
+        periods: Array.from(bucket.periodsByKey.values()).sort(
+          (a, b) => a.slot.sortOrder - b.slot.sortOrder,
+        ),
+      }));
 
     return {
       timetable: {
@@ -319,7 +405,7 @@ export class TimetableService {
         adjacencyConstraintEnabled: timetable.adjacencyConstraintEnabled,
         generatedAt: timetable.generatedAt,
       },
-      days: Object.values(grid).sort((a, b) => a.workingDay.sortOrder - b.workingDay.sortOrder),
+      days,
     };
   }
 
@@ -328,9 +414,50 @@ export class TimetableService {
   async overrideSlot(schoolId: string, timetableSlotId: string, dto: OverrideSlotDto) {
     const timetableSlot = await prisma.timetableSlot.findFirst({
       where: { id: timetableSlotId, schoolId },
-      include: { timetable: true },
+      include: {
+        timetable: true,
+        divisionAssignment: { select: { electiveGroupId: true } },
+      },
     });
     if (!timetableSlot) throw new NotFoundError('TimetableSlot', timetableSlotId);
+
+    // Refuse to mutate any cell that's currently part of an elective group
+    // OR any cell on whose (day, slot) coordinates an elective is already
+    // sitting (you'd otherwise add a non-elective row alongside the elective
+    // members, which would mean two different subjects in the same physical
+    // slot for the same students).
+    const electiveSiblings = await prisma.timetableSlot.findMany({
+      where: {
+        timetableId: timetableSlot.timetableId,
+        workingDayId: timetableSlot.workingDayId,
+        slotId: timetableSlot.slotId,
+        divisionAssignment: { electiveGroupId: { not: null } },
+      },
+      select: { id: true },
+    });
+    if (electiveSiblings.length > 0) {
+      throw new AppError(
+        'This cell belongs to an elective group and cannot be edited from the timetable view. Use the Assignments page or the Elective Groups page to change which subjects/teachers run during this elective slot.',
+        400,
+        'ELECTIVE_CELL_LOCKED',
+      );
+    }
+
+    // Refuse to PLACE an elective assignment via override either — electives
+    // must come from a regenerated timetable, not manual single-cell edits.
+    if (dto.divisionAssignmentId) {
+      const target = await prisma.divisionAssignment.findFirst({
+        where: { id: dto.divisionAssignmentId, schoolId, deletedAt: null },
+        select: { electiveGroupId: true },
+      });
+      if (target?.electiveGroupId) {
+        throw new AppError(
+          'Cannot place an elective-group assignment via single-cell override. Regenerate the timetable instead.',
+          400,
+          'ELECTIVE_OVERRIDE_FORBIDDEN',
+        );
+      }
+    }
 
     // If assigning (not clearing), validate no teacher double-booking
     if (dto.divisionAssignmentId) {
@@ -432,6 +559,7 @@ export class TimetableService {
         divisionAssignment: {
           include: {
             subject: { select: { id: true, name: true } },
+            electiveGroup: { select: { id: true, name: true } },
           },
         },
       },
@@ -483,21 +611,25 @@ export class TimetableService {
 
     // Build per-day grid skeleton keyed by dayOfWeek (so multiple structures
     // with the same day collapse into one row). Shape matches the division
-    // timetable response (TimetablePeriod) so the frontend renders cells via
-    // period.assignment just like the division view. For teacher view, the
-    // "teacher" label in each cell is the class-division label (since the
-    // teacher is always the one being viewed).
+    // timetable response (PeriodDto with assignments[]). For teacher view,
+    // the "teacher" field on each assignment carries the class-division label
+    // since the teacher being viewed is implicit.
+    type TeacherAssignmentDto = {
+      id: string;
+      subject: { id: string; name: string };
+      teacher: { id: string; name: string } | null;
+      electiveGroup: { id: string; name: string } | null;
+    };
+    type TeacherPeriodDto = {
+      timetableSlotId: string;
+      slotIds: string[];
+      slot: { id: string; slotType: string; slotNumber: number | null; startTime: Date; endTime: Date; sortOrder: number };
+      assignments: TeacherAssignmentDto[];
+      isElective: boolean;
+    };
     const grid: Record<number, {
       workingDay: { id: string; dayOfWeek: number; label: string; sortOrder: number };
-      periods: Array<{
-        timetableSlotId: string;
-        slot: { id: string; slotType: string; slotNumber: number | null; startTime: Date; endTime: Date; sortOrder: number };
-        assignment: {
-          id: string;
-          subject: { id: string; name: string };
-          teacher: { id: string; name: string } | null;
-        } | null;
-      }>;
+      periods: TeacherPeriodDto[];
     }> = {};
 
     for (const wd of workingDays) {
@@ -519,6 +651,7 @@ export class TimetableService {
         if (seen.has(sl.sortOrder)) continue;
         dayBucket.periods.push({
           timetableSlotId: `${wd.id}:${sl.id}`,
+          slotIds: [],
           slot: {
             id: sl.id,
             slotType: sl.slotType,
@@ -527,20 +660,21 @@ export class TimetableService {
             endTime: sl.endTime,
             sortOrder: sl.sortOrder,
           },
-          assignment: null,
+          assignments: [],
+          isElective: false,
         });
       }
       dayBucket.periods.sort((a, b) => a.slot.sortOrder - b.slot.sortOrder);
     }
 
-    // Overlay the teacher's actual assignments into the skeleton.
-    // Need class names for the display label — batch fetch.
+    // Need class name lookups for overlay (electiveGroup is already in `slots`)
     const classIds = Array.from(new Set(slots.map((s) => s.timetable.division.classId)));
     const classes = classIds.length > 0
       ? await prisma.class.findMany({ where: { id: { in: classIds } }, select: { id: true, name: true } })
       : [];
     const classNameById = new Map(classes.map((c) => [c.id, c.name]));
 
+    // Overlay the teacher's actual assignments into the skeleton.
     for (const s of slots) {
       const dayBucket = grid[s.workingDay.dayOfWeek];
       if (!dayBucket) continue;
@@ -548,26 +682,21 @@ export class TimetableService {
       if (idx === -1) continue;
       const className = classNameById.get(s.timetable.division.classId) ?? '';
       const divLabel = `${className}-${s.timetable.division.label}`.replace(/^-/, '');
-      dayBucket.periods[idx] = {
-        timetableSlotId: s.id,
-        slot: {
-          id: s.slot.id,
-          slotType: s.slot.slotType,
-          slotNumber: s.slot.slotNumber,
-          startTime: s.slot.startTime,
-          endTime: s.slot.endTime,
-          sortOrder: s.slot.sortOrder,
-        },
-        assignment: s.divisionAssignment
-          ? {
-              id: s.divisionAssignment.id,
-              subject: s.divisionAssignment.subject,
-              // Reuse "teacher" field to carry the class-division label for
-              // the UI cell — the cell renders `assignment.teacher?.name`.
-              teacher: { id: s.timetable.division.id, name: divLabel },
-            }
-          : null,
-      };
+      const da = s.divisionAssignment;
+      if (!da) continue;
+      const period = dayBucket.periods[idx];
+      // Replace the empty placeholder with the real slot id
+      period.timetableSlotId = s.id;
+      period.slotIds = [s.id];
+      period.assignments.push({
+        id: da.id,
+        subject: da.subject,
+        // Reuse "teacher" field to carry the class-division label for
+        // the UI cell — the cell renders `assignment.teacher?.name`.
+        teacher: { id: s.timetable.division.id, name: divLabel },
+        electiveGroup: da.electiveGroup,
+      });
+      if (da.electiveGroupId) period.isElective = true;
     }
 
     return {

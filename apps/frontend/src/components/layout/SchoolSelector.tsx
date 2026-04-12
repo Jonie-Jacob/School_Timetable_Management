@@ -48,9 +48,12 @@ export function SchoolSelector() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <Building2 className="size-4" />
-          <span className="hidden sm:inline max-w-[150px] truncate">{selected?.name ?? '—'}</span>
+        <Button
+          size="sm"
+          className="gap-2 h-8 rounded-lg border border-white/15 bg-white/10 text-white/80 hover:bg-white/15 hover:text-white"
+        >
+          <Building2 className="size-4 text-white/60" />
+          <span className="hidden sm:inline max-w-[150px] truncate font-semibold">{selected?.name ?? '—'}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
