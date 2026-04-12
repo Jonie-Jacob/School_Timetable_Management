@@ -70,8 +70,6 @@ export function Component() {
   };
 
   const scopeCount = getDivisionIdsForScope(generateScope).length;
-  const anyGeneratable = outdated + pending > 0;
-
   const handleGenerate = async () => {
     const ids = getDivisionIdsForScope(generateScope);
     setShowGenerateDialog(false);
