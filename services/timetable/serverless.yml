@@ -69,6 +69,11 @@ functions:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
+          path: /api/timetables/slots/create-empty
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
           path: /api/timetables/{id}/publish
           authorizer:
             name: cognitoAuthorizer

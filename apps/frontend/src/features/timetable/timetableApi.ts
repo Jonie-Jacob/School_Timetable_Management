@@ -156,6 +156,16 @@ export const timetableApi = createApi({
       invalidatesTags: ['Timetable'],
     }),
 
+    createEmptySlot: builder.mutation<{ timetableSlotId: string; created: boolean }, { timetableId: string; workingDayId: string; slotId: string }>({
+      query: (body) => ({
+        url: 'timetables/slots/create-empty',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: { timetableSlotId: string; created: boolean } }) => response.data,
+      invalidatesTags: ['Timetable'],
+    }),
+
     autoResolveConflict: builder.mutation<AutoResolveResponse, { conflictedSlotId: string }>({
       query: (body) => ({
         url: 'timetables/slots/auto-resolve',
@@ -175,5 +185,6 @@ export const {
   useGetTeacherTimetableQuery,
   useOverrideSlotMutation,
   useSwapSlotsMutation,
+  useCreateEmptySlotMutation,
   useAutoResolveConflictMutation,
 } = timetableApi;

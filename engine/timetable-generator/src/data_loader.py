@@ -29,6 +29,8 @@ class SlotInfo:
     sort_order: int
     day_of_week: int
     day_label: str
+    start_time: str  # e.g. "09:00:00"
+    end_time: str    # e.g. "09:45:00"
 
 
 @dataclass
@@ -254,6 +256,8 @@ def _load_period_slots(cur, data: SchoolData) -> None:
             s.slot_type,
             s.slot_number,
             s.sort_order,
+            s.start_time,
+            s.end_time,
             wd.day_of_week,
             wd.sort_order AS day_sort_order,
             wd.label AS day_label
@@ -296,6 +300,8 @@ def _load_period_slots(cur, data: SchoolData) -> None:
                 sort_order=row["sort_order"],
                 day_of_week=row["day_of_week"],
                 day_label=row["day_label"],
+                start_time=str(row["start_time"]),
+                end_time=str(row["end_time"]),
             )
             data.period_slots.append(slot)
 

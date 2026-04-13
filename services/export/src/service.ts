@@ -259,12 +259,14 @@ export class ExportService {
 
     const orderedSlots = Array.from(slotMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 
-    // Group by day. The query is filtered to this teacher only, so each
-    // (day, slot) cell holds at most one entry — but we still use the
-    // CellContent shape for consistency with the division grid renderer.
-    const dayMap = new Map<string, DayColumn>();
+    // Group by dayOfWeek (not workingDayId). A teacher may teach across
+    // multiple period structures, each with its own WorkingDay records.
+    // "Monday" in structure A and "Monday" in structure B share
+    // dayOfWeek=1 but have different workingDayIds. Grouping by
+    // dayOfWeek consolidates them into one row.
+    const dayMap = new Map<number, DayColumn>();
     for (const s of timetableSlots) {
-      const dayKey = s.workingDayId;
+      const dayKey = s.workingDay.dayOfWeek;
       if (!dayMap.has(dayKey)) {
         dayMap.set(dayKey, {
           label: s.workingDay.label,
@@ -278,7 +280,7 @@ export class ExportService {
       const cell = day.periods.get(s.slot.sortOrder) ?? { entries: [] };
       cell.entries.push({
         subject: s.divisionAssignment?.subject?.name ?? '-',
-        teacher: `${className}-${divLabel}`,
+        teacher: `${className} ${divLabel}`,
       });
       day.periods.set(s.slot.sortOrder, cell);
     }

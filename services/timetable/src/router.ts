@@ -47,6 +47,11 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.autoResolve(event);
   }
 
+  // Create empty slot: POST /timetables/slots/create-empty
+  if (method === 'POST' && path === '/api/timetables/slots/create-empty') {
+    return controller.createEmptySlot(event);
+  }
+
   // Override slot: PUT /timetables/slots/:slotId
   const slotMatch = path.match(/^\/api\/timetables\/slots\/([^/]+)$/);
   if (method === 'PUT' && slotMatch) {

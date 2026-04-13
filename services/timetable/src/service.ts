@@ -1,6 +1,6 @@
 import {
   prisma, AppError, NotFoundError,
-  TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto,
+  TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto, CreateEmptySlotDto,
 } from '@timetable/shared';
 import { JobStatus, TimetableStatus, SlotType } from '@prisma/client';
 import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs';
@@ -830,6 +830,38 @@ export class TimetableService {
       fromSlotId: conflictedSlotId,
       toSlotId: best.id,
     };
+  }
+
+  // ── Create Empty Slot ──
+
+  async createEmptySlot(schoolId: string, dto: CreateEmptySlotDto) {
+    const { timetableId, workingDayId, slotId } = dto;
+
+    // Verify timetable exists
+    const timetable = await prisma.timetable.findFirst({
+      where: { id: timetableId, schoolId },
+    });
+    if (!timetable) throw new NotFoundError('Timetable', timetableId);
+
+    // Check if a row already exists (avoid duplicates)
+    const existing = await prisma.timetableSlot.findFirst({
+      where: { timetableId, workingDayId, slotId, schoolId },
+    });
+    if (existing) {
+      return { timetableSlotId: existing.id, created: false };
+    }
+
+    const newSlot = await prisma.timetableSlot.create({
+      data: {
+        schoolId,
+        timetableId,
+        workingDayId,
+        slotId,
+        divisionAssignmentId: null,
+      },
+    });
+
+    return { timetableSlotId: newSlot.id, created: true };
   }
 
   // ── Get Conflicts ──

@@ -2,7 +2,7 @@ import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import {
   success, accepted,
   parseBody, authMiddleware, academicYearMiddleware,
-  triggerGenerationSchema, overrideSlotSchema, swapSlotsSchema, autoResolveSchema,
+  triggerGenerationSchema, overrideSlotSchema, swapSlotsSchema, autoResolveSchema, createEmptySlotSchema,
 } from '@timetable/shared';
 import { TimetableService } from './service';
 
@@ -52,6 +52,13 @@ export class TimetableController {
     const auth = await authMiddleware(event);
     const body = parseBody(event, autoResolveSchema);
     const result = await service.autoResolveConflict(auth.schoolId!, body);
+    return success(result);
+  }
+
+  async createEmptySlot(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const body = parseBody(event, createEmptySlotSchema);
+    const result = await service.createEmptySlot(auth.schoolId!, body);
     return success(result);
   }
 

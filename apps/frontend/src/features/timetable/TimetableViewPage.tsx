@@ -38,6 +38,7 @@ import {
   useGetDivisionTimetableQuery,
   useOverrideSlotMutation,
   useSwapSlotsMutation,
+  useCreateEmptySlotMutation,
   useAutoResolveConflictMutation,
   type TimetablePeriod,
   type TimetableSlotAssignment,
@@ -81,6 +82,7 @@ export function Component() {
   const [overrideSlot] = useOverrideSlotMutation();
   const [swapSlots, { isLoading: isSwapping }] = useSwapSlotsMutation();
   const [autoResolve] = useAutoResolveConflictMutation();
+  const [createEmptySlot] = useCreateEmptySlotMutation();
   const [updateAssignment] = useUpdateAssignmentMutation();
 
   // Conflict dialog state for drag-and-drop swaps
@@ -324,7 +326,46 @@ export function Component() {
                       );
                     }
                     const period = getPeriodForSlot(day.periods, slot.sortOrder);
-                    if (!period) return <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40"><span className="text-xs text-muted-foreground/40">—</span></td>;
+                    if (!period) {
+                      // No timetable_slot row for this (day, slot) — new period
+                      // added after generation. Click creates the row then opens editor.
+                      const handleNewSlotClick = async () => {
+                        if (!grid?.timetable?.id) return;
+                        try {
+                          const result = await createEmptySlot({
+                            timetableId: grid.timetable.id,
+                            workingDayId: day.workingDay.id,
+                            slotId: slot.id,
+                          }).unwrap();
+                          setEditSlot({
+                            timetableSlotId: result.timetableSlotId,
+                            workingDayId: day.workingDay.id,
+                            slotId: slot.id,
+                            dayLabel: DAY_LABELS[day.workingDay.dayOfWeek] ?? day.workingDay.label,
+                            periodNumber: slot.slotNumber,
+                            startTime: slot.startTime,
+                            endTime: slot.endTime,
+                            currentAssignmentId: null,
+                            currentSubjectName: null,
+                            currentTeacherName: null,
+                          });
+                          setSheetSubjectId('');
+                          setSheetSelectedTeacherId('');
+                          setTeacherPool('relevant');
+                          setHideConflicts(false);
+                          setTeacherSort('name');
+                        } catch {
+                          toast.error('Failed to create slot.');
+                        }
+                      };
+                      return (
+                        <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40 cursor-pointer hover:bg-muted/30 transition-colors" onClick={handleNewSlotClick}>
+                          <div className="h-10 flex items-center justify-center">
+                            <span className="text-xs text-muted-foreground/40">—</span>
+                          </div>
+                        </td>
+                      );
+                    }
 
                     const firstAssignment = period.assignments[0];
 

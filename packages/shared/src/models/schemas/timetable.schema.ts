@@ -19,7 +19,14 @@ export const autoResolveSchema = z.object({
   conflictedSlotId: z.string().uuid(),
 });
 
+export const createEmptySlotSchema = z.object({
+  timetableId: z.string().uuid(),
+  workingDayId: z.string().uuid(),
+  slotId: z.string().uuid(),
+});
+
 export type TriggerGenerationDto = z.infer<typeof triggerGenerationSchema>;
 export type OverrideSlotDto = z.infer<typeof overrideSlotSchema>;
 export type SwapSlotsDto = z.infer<typeof swapSlotsSchema>;
 export type AutoResolveDto = z.infer<typeof autoResolveSchema>;
+export type CreateEmptySlotDto = z.infer<typeof createEmptySlotSchema>;
