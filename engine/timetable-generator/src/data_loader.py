@@ -433,28 +433,47 @@ def _load_existing_teacher_slots(cur, data: SchoolData) -> None:
 
     When we generate one division at a time, we must avoid scheduling a
     teacher into a (day, slot) where they are already booked in another
-    division's already-generated timetable. This reads every
-    (teacher_id, working_day_id, slot_id) triple currently occupied in the
-    school+AY *except* the division we're generating, and the fitness
-    function treats these as forbidden placements.
+    division's already-generated timetable.
+
+    Different divisions may use DIFFERENT period structures, each with its
+    own WorkingDay and Slot IDs. Matching on (working_day_id, slot_id)
+    directly would miss cross-structure conflicts. Instead, we load
+    (teacher_id, day_of_week, start_time) from other divisions and MAP
+    each entry to the CURRENT division's (working_day_id, slot_id)
+    coordinates using clock-time + day_of_week matching. The fitness
+    function then checks against this remapped set as before.
     """
     cur.execute("""
-        SELECT da.teacher_id, ts.working_day_id, ts.slot_id
+        SELECT da.teacher_id, wd.day_of_week,
+               s.start_time, s.end_time
         FROM timetable_slots ts
         JOIN timetables tt ON tt.id = ts.timetable_id
         JOIN division_assignments da ON da.id = ts.division_assignment_id
+        JOIN working_days wd ON wd.id = ts.working_day_id
+        JOIN slots s ON s.id = ts.slot_id
         WHERE tt.school_id = %s
           AND tt.academic_year_id = %s
           AND tt.division_id <> %s
           AND da.teacher_id IS NOT NULL
+          AND s.slot_type = 'PERIOD'
     """, (data.school_id, data.academic_year_id, data.division_id))
 
+    # Build a lookup from the CURRENT division's period slots:
+    # (day_of_week, start_time_str) → (working_day_id, slot_id)
+    current_slot_map: dict[tuple[int, str], tuple[str, str]] = {}
+    for slot in data.period_slots:
+        key = (slot.day_of_week, slot.start_time)
+        current_slot_map[key] = (slot.working_day_id, slot.id)
+
     for row in cur.fetchall():
-        data.existing_teacher_slots.add((
-            row["teacher_id"],
-            row["working_day_id"],
-            row["slot_id"],
-        ))
+        teacher_id = row["teacher_id"]
+        day_of_week = row["day_of_week"]
+        start_time = str(row["start_time"])
+
+        # Map the other division's (day, time) to our slot coordinates
+        mapped = current_slot_map.get((day_of_week, start_time))
+        if mapped:
+            data.existing_teacher_slots.add((teacher_id, mapped[0], mapped[1]))
 
 
 def _load_teacher_unavailability(cur, data: SchoolData) -> None:

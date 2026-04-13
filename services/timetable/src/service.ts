@@ -409,6 +409,44 @@ export class TimetableService {
     };
   }
 
+  // ── Time-based teacher conflict helper ──
+
+  /**
+   * Find a timetable_slot where the given teacher is booked at the same
+   * day_of_week and overlapping clock time, across ANY period structure.
+   * Uses time overlap (startTime < otherEnd AND endTime > otherStart)
+   * instead of matching on workingDayId+slotId, which fails across
+   * different period structures.
+   */
+  private async findTeacherTimeConflict(
+    schoolId: string,
+    excludeSlotIds: string[],
+    dayOfWeek: number,
+    startTime: Date,
+    endTime: Date,
+    teacherId: string,
+  ) {
+    return prisma.timetableSlot.findFirst({
+      where: {
+        id: { notIn: excludeSlotIds },
+        schoolId,
+        workingDay: { dayOfWeek },
+        slot: {
+          slotType: 'PERIOD',
+          startTime: { lt: endTime },
+          endTime: { gt: startTime },
+        },
+        divisionAssignment: { teacherId },
+      },
+      include: {
+        timetable: { include: { division: { include: { class: true } } } },
+        divisionAssignment: { include: { teacher: { select: { id: true, name: true } } } },
+        workingDay: true,
+        slot: true,
+      },
+    });
+  }
+
   // ── Override Slot ──
 
   async overrideSlot(schoolId: string, timetableSlotId: string, dto: OverrideSlotDto) {
@@ -466,29 +504,30 @@ export class TimetableService {
       });
       if (!assignment) throw new NotFoundError('DivisionAssignment', dto.divisionAssignmentId);
 
-      // Check teacher isn't already booked in the same slot+day across other divisions
-      const conflict = await prisma.timetableSlot.findFirst({
-        where: {
-          id: { not: timetableSlotId },
-          schoolId,
-          workingDayId: timetableSlot.workingDayId,
-          slotId: timetableSlot.slotId,
-          divisionAssignment: { teacherId: assignment.teacherId },
-        },
-        include: {
-          timetable: { include: { division: true } },
-          divisionAssignment: { include: { teacher: { select: { id: true, name: true } } } },
-        },
-      });
-
-      if (conflict) {
-        const teacherName = conflict.divisionAssignment?.teacher?.name ?? 'Unknown';
-        const divLabel = conflict.timetable.division?.label ?? conflict.timetable.divisionId;
-        throw new AppError(
-          `Teacher "${teacherName}" is already assigned in division "${divLabel}" at the same time slot`,
-          409,
-          'TEACHER_CONFLICT',
-        );
+      // Check teacher isn't already booked at overlapping time across ANY division/structure
+      if (assignment.teacherId) {
+        // Load the slot's time info for overlap check
+        const slotInfo = await prisma.slot.findFirst({ where: { id: timetableSlot.slotId } });
+        const dayInfo = await prisma.workingDay.findFirst({ where: { id: timetableSlot.workingDayId } });
+        if (slotInfo && dayInfo) {
+          const conflict = await this.findTeacherTimeConflict(
+            schoolId,
+            [timetableSlotId],
+            dayInfo.dayOfWeek,
+            slotInfo.startTime,
+            slotInfo.endTime,
+            assignment.teacherId,
+          );
+          if (conflict) {
+            const teacherName = conflict.divisionAssignment?.teacher?.name ?? 'Unknown';
+            const divLabel = conflict.timetable.division?.label ?? conflict.timetable.divisionId;
+            throw new AppError(
+              `Teacher "${teacherName}" is already assigned in division "${divLabel}" at the same time slot`,
+              409,
+              'TEACHER_CONFLICT',
+            );
+          }
+        }
       }
     }
 
@@ -591,21 +630,16 @@ export class TimetableService {
     };
     const conflicts: ConflictInfo[] = [];
 
-    // Check source teacher at target's (day, slot) in other divisions
+    // Check source teacher at target's (day, time) in other divisions
     const sourceTeacherId = sourceSlot.divisionAssignment?.teacher?.id;
     if (sourceTeacherId) {
-      const conflict = await prisma.timetableSlot.findFirst({
-        where: {
-          id: { not: targetSlotId },
-          schoolId,
-          workingDayId: targetSlot.workingDayId,
-          slotId: targetSlot.slotId,
-          divisionAssignment: { teacherId: sourceTeacherId },
-        },
-        include: {
-          timetable: { include: { division: { include: { class: true } } } },
-        },
-      });
+      const conflict = await this.findTeacherTimeConflict(
+        schoolId, [sourceSlotId, targetSlotId],
+        targetSlot.workingDay.dayOfWeek,
+        targetSlot.slot.startTime,
+        targetSlot.slot.endTime,
+        sourceTeacherId,
+      );
       if (conflict) {
         conflicts.push({
           teacherName: sourceSlot.divisionAssignment!.teacher!.name,
@@ -619,21 +653,16 @@ export class TimetableService {
       }
     }
 
-    // Check target teacher at source's (day, slot) in other divisions
+    // Check target teacher at source's (day, time) in other divisions
     const targetTeacherId = targetSlot.divisionAssignment?.teacher?.id;
     if (targetTeacherId) {
-      const conflict = await prisma.timetableSlot.findFirst({
-        where: {
-          id: { not: sourceSlotId },
-          schoolId,
-          workingDayId: sourceSlot.workingDayId,
-          slotId: sourceSlot.slotId,
-          divisionAssignment: { teacherId: targetTeacherId },
-        },
-        include: {
-          timetable: { include: { division: { include: { class: true } } } },
-        },
-      });
+      const conflict = await this.findTeacherTimeConflict(
+        schoolId, [sourceSlotId, targetSlotId],
+        sourceSlot.workingDay.dayOfWeek,
+        sourceSlot.slot.startTime,
+        sourceSlot.slot.endTime,
+        targetTeacherId,
+      );
       if (conflict) {
         conflicts.push({
           teacherName: targetSlot.divisionAssignment!.teacher!.name,
@@ -748,31 +777,27 @@ export class TimetableService {
 
       const candidateTeacherId = candidate.divisionAssignment?.teacher?.id;
 
-      // Check: would the conflicted teacher be free at the candidate's (day, slot)?
-      const conflictedTeacherBusy = await prisma.timetableSlot.findFirst({
-        where: {
-          id: { notIn: [conflictedSlotId, candidate.id] },
-          schoolId,
-          workingDayId: candidate.workingDayId,
-          slotId: candidate.slotId,
-          divisionAssignment: { teacherId },
-        },
-        select: { id: true },
-      });
+      // Check: would the conflicted teacher be free at the candidate's (day, time)?
+      const conflictedTeacherBusy = await this.findTeacherTimeConflict(
+        schoolId,
+        [conflictedSlotId, candidate.id],
+        candidate.workingDay!.dayOfWeek,
+        candidate.slot!.startTime,
+        candidate.slot!.endTime,
+        teacherId,
+      );
       if (conflictedTeacherBusy) continue; // teacher is also busy here, skip
 
       // Check: would the candidate's teacher (if any) be free at the conflicted position?
       if (candidateTeacherId) {
-        const candidateTeacherBusy = await prisma.timetableSlot.findFirst({
-          where: {
-            id: { notIn: [conflictedSlotId, candidate.id] },
-            schoolId,
-            workingDayId: conflictedSlot.workingDayId,
-            slotId: conflictedSlot.slotId,
-            divisionAssignment: { teacherId: candidateTeacherId },
-          },
-          select: { id: true },
-        });
+        const candidateTeacherBusy = await this.findTeacherTimeConflict(
+          schoolId,
+          [conflictedSlotId, candidate.id],
+          conflictedSlot.workingDay!.dayOfWeek,
+          conflictedSlot.slot!.startTime,
+          conflictedSlot.slot!.endTime,
+          candidateTeacherId,
+        );
         if (candidateTeacherBusy) continue; // would create a new conflict
       }
 
