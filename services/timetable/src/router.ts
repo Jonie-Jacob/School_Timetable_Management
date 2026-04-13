@@ -37,6 +37,16 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.getTeacherTimetable(event, teacherMatch[1]);
   }
 
+  // Swap slots: POST /timetables/slots/swap
+  if (method === 'POST' && path === '/api/timetables/slots/swap') {
+    return controller.swapSlots(event);
+  }
+
+  // Auto-resolve conflict: POST /timetables/slots/auto-resolve
+  if (method === 'POST' && path === '/api/timetables/slots/auto-resolve') {
+    return controller.autoResolve(event);
+  }
+
   // Override slot: PUT /timetables/slots/:slotId
   const slotMatch = path.match(/^\/api\/timetables\/slots\/([^/]+)$/);
   if (method === 'PUT' && slotMatch) {

@@ -124,7 +124,21 @@
       "Bash(ls -la libquery_engine*)",
       "Bash(powershell.exe -Command \"if \\(Test-Path '../shared-layer.zip'\\) { Remove-Item '../shared-layer.zip' }; Compress-Archive -Path 'nodejs' -DestinationPath '../shared-layer.zip' -Force\")",
       "Bash(sed -i 's/electiveGroup: { select: { id: true, name: true } }/electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } }/g' src/service.ts)",
-      "Bash(grep -c \"electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } }\" src/service.ts)"
+      "Bash(grep -c \"electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } }\" src/service.ts)",
+      "Bash(export SHARED_LAYER_ARN=\"arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:13\")",
+      "Bash(export COGNITO_ISSUER_URL=\"https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_rlYNHNPRZ\")",
+      "Bash(export COGNITO_CLIENT_ID=\"42r2ih2m9c3l26lb4u1mrrl5sb\")",
+      "Bash(export ECS_CLUSTER_ARN=\"arn:aws:ecs:ap-south-1:648485682362:cluster/timetable-prod-cluster\")",
+      "Bash(export ECS_TASK_DEF_ARN=\"arn:aws:ecs:ap-south-1:648485682362:task-definition/timetable-prod-timetable-engine\")",
+      "Bash(aws s3:*)",
+      "Bash(MSYS_NO_PATHCONV=1 aws cloudfront create-invalidation --distribution-id EUWIXJK2BNYEF --paths \"/*\" --query \"Invalidation.Id\" --output text)",
+      "Bash(export ECS_SUBNET_IDS=\"subnet-00a02f0f32ba8fc7b,subnet-0bad413134e1811e2\")",
+      "Bash(export ECS_SECURITY_GROUP_ID=\"sg-023ec7ce6f103470a\")",
+      "Bash(MSYS_NO_PATHCONV=1 aws lambda invoke --function-name timetable-service-prod-timetable --payload '{\"rawPath\":\"/api/timetables/health\",\"requestContext\":{\"http\":{\"method\":\"GET\",\"path\":\"/api/timetables/health\"}}}' --region ap-south-1 /tmp/lambda-out.json)",
+      "Bash(python -m json.tool)",
+      "Bash(MSYS_NO_PATHCONV=1 aws lambda invoke --function-name timetable-service-prod-timetable --cli-binary-format raw-in-base64-out --payload '{\"rawPath\":\"/api/timetables/health\",\"requestContext\":{\"http\":{\"method\":\"GET\",\"path\":\"/api/timetables/health\"}}}' --region ap-south-1 /tmp/lambda-out.json)",
+      "Bash(MSYS_NO_PATHCONV=1 aws lambda invoke --function-name timetable-service-prod-timetable --cli-binary-format raw-in-base64-out --payload '{\"rawPath\":\"/api/timetables/health\",\"requestContext\":{\"http\":{\"method\":\"GET\",\"path\":\"/api/timetables/health\"}}}' --region ap-south-1 \"C:\\\\Users\\\\jonie\\\\AppData\\\\Local\\\\Temp\\\\lambda-out.json\")",
+      "Bash(MSYS_NO_PATHCONV=1 npx serverless deploy --stage prod)"
     ]
   }
 }

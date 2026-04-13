@@ -41,7 +41,7 @@ export class ClassService {
             periodStructure: { select: { id: true, name: true } },
             classTeacherId: true,
             classTeacher: { select: { id: true, name: true } },
-            timetables: { select: { id: true, status: true }, take: 1 },
+            timetables: { select: { id: true, status: true, generatedAt: true }, take: 1 },
             _count: { select: { divisionAssignments: { where: { deletedAt: null } } } },
           },
         },
@@ -59,7 +59,7 @@ export class ClassService {
           include: {
             periodStructure: { select: { id: true, name: true } },
             classTeacher: { select: { id: true, name: true } },
-            timetables: { select: { id: true, status: true }, take: 1 },
+            timetables: { select: { id: true, status: true, generatedAt: true }, take: 1 },
             _count: { select: { divisionAssignments: { where: { deletedAt: null } } } },
           },
         },

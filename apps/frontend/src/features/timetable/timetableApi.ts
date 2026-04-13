@@ -75,6 +75,35 @@ interface GenerateResponse {
   divisionId: string;
 }
 
+export interface SwapConflict {
+  teacherName: string;
+  className: string;
+  divisionLabel: string;
+  classId: string;
+  divisionId: string;
+  conflictedSlotId: string;
+  direction: 'source_to_target' | 'target_to_source';
+}
+
+interface SwapSlotsRequest {
+  sourceSlotId: string;
+  targetSlotId: string;
+  force?: boolean;
+}
+
+interface SwapSlotsResponse {
+  source: unknown;
+  target: unknown;
+  conflicts: SwapConflict[];
+}
+
+interface AutoResolveResponse {
+  resolved: boolean;
+  message: string;
+  fromSlotId: string;
+  toSlotId: string;
+}
+
 export const timetableApi = createApi({
   reducerPath: 'timetableApi',
   baseQuery,
@@ -116,6 +145,26 @@ export const timetableApi = createApi({
       }),
       invalidatesTags: ['Timetable'],
     }),
+
+    swapSlots: builder.mutation<SwapSlotsResponse, SwapSlotsRequest>({
+      query: (body) => ({
+        url: 'timetables/slots/swap',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: SwapSlotsResponse }) => response.data,
+      invalidatesTags: ['Timetable'],
+    }),
+
+    autoResolveConflict: builder.mutation<AutoResolveResponse, { conflictedSlotId: string }>({
+      query: (body) => ({
+        url: 'timetables/slots/auto-resolve',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: AutoResolveResponse }) => response.data,
+      invalidatesTags: ['Timetable'],
+    }),
   }),
 });
 
@@ -125,4 +174,6 @@ export const {
   useGetDivisionTimetableQuery,
   useGetTeacherTimetableQuery,
   useOverrideSlotMutation,
+  useSwapSlotsMutation,
+  useAutoResolveConflictMutation,
 } = timetableApi;

@@ -1,6 +1,6 @@
 import {
   prisma, AppError, NotFoundError,
-  TriggerGenerationDto, OverrideSlotDto,
+  TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto,
 } from '@timetable/shared';
 import { JobStatus, TimetableStatus, SlotType } from '@prisma/client';
 import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs';
@@ -508,6 +508,328 @@ export class TimetableService {
     });
 
     return updated;
+  }
+
+  // ── Swap Slots (atomic) ──
+
+  async swapSlots(schoolId: string, dto: SwapSlotsDto) {
+    const { sourceSlotId, targetSlotId, force } = dto;
+
+    if (sourceSlotId === targetSlotId) {
+      throw new AppError('Source and target slots are the same', 400, 'SAME_SLOT');
+    }
+
+    // Load both slots with their assignments + teachers
+    const includeAssignment = {
+      include: {
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true } },
+      },
+    };
+    const [sourceSlot, targetSlot] = await Promise.all([
+      prisma.timetableSlot.findFirst({
+        where: { id: sourceSlotId, schoolId },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+          divisionAssignment: includeAssignment,
+          workingDay: true,
+          slot: true,
+        },
+      }),
+      prisma.timetableSlot.findFirst({
+        where: { id: targetSlotId, schoolId },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+          divisionAssignment: includeAssignment,
+          workingDay: true,
+          slot: true,
+        },
+      }),
+    ]);
+
+    if (!sourceSlot) throw new NotFoundError('TimetableSlot', sourceSlotId);
+    if (!targetSlot) throw new NotFoundError('TimetableSlot', targetSlotId);
+
+    // ── Elective guards ──
+    for (const slot of [sourceSlot, targetSlot]) {
+      if (slot.divisionAssignment?.electiveGroup) {
+        throw new AppError(
+          'Elective cells cannot be swapped from the timetable view. Use the Elective Groups page or regenerate the timetable.',
+          400,
+          'ELECTIVE_CELL_LOCKED',
+        );
+      }
+      // Check for elective siblings at same (day, slot)
+      const electiveSiblings = await prisma.timetableSlot.findFirst({
+        where: {
+          timetableId: slot.timetableId,
+          workingDayId: slot.workingDayId,
+          slotId: slot.slotId,
+          divisionAssignment: { electiveGroupId: { not: null } },
+        },
+        select: { id: true },
+      });
+      if (electiveSiblings) {
+        throw new AppError(
+          'This cell belongs to an elective group and cannot be edited from the timetable view.',
+          400,
+          'ELECTIVE_CELL_LOCKED',
+        );
+      }
+    }
+
+    // ── Conflict detection ──
+    type ConflictInfo = {
+      teacherName: string;
+      className: string;
+      divisionLabel: string;
+      classId: string;
+      divisionId: string;
+      conflictedSlotId: string;
+      direction: 'source_to_target' | 'target_to_source';
+    };
+    const conflicts: ConflictInfo[] = [];
+
+    // Check source teacher at target's (day, slot) in other divisions
+    const sourceTeacherId = sourceSlot.divisionAssignment?.teacher?.id;
+    if (sourceTeacherId) {
+      const conflict = await prisma.timetableSlot.findFirst({
+        where: {
+          id: { not: targetSlotId },
+          schoolId,
+          workingDayId: targetSlot.workingDayId,
+          slotId: targetSlot.slotId,
+          divisionAssignment: { teacherId: sourceTeacherId },
+        },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+        },
+      });
+      if (conflict) {
+        conflicts.push({
+          teacherName: sourceSlot.divisionAssignment!.teacher!.name,
+          className: conflict.timetable.division?.class?.name ?? '',
+          divisionLabel: conflict.timetable.division?.label ?? '',
+          classId: conflict.timetable.division?.classId ?? '',
+          divisionId: conflict.timetable.divisionId,
+          conflictedSlotId: conflict.id,
+          direction: 'source_to_target',
+        });
+      }
+    }
+
+    // Check target teacher at source's (day, slot) in other divisions
+    const targetTeacherId = targetSlot.divisionAssignment?.teacher?.id;
+    if (targetTeacherId) {
+      const conflict = await prisma.timetableSlot.findFirst({
+        where: {
+          id: { not: sourceSlotId },
+          schoolId,
+          workingDayId: sourceSlot.workingDayId,
+          slotId: sourceSlot.slotId,
+          divisionAssignment: { teacherId: targetTeacherId },
+        },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+        },
+      });
+      if (conflict) {
+        conflicts.push({
+          teacherName: targetSlot.divisionAssignment!.teacher!.name,
+          className: conflict.timetable.division?.class?.name ?? '',
+          divisionLabel: conflict.timetable.division?.label ?? '',
+          classId: conflict.timetable.division?.classId ?? '',
+          divisionId: conflict.timetable.divisionId,
+          conflictedSlotId: conflict.id,
+          direction: 'target_to_source',
+        });
+      }
+    }
+
+    // If conflicts and not forced, return 409 with details
+    if (conflicts.length > 0 && !force) {
+      throw new AppError(
+        JSON.stringify({ conflicts }),
+        409,
+        'TEACHER_CONFLICT',
+      );
+    }
+
+    // ── Atomic swap in a transaction ──
+    const [updatedSource, updatedTarget] = await prisma.$transaction([
+      prisma.timetableSlot.update({
+        where: { id: sourceSlotId },
+        data: { divisionAssignmentId: targetSlot.divisionAssignmentId },
+      }),
+      prisma.timetableSlot.update({
+        where: { id: targetSlotId },
+        data: { divisionAssignmentId: sourceSlot.divisionAssignmentId },
+      }),
+    ]);
+
+    // ── Persist conflict notifications for force-swaps ──
+    if (force && conflicts.length > 0) {
+      const notificationData = conflicts.map((c) => ({
+        schoolId,
+        timetableId: c.direction === 'source_to_target'
+          ? targetSlot.timetableId   // conflict is in the other division's timetable
+          : sourceSlot.timetableId,
+        divisionId: c.divisionId,
+        conflictType: 'SWAP_CONFLICT' as const,
+        changeDescription: `Teacher "${c.teacherName}" is double-booked — also teaching ${c.className} Division ${c.divisionLabel} at the same time slot`,
+      }));
+      await prisma.timetableNotification.createMany({ data: notificationData }).catch(() => {
+        // Gracefully handle if SWAP_CONFLICT enum doesn't exist yet (migration pending)
+      });
+    }
+
+    return {
+      source: updatedSource,
+      target: updatedTarget,
+      conflicts: force ? conflicts : [],
+    };
+  }
+
+  // ── Auto-Resolve Conflict ──
+
+  async autoResolveConflict(schoolId: string, dto: AutoResolveDto) {
+    const { conflictedSlotId } = dto;
+
+    // Load the conflicted slot
+    const conflictedSlot = await prisma.timetableSlot.findFirst({
+      where: { id: conflictedSlotId, schoolId },
+      include: {
+        timetable: { include: { division: { include: { class: true } } } },
+        divisionAssignment: {
+          include: {
+            subject: { select: { id: true, name: true } },
+            teacher: { select: { id: true, name: true } },
+          },
+        },
+        workingDay: true,
+        slot: true,
+      },
+    });
+    if (!conflictedSlot) throw new NotFoundError('TimetableSlot', conflictedSlotId);
+
+    const teacherId = conflictedSlot.divisionAssignment?.teacher?.id;
+    if (!teacherId) {
+      throw new AppError('No teacher assigned to this slot — nothing to resolve', 400, 'NO_TEACHER');
+    }
+
+    const timetableId = conflictedSlot.timetableId;
+
+    // Find all other PERIOD slots in the same timetable (same division)
+    const allSlots = await prisma.timetableSlot.findMany({
+      where: {
+        timetableId,
+        id: { not: conflictedSlotId },
+      },
+      include: {
+        divisionAssignment: {
+          include: { teacher: { select: { id: true, name: true } }, electiveGroup: { select: { id: true } } },
+        },
+        workingDay: true,
+        slot: true,
+      },
+    });
+
+    // For each candidate slot, check if swapping would resolve the conflict
+    // without creating a NEW conflict.
+    // Strategy: prefer empty slots > slots with null-teacher > slots whose
+    // teacher is free at the conflicted position.
+    type Candidate = { slot: typeof allSlots[0]; score: number };
+    const candidates: Candidate[] = [];
+
+    for (const candidate of allSlots) {
+      // Skip elective slots
+      if (candidate.divisionAssignment?.electiveGroup) continue;
+
+      const candidateTeacherId = candidate.divisionAssignment?.teacher?.id;
+
+      // Check: would the conflicted teacher be free at the candidate's (day, slot)?
+      const conflictedTeacherBusy = await prisma.timetableSlot.findFirst({
+        where: {
+          id: { notIn: [conflictedSlotId, candidate.id] },
+          schoolId,
+          workingDayId: candidate.workingDayId,
+          slotId: candidate.slotId,
+          divisionAssignment: { teacherId },
+        },
+        select: { id: true },
+      });
+      if (conflictedTeacherBusy) continue; // teacher is also busy here, skip
+
+      // Check: would the candidate's teacher (if any) be free at the conflicted position?
+      if (candidateTeacherId) {
+        const candidateTeacherBusy = await prisma.timetableSlot.findFirst({
+          where: {
+            id: { notIn: [conflictedSlotId, candidate.id] },
+            schoolId,
+            workingDayId: conflictedSlot.workingDayId,
+            slotId: conflictedSlot.slotId,
+            divisionAssignment: { teacherId: candidateTeacherId },
+          },
+          select: { id: true },
+        });
+        if (candidateTeacherBusy) continue; // would create a new conflict
+      }
+
+      // Score: empty slot = best, null teacher = good, teacher swap = ok
+      let score = 0;
+      if (!candidate.divisionAssignmentId) score = 100; // empty slot
+      else if (!candidateTeacherId) score = 80; // unassigned teacher
+      else score = 50; // teacher swap, both free
+
+      candidates.push({ slot: candidate, score });
+    }
+
+    if (candidates.length === 0) {
+      throw new AppError(
+        'No conflict-free slot found for auto-resolve. Manual adjustment is needed.',
+        409,
+        'NO_RESOLUTION',
+      );
+    }
+
+    // Pick the best candidate
+    candidates.sort((a, b) => b.score - a.score);
+    const best = candidates[0].slot;
+
+    // Atomic swap
+    await prisma.$transaction([
+      prisma.timetableSlot.update({
+        where: { id: conflictedSlotId },
+        data: { divisionAssignmentId: best.divisionAssignmentId },
+      }),
+      prisma.timetableSlot.update({
+        where: { id: best.id },
+        data: { divisionAssignmentId: conflictedSlot.divisionAssignmentId },
+      }),
+    ]);
+
+    // Dismiss related SWAP_CONFLICT notifications for this slot
+    await prisma.timetableNotification.updateMany({
+      where: {
+        schoolId,
+        timetableId,
+        conflictType: 'SWAP_CONFLICT',
+        dismissed: false,
+      },
+      data: { dismissed: true },
+    });
+
+    const teacherName = conflictedSlot.divisionAssignment!.teacher!.name;
+    const subjectName = conflictedSlot.divisionAssignment!.subject?.name ?? 'Unknown';
+    const movedTo = best.workingDay?.label ?? 'Unknown day';
+
+    return {
+      resolved: true,
+      message: `Moved "${subjectName}" (${teacherName}) to ${movedTo} Period ${best.slot?.slotNumber ?? '?'}`,
+      fromSlotId: conflictedSlotId,
+      toSlotId: best.id,
+    };
   }
 
   // ── Get Conflicts ──

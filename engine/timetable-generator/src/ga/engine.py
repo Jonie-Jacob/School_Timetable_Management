@@ -18,6 +18,7 @@ from .chromosome import create_random_chromosome
 from .fitness import evaluate
 from .operators import (
     initialize_population,
+    mutate_adjacency,
     mutate_swap,
     repair_chromosome,
     tournament_selection,
@@ -32,6 +33,12 @@ MUTATION_RATE = float(os.getenv("GA_MUTATION_RATE", "0.05"))
 CROSSOVER_RATE = float(os.getenv("GA_CROSSOVER_RATE", "0.8"))
 TOURNAMENT_SIZE = int(os.getenv("GA_TOURNAMENT_SIZE", "5"))
 CONVERGENCE_THRESHOLD = int(os.getenv("GA_CONVERGENCE_THRESHOLD", "50"))
+
+# When adjacency constraint is on, the search space is harder — bump params.
+ADJ_POPULATION_SIZE = int(os.getenv("GA_ADJ_POPULATION_SIZE", "200"))
+ADJ_MAX_GENERATIONS = int(os.getenv("GA_ADJ_MAX_GENERATIONS", "1500"))
+ADJ_MUTATION_RATE = float(os.getenv("GA_ADJ_MUTATION_RATE", "0.25"))
+ADJ_CONVERGENCE_THRESHOLD = int(os.getenv("GA_ADJ_CONVERGENCE_THRESHOLD", "150"))
 
 
 @dataclass
@@ -67,8 +74,14 @@ def run_ga(
     rng = np.random.default_rng(seed)
     start_time = time.time()
 
+    # Pick GA parameters based on adjacency constraint
+    pop_size = ADJ_POPULATION_SIZE if data.adjacency_constraint_enabled else POPULATION_SIZE
+    max_gens = ADJ_MAX_GENERATIONS if data.adjacency_constraint_enabled else MAX_GENERATIONS
+    mut_rate = ADJ_MUTATION_RATE if data.adjacency_constraint_enabled else MUTATION_RATE
+    conv_threshold = ADJ_CONVERGENCE_THRESHOLD if data.adjacency_constraint_enabled else CONVERGENCE_THRESHOLD
+
     # ── Initialize population ──────────────────────────────────────────────
-    population = initialize_population(data, POPULATION_SIZE, rng)
+    population = initialize_population(data, pop_size, rng)
 
     # Repair all chromosomes to ensure valid weightage distribution
     population = [repair_chromosome(c, data, rng) for c in population]
@@ -84,13 +97,13 @@ def run_ga(
     converged = False
 
     # ── Evolution loop ─────────────────────────────────────────────────────
-    for gen in range(1, MAX_GENERATIONS + 1):
+    for gen in range(1, max_gens + 1):
         new_population: list[np.ndarray] = []
 
         # Elitism: keep the best individual
         new_population.append(best_chromosome.copy())
 
-        while len(new_population) < POPULATION_SIZE:
+        while len(new_population) < pop_size:
             # Selection
             parent1 = tournament_selection(population, fitnesses, TOURNAMENT_SIZE, rng)
             parent2 = tournament_selection(population, fitnesses, TOURNAMENT_SIZE, rng)
@@ -101,19 +114,24 @@ def run_ga(
             else:
                 child1, child2 = parent1.copy(), parent2.copy()
 
-            # Mutation
-            child1 = mutate_swap(child1, data, MUTATION_RATE, rng)
-            child2 = mutate_swap(child2, data, MUTATION_RATE, rng)
+            # Mutation — standard swap
+            child1 = mutate_swap(child1, data, mut_rate, rng)
+            child2 = mutate_swap(child2, data, mut_rate, rng)
+
+            # Adjacency-specific mutation — cluster same-subject periods
+            if data.adjacency_constraint_enabled:
+                child1 = mutate_adjacency(child1, data, mut_rate, rng)
+                child2 = mutate_adjacency(child2, data, mut_rate, rng)
 
             # Repair to fix weightage counts after crossover
             child1 = repair_chromosome(child1, data, rng)
             child2 = repair_chromosome(child2, data, rng)
 
             new_population.append(child1)
-            if len(new_population) < POPULATION_SIZE:
+            if len(new_population) < pop_size:
                 new_population.append(child2)
 
-        population = new_population[:POPULATION_SIZE]
+        population = new_population[:pop_size]
 
         # ── Evaluate ───────────────────────────────────────────────────────
         fitnesses = np.array([evaluate(data, c) for c in population])
@@ -135,7 +153,7 @@ def run_ga(
             on_progress(gen, best_fitness, avg_fitness)
 
         # Convergence check
-        if stagnation_count >= CONVERGENCE_THRESHOLD:
+        if stagnation_count >= conv_threshold:
             converged = True
             break
 

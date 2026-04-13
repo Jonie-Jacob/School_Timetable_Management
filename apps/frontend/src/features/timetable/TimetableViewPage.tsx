@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, CalendarDays, Coffee, UtensilsCrossed, AlertTriangle, Trash2, Check, X as XIcon } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Coffee, UtensilsCrossed, AlertTriangle, Trash2, Check, X as XIcon, Loader2, ExternalLink } from 'lucide-react';
 import {
   DndContext,
   type DragEndEvent,
@@ -16,6 +16,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Sheet, SheetContent,
 } from '@/components/ui/sheet';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/cn';
 import { PageHeader } from '@/components/shared';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -34,8 +37,11 @@ import {
 import {
   useGetDivisionTimetableQuery,
   useOverrideSlotMutation,
+  useSwapSlotsMutation,
+  useAutoResolveConflictMutation,
   type TimetablePeriod,
   type TimetableSlotAssignment,
+  type SwapConflict,
 } from './timetableApi';
 import { DraggableCell, DroppableCell, CellContent, ElectiveCellContent } from './TimetableCells';
 
@@ -73,7 +79,23 @@ export function Component() {
   const { data: teacherLoads } = useGetTeachersLoadQuery();
   const { data: electiveGroups } = useGetElectiveGroupsQuery();
   const [overrideSlot] = useOverrideSlotMutation();
+  const [swapSlots, { isLoading: isSwapping }] = useSwapSlotsMutation();
+  const [autoResolve] = useAutoResolveConflictMutation();
   const [updateAssignment] = useUpdateAssignmentMutation();
+
+  // Conflict dialog state for drag-and-drop swaps
+  const [swapConflictDialog, setSwapConflictDialog] = useState<{
+    sourceSlotId: string;
+    targetSlotId: string;
+    conflicts: SwapConflict[];
+  } | null>(null);
+  // Track which slot IDs are involved in an in-flight swap for loading indicators
+  const [swappingSlotIds, setSwappingSlotIds] = useState<Set<string>>(new Set());
+  // Post-swap result dialog — shows after a forced swap with conflicts
+  const [swapResultDialog, setSwapResultDialog] = useState<{
+    conflicts: SwapConflict[];
+    resolving: Set<string>; // conflictedSlotIds currently being auto-resolved
+  } | null>(null);
 
   // Read-only info sheet for elective cells.
   // The override endpoint refuses elective rows, so click-to-edit can't
@@ -159,6 +181,36 @@ export function Component() {
     return result;
   }, [allSlots, grid]);
 
+  const executeSwap = useCallback(async (sourceSlotId: string, targetSlotId: string, force = false) => {
+    setSwappingSlotIds(new Set([sourceSlotId, targetSlotId]));
+    try {
+      const result = await swapSlots({ sourceSlotId, targetSlotId, force }).unwrap();
+      if (force && result.conflicts?.length > 0) {
+        // Show post-swap result dialog with conflict details
+        setSwapResultDialog({ conflicts: result.conflicts, resolving: new Set() });
+        toast.success('Slot swapped — conflicts created.');
+      } else {
+        toast.success('Slot swapped.');
+      }
+    } catch (err: unknown) {
+      // Check if it's a 409 TEACHER_CONFLICT with conflicts array
+      const error = err as { status?: number; data?: { error?: { code?: string; message?: string } } };
+      if (error?.status === 409 && error?.data?.error?.code === 'TEACHER_CONFLICT') {
+        try {
+          const parsed = JSON.parse(error.data!.error!.message!);
+          if (parsed.conflicts) {
+            setSwapConflictDialog({ sourceSlotId, targetSlotId, conflicts: parsed.conflicts });
+            return; // Don't clear swapping IDs yet — dialog is open
+          }
+        } catch { /* fall through to generic error */ }
+      }
+      const msg = error?.data?.error?.message ?? 'Swap failed.';
+      toast.error(msg);
+    } finally {
+      setSwappingSlotIds(new Set());
+    }
+  }, [swapSlots]);
+
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     setActiveDrag(null);
     const { active, over } = event;
@@ -181,20 +233,8 @@ export function Component() {
     const sourceAssignment = sourcePeriod?.assignments[0];
     if (!sourceAssignment) return;
 
-    try {
-      const targetAssignment = targetPeriod?.assignments[0];
-      // Swap: put source's assignment in target, target's in source
-      await overrideSlot({ slotId: targetSlotId, divisionAssignmentId: sourceAssignment.id }).unwrap();
-      if (targetAssignment) {
-        await overrideSlot({ slotId: sourceSlotId, divisionAssignmentId: targetAssignment.id }).unwrap();
-      } else {
-        await overrideSlot({ slotId: sourceSlotId, divisionAssignmentId: null }).unwrap();
-      }
-      toast.success('Slot swapped.');
-    } catch {
-      toast.error('Swap failed — possible conflict.');
-    }
-  }, [grid, overrideSlot]);
+    await executeSwap(sourceSlotId, targetSlotId);
+  }, [grid, executeSwap]);
 
   if (isLoading) {
     return (
@@ -209,7 +249,7 @@ export function Component() {
     return (
       <div className="space-y-6">
         <PageHeader title={t('editor.title')} description={divisionLabel}
-          actions={<Button variant="outline" size="sm" onClick={() => navigate(`/classes/${classId}`)}><ArrowLeft className="size-3.5" />Back</Button>}
+          actions={<Button variant="outline" size="sm" onClick={() => navigate(-1)}><ArrowLeft className="size-3.5" />Back</Button>}
         />
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 backdrop-blur-sm p-12 text-center">
           <CalendarDays className="size-7 text-teal-500 mb-4" />
@@ -233,7 +273,7 @@ export function Component() {
         actions={
           <div className="flex items-center gap-2">
             <Badge variant={grid.timetable.status === 'GENERATED' ? 'success' : 'warning'}>{grid.timetable.status}</Badge>
-            <Button variant="outline" size="sm" onClick={() => navigate(`/classes/${classId}`)}><ArrowLeft className="size-3.5" />Back</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate(-1)}><ArrowLeft className="size-3.5" />Back</Button>
           </div>
         }
       />
@@ -329,8 +369,15 @@ export function Component() {
                       setTeacherSort('name');
                     };
 
+                    const isCellSwapping = swappingSlotIds.has(period.timetableSlotId);
+
                     return (
-                      <td key={slot.id} className="px-1 py-1 border-r border-border/40" onClick={openEditor} style={{ cursor: 'pointer' }}>
+                      <td key={slot.id} className="px-1 py-1 border-r border-border/40 relative" onClick={openEditor} style={{ cursor: 'pointer' }}>
+                        {isCellSwapping && (
+                          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[2px] rounded-lg">
+                            <Loader2 className="size-5 animate-spin text-amber-500" />
+                          </div>
+                        )}
                         {isDesktop && firstAssignment ? (
                           <DraggableCell slotId={period.timetableSlotId}>
                             <DroppableCell slotId={period.timetableSlotId}>
@@ -839,6 +886,154 @@ export function Component() {
           })()}
         </SheetContent>
       </Sheet>
+
+      {/* ── Conflict confirmation dialog for drag-and-drop swaps ── */}
+      <Dialog
+        open={!!swapConflictDialog}
+        onOpenChange={(v) => {
+          if (!v) {
+            setSwapConflictDialog(null);
+            setSwappingSlotIds(new Set());
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="size-5 text-amber-500" />
+              Teacher Conflict Detected
+            </DialogTitle>
+            <DialogDescription>
+              Swapping these periods will create a scheduling conflict in another division.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {swapConflictDialog?.conflicts.map((c, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3"
+              >
+                <AlertTriangle className="size-4 text-amber-500 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <span className="font-semibold">{c.teacherName}</span> is already teaching{' '}
+                  <span className="font-semibold">{c.className} {c.divisionLabel}</span> at this time slot.
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSwapConflictDialog(null);
+                setSwappingSlotIds(new Set());
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={isSwapping}
+              onClick={async () => {
+                if (!swapConflictDialog) return;
+                const { sourceSlotId, targetSlotId } = swapConflictDialog;
+                setSwapConflictDialog(null);
+                await executeSwap(sourceSlotId, targetSlotId, true);
+              }}
+            >
+              Swap Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Post-swap result dialog — shows conflicts with auto-resolve ── */}
+      <Dialog
+        open={!!swapResultDialog}
+        onOpenChange={(v) => { if (!v) setSwapResultDialog(null); }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="size-5 text-amber-500" />
+              Swap Completed — {swapResultDialog?.conflicts.length} Conflict{(swapResultDialog?.conflicts.length ?? 0) !== 1 ? 's' : ''} Created
+            </DialogTitle>
+            <DialogDescription>
+              The following teacher conflicts were created in other divisions. You can auto-resolve them or fix manually.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {swapResultDialog?.conflicts.map((c, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3"
+              >
+                <div className="text-sm min-w-0">
+                  <span className="font-semibold">{c.teacherName}</span>
+                  <span className="text-muted-foreground"> → </span>
+                  <span className="font-semibold">{c.className} Div {c.divisionLabel}</span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    className="text-[11px]"
+                    loading={swapResultDialog.resolving.has(c.conflictedSlotId)}
+                    onClick={async () => {
+                      setSwapResultDialog((prev) => prev ? {
+                        ...prev,
+                        resolving: new Set([...prev.resolving, c.conflictedSlotId]),
+                      } : null);
+                      try {
+                        const res = await autoResolve({ conflictedSlotId: c.conflictedSlotId }).unwrap();
+                        toast.success(res.message);
+                        // Remove resolved conflict from the dialog
+                        setSwapResultDialog((prev) => {
+                          if (!prev) return null;
+                          const remaining = prev.conflicts.filter((_, idx) => idx !== i);
+                          if (remaining.length === 0) return null;
+                          const newResolving = new Set(prev.resolving);
+                          newResolving.delete(c.conflictedSlotId);
+                          return { conflicts: remaining, resolving: newResolving };
+                        });
+                      } catch (err: unknown) {
+                        const error = err as { data?: { error?: { message?: string } } };
+                        toast.error(error?.data?.error?.message ?? 'Auto-resolve failed');
+                        setSwapResultDialog((prev) => prev ? {
+                          ...prev,
+                          resolving: new Set([...prev.resolving].filter((id) => id !== c.conflictedSlotId)),
+                        } : null);
+                      }
+                    }}
+                  >
+                    Auto-Resolve
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className="text-[11px]"
+                    onClick={() => {
+                      window.open(`/classes/${c.classId}/divisions/${c.divisionId}/timetable`, '_blank');
+                    }}
+                  >
+                    <ExternalLink className="size-3 mr-1" />
+                    View
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSwapResultDialog(null)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -22,6 +22,7 @@ export interface Division {
   timetable?: {
     id: string;
     status: string;
+    generatedAt: string | null;
   } | null;
 }
 

@@ -1,0 +1,2 @@
+-- Add SWAP_CONFLICT to the ConflictType enum
+ALTER TYPE "ConflictType" ADD VALUE IF NOT EXISTS 'SWAP_CONFLICT';

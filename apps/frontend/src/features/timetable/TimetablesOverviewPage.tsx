@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CalendarDays, Eye, Zap, CheckCircle2, AlertTriangle, Clock, Loader2 } from 'lucide-react';
@@ -30,6 +30,9 @@ import { cn } from '@/lib/cn';
 
 type GenerateScope = 'all' | 'outdated' | 'pending';
 
+const POLL_INTERVAL_MS = 5_000;
+const POLL_MAX_DURATION_MS = 5 * 60_000; // stop polling after 5 min
+
 export function Component() {
   useTranslation();
   const navigate = useNavigate();
@@ -45,6 +48,88 @@ export function Component() {
   const [adjacencyEnabled, setAdjacencyEnabled] = useState(false);
   const [generateScope, setGenerateScope] = useState<GenerateScope>('all');
 
+  // ── Polling state for generation progress ──
+  const [polling, setPolling] = useState(false);
+  const [queuedCount, setQueuedCount] = useState(0);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef(0);
+  const targetDivisionIdsRef = useRef<Set<string>>(new Set());
+  // Snapshot of each target division's generatedAt BEFORE triggering.
+  // A division is "done" when its generatedAt differs from the snapshot.
+  const preGenerateSnapshotRef = useRef<Map<string, string | null>>(new Map());
+  const lastProgressRef = useRef<{ count: number; at: number }>({ count: 0, at: 0 });
+  // High-water mark — never show less progress than previously seen
+  const highWaterRef = useRef(0);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setPolling(false);
+  }, []);
+
+  // Poll: refetch classes and check how many target divisions are now GENERATED
+  useEffect(() => {
+    if (!polling) return;
+
+    const tick = () => {
+      // Timeout guard
+      if (Date.now() - pollStartRef.current > POLL_MAX_DURATION_MS) {
+        stopPolling();
+        toast.info('Generation is taking longer than expected. Refresh manually to check.');
+        return;
+      }
+      dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
+    };
+
+    pollTimerRef.current = setInterval(tick, POLL_INTERVAL_MS);
+    return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
+  }, [polling, dispatch, stopPolling]);
+
+  // Check completion whenever classes data changes during polling.
+  // A division is "done" when its timetable status is GENERATED AND its
+  // generatedAt is AFTER the timestamp when we triggered the batch.
+  // This prevents false-positives from previously generated timetables.
+  useEffect(() => {
+    if (!polling || !classes) return;
+    const targets = targetDivisionIdsRef.current;
+    if (targets.size === 0) return;
+
+    const snapshot = preGenerateSnapshotRef.current;
+    const allDivs = (classes ?? []).flatMap((cls) => cls.divisions ?? []);
+    const doneCount = allDivs.filter((d) => {
+      if (!targets.has(d.id)) return false;
+      if (d.timetable?.status !== 'GENERATED') return false;
+      // Compare against pre-trigger snapshot — "done" means generatedAt changed
+      const before = snapshot.get(d.id);
+      const now = d.timetable.generatedAt;
+      return now !== before;
+    }).length;
+
+    if (doneCount >= targets.size) {
+      stopPolling();
+      toast.success(`All ${targets.size} timetable(s) generated successfully!`);
+      return;
+    }
+
+    // Use high-water mark for stall detection too (prevents flicker from partial refetches)
+    if (doneCount > highWaterRef.current) highWaterRef.current = doneCount;
+    const hwm = highWaterRef.current;
+
+    // Detect stalled progress — if count hasn't changed for 30s, stop
+    const prev = lastProgressRef.current;
+    if (hwm > prev.count) {
+      lastProgressRef.current = { count: hwm, at: Date.now() };
+    } else if (hwm === prev.count && prev.at > 0 && Date.now() - prev.at > 30_000) {
+      stopPolling();
+      const remaining = targets.size - hwm;
+      if (hwm > 0) {
+        toast.success(`${hwm} / ${targets.size} timetable(s) generated. ${remaining} division(s) may have no assignments.`);
+      }
+    }
+  }, [classes, polling, stopPolling]);
+
   // Flatten all divisions across classes
   const allDivisions = (classes ?? []).flatMap((cls) =>
     (cls.divisions ?? []).map((div) => ({
@@ -57,6 +142,19 @@ export function Component() {
   const generated = allDivisions.filter((d) => d.timetable?.status === 'GENERATED').length;
   const outdated = allDivisions.filter((d) => d.timetable?.status === 'OUTDATED').length;
   const pending = allDivisions.filter((d) => !d.timetable).length;
+
+  // Progress tracking during polling — use high-water mark to prevent flickering
+  const rawCompleted = polling
+    ? allDivisions.filter((d) => {
+        if (!targetDivisionIdsRef.current.has(d.id)) return false;
+        if (d.timetable?.status !== 'GENERATED') return false;
+        const before = preGenerateSnapshotRef.current.get(d.id);
+        return d.timetable.generatedAt !== before;
+      }).length
+    : 0;
+  if (rawCompleted > highWaterRef.current) highWaterRef.current = rawCompleted;
+  const completedOfQueued = polling ? highWaterRef.current : 0;
+  const progressPct = queuedCount > 0 ? Math.round((completedOfQueued / queuedCount) * 100) : 0;
 
   const getDivisionIdsForScope = (scope: GenerateScope) => {
     switch (scope) {
@@ -78,9 +176,24 @@ export function Component() {
       return;
     }
     try {
+      // Snapshot each target division's current generatedAt BEFORE triggering
+      const snapshot = new Map<string, string | null>();
+      for (const div of allDivisions) {
+        if (ids.includes(div.id)) {
+          snapshot.set(div.id, div.timetable?.generatedAt ?? null);
+        }
+      }
+      preGenerateSnapshotRef.current = snapshot;
+
       await generateMutation({ divisionIds: ids, adjacencyConstraintEnabled: adjacencyEnabled }).unwrap();
-      dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
-      toast.success(`Queued generation for ${ids.length} division(s).`);
+      // Start polling for completion
+      targetDivisionIdsRef.current = new Set(ids);
+      setQueuedCount(ids.length);
+      pollStartRef.current = Date.now();
+      lastProgressRef.current = { count: 0, at: Date.now() };
+      highWaterRef.current = 0;
+      setPolling(true);
+      toast.info(`Queued ${ids.length} division(s) — tracking progress...`);
     } catch {
       dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
       toast.error('Some timetables failed to generate. Check individual divisions.');
@@ -147,6 +260,27 @@ export function Component() {
             <Clock className="size-4 text-muted-foreground" />
             <span className="text-sm font-medium">{pending}</span>
             <span className="text-xs text-muted-foreground">Pending</span>
+          </div>
+        </div>
+      )}
+
+      {/* Generation progress */}
+      {polling && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 backdrop-blur-sm px-5 py-4 space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin text-amber-500" />
+              <span className="font-medium">Generating timetables...</span>
+            </div>
+            <span className="text-muted-foreground">
+              {completedOfQueued} / {queuedCount} completed
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-amber-500/20 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-amber-500 transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
           </div>
         </div>
       )}

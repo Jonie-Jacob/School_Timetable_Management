@@ -46,7 +46,7 @@ SOFT_WEIGHT_MAX_PERIODS = 6.0
 # the per-assignment "preferAdjacentPeriods" preference. This is intentionally
 # strong (close to a hard constraint) but soft so the GA can still converge
 # in tight schedules.
-SOFT_WEIGHT_ADJACENCY_GLOBAL = 50.0
+SOFT_WEIGHT_ADJACENCY_GLOBAL = 200.0
 
 
 def evaluate(

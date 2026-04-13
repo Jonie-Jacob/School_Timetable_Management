@@ -21,6 +21,7 @@ const TYPE_COLORS: Record<string, string> = {
   TEACHER_AVAILABILITY_CHANGED: 'warning',
   WEIGHTAGE_CHANGED: 'warning',
   ELECTIVE_GROUP_CHANGED: 'warning',
+  SWAP_CONFLICT: 'destructive',
 };
 
 export function Component() {
