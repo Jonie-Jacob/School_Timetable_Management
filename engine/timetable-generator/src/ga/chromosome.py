@@ -77,3 +77,25 @@ def get_day_slice(data: SchoolData, chromosome: np.ndarray, day_index: int) -> n
 def count_assignment_periods(chromosome: np.ndarray, assignment_index: int) -> int:
     """Count how many times an assignment appears in the chromosome."""
     return int(np.count_nonzero(chromosome == assignment_index))
+
+
+def create_seeded_chromosome(seed: np.ndarray, data: SchoolData, rng: np.random.Generator) -> np.ndarray:
+    """Create a chromosome from a pre-placed seed array.
+
+    The seed already has assignments placed by the greedy placer. We add
+    small random perturbations (swap 2-3 within-day pairs) so the GA
+    population has diversity while preserving the greedy structure.
+    """
+    chromosome = seed.copy()
+    ppd = data.periods_per_day
+
+    # Randomly swap 1-3 pairs within each day for diversity
+    swaps = rng.integers(1, 4)
+    for _ in range(swaps):
+        day_idx = rng.integers(0, data.num_days)
+        start = day_idx * ppd
+        pos1, pos2 = rng.choice(ppd, size=2, replace=False)
+        i, j = start + pos1, start + pos2
+        chromosome[i], chromosome[j] = chromosome[j], chromosome[i]
+
+    return chromosome

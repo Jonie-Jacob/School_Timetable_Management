@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CalendarDays, Eye, Zap, CheckCircle2, AlertTriangle, Clock, Loader2 } from 'lucide-react';
@@ -12,7 +12,18 @@ import { PageHeader } from '@/components/shared';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { Skeleton } from '@/components/ui/skeleton';
 import { classApi, useGetClassesQuery } from '@/features/classes/classApi';
-import { useGenerateTimetableMutation } from './timetableApi';
+import { useGenerateTimetableMutation, useGetActiveGenerationQuery } from './timetableApi';
+import { onGenerationEvent } from '@/hooks/useWebSocket';
+import {
+  GenerationProgress,
+  INITIAL_GENERATION_STATE,
+  type GenerationState,
+  type PhaseState,
+  type StepState,
+  type DivisionProgressState,
+  type DivisionCompletedState,
+  type SummaryState,
+} from './GenerationProgress';
 import {
   useExportDivisionPdfMutation, useExportDivisionExcelMutation,
   useExportClassesPdfMutation, useExportClassesExcelMutation,
@@ -30,8 +41,6 @@ import { cn } from '@/lib/cn';
 
 type GenerateScope = 'all' | 'outdated' | 'pending';
 
-const POLL_INTERVAL_MS = 5_000;
-const POLL_MAX_DURATION_MS = 5 * 60_000; // stop polling after 5 min
 
 export function Component() {
   useTranslation();
@@ -48,87 +57,214 @@ export function Component() {
   const [adjacencyEnabled, setAdjacencyEnabled] = useState(false);
   const [generateScope, setGenerateScope] = useState<GenerateScope>('all');
 
-  // ── Polling state for generation progress ──
-  const [polling, setPolling] = useState(false);
-  const [queuedCount, setQueuedCount] = useState(0);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollStartRef = useRef(0);
-  const targetDivisionIdsRef = useRef<Set<string>>(new Set());
-  // Snapshot of each target division's generatedAt BEFORE triggering.
-  // A division is "done" when its generatedAt differs from the snapshot.
-  const preGenerateSnapshotRef = useRef<Map<string, string | null>>(new Map());
-  const lastProgressRef = useRef<{ count: number; at: number }>({ count: 0, at: 0 });
-  // High-water mark — never show less progress than previously seen
-  const highWaterRef = useRef(0);
-
-  const stopPolling = useCallback(() => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-    setPolling(false);
-  }, []);
-
-  // Poll: refetch classes and check how many target divisions are now GENERATED
-  useEffect(() => {
-    if (!polling) return;
-
-    const tick = () => {
-      // Timeout guard
-      if (Date.now() - pollStartRef.current > POLL_MAX_DURATION_MS) {
-        stopPolling();
-        toast.info('Generation is taking longer than expected. Refresh manually to check.');
-        return;
+  // ── WebSocket-driven generation progress ──
+  // Restore last completed generation result from localStorage
+  const [genState, setGenState] = useState<GenerationState>(() => {
+    try {
+      const saved = localStorage.getItem('last-generation-result');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Only restore if it has a summary (completed generation)
+        if (parsed.summary) {
+          return {
+            ...INITIAL_GENERATION_STATE,
+            summary: parsed.summary,
+            divisionCompleted: new Map(Object.entries(parsed.divisionCompleted ?? {})),
+            currentPhase: { phase: 'complete', message: 'Last generation results', totalDivisions: parsed.summary.totalDivisions, completedDivisions: parsed.summary.completedDivisions },
+          };
+        }
       }
-      dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
-    };
+    } catch { /* ignore */ }
+    return INITIAL_GENERATION_STATE;
+  });
 
-    pollTimerRef.current = setInterval(tick, POLL_INTERVAL_MS);
-    return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
-  }, [polling, dispatch, stopPolling]);
+  // Check for active generation on mount + poll every 5s while active
+  const { data: activeGen, refetch: refetchActive } = useGetActiveGenerationQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+  });
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Check completion whenever classes data changes during polling.
-  // A division is "done" when its timetable status is GENERATED AND its
-  // generatedAt is AFTER the timestamp when we triggered the batch.
-  // This prevents false-positives from previously generated timetables.
   useEffect(() => {
-    if (!polling || !classes) return;
-    const targets = targetDivisionIdsRef.current;
-    if (targets.size === 0) return;
-
-    const snapshot = preGenerateSnapshotRef.current;
-    const allDivs = (classes ?? []).flatMap((cls) => cls.divisions ?? []);
-    const doneCount = allDivs.filter((d) => {
-      if (!targets.has(d.id)) return false;
-      if (d.timetable?.status !== 'GENERATED') return false;
-      // Compare against pre-trigger snapshot — "done" means generatedAt changed
-      const before = snapshot.get(d.id);
-      const now = d.timetable.generatedAt;
-      return now !== before;
-    }).length;
-
-    if (doneCount >= targets.size) {
-      stopPolling();
-      toast.success(`All ${targets.size} timetable(s) generated successfully!`);
+    if (!genState.active) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       return;
     }
+    // Poll active generation endpoint every 5s for progress
+    pollRef.current = setInterval(() => {
+      refetchActive();
+    }, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [genState.active, refetchActive]);
 
-    // Use high-water mark for stall detection too (prevents flicker from partial refetches)
-    if (doneCount > highWaterRef.current) highWaterRef.current = doneCount;
-    const hwm = highWaterRef.current;
+  // Update genState from polling data (fallback when WebSocket isn't available)
+  useEffect(() => {
+    if (!activeGen) return;
 
-    // Detect stalled progress — if count hasn't changed for 30s, stop
-    const prev = lastProgressRef.current;
-    if (hwm > prev.count) {
-      lastProgressRef.current = { count: hwm, at: Date.now() };
-    } else if (hwm === prev.count && prev.at > 0 && Date.now() - prev.at > 30_000) {
-      stopPolling();
-      const remaining = targets.size - hwm;
-      if (hwm > 0) {
-        toast.success(`${hwm} / ${targets.size} timetable(s) generated. ${remaining} division(s) may have no assignments.`);
-      }
+    if (activeGen.active && !genState.active) {
+      setGenState((prev) => ({ ...prev, active: true }));
     }
-  }, [classes, polling, stopPolling]);
+
+    // Update progress from polled job data
+    if (activeGen.totalDivisions && activeGen.totalDivisions > 0) {
+      const completed = (activeGen as any).completedDivisions ?? 0;
+      const total = activeGen.totalDivisions;
+      const jobs = (activeGen as any).jobs as Array<{ divisionId: string; divisionLabel: string; status: string; completedAt?: string }> | undefined;
+
+      setGenState((prev) => {
+        // If we just started a new generation (active + no summary + early phases),
+        // don't let stale polling data from the previous run override our fresh state
+        if (prev.active && !prev.summary && !activeGen.active) {
+          return prev;
+        }
+
+        const next = { ...prev };
+
+        // Update phase based on progress — only if we haven't received
+        // richer WebSocket phase updates
+        if (!prev.phases.length || prev.phases[prev.phases.length - 1] === 'loading') {
+          if (completed === 0 && activeGen.active) {
+            next.currentPhase = { phase: 'demand_placement', message: `Scheduling ${total} divisions — constraint propagation in progress...`, totalDivisions: total, completedDivisions: 0 };
+          } else if (completed > 0 && completed < total) {
+            next.currentPhase = { phase: 'writing', message: `Writing timetables (${completed}/${total})...`, totalDivisions: total, completedDivisions: completed };
+          }
+        }
+
+        // Update division completed from polled jobs — but DON'T overwrite
+        // entries that came from WebSocket (which have richer violation data)
+        if (jobs) {
+          const newCompleted = new Map(prev.divisionCompleted);
+          for (const job of jobs) {
+            if (job.status === 'COMPLETED' && !newCompleted.has(job.divisionId)) {
+              newCompleted.set(job.divisionId, {
+                divisionId: job.divisionId,
+                divisionLabel: job.divisionLabel,
+                completedIndex: newCompleted.size + 1,
+                totalDivisions: total,
+                generationsRun: 0,
+                elapsed: 0,
+                hardViolations: 0,
+                timetableId: '',
+                violations: [],
+              });
+            }
+          }
+          next.divisionCompleted = newCompleted;
+        }
+
+        // Check if all done
+        if (!activeGen.active && completed >= total) {
+          // If WS is active (we've received phase events), don't build summary
+          // from polling — wait for the richer generation_summary WS event
+          // which includes failureAnalysis
+          if (prev.phases.length > 0 && !prev.summary) {
+            // WS is active but summary hasn't arrived yet — just mark complete
+            next.active = false;
+            next.currentPhase = { phase: 'complete', message: `All ${total} timetables generated`, totalDivisions: total, completedDivisions: total };
+          } else if (!prev.summary) {
+            // No WS — build summary from polling data (fallback)
+            next.active = false;
+            next.currentPhase = { phase: 'complete', message: `All ${total} timetables generated`, totalDivisions: total, completedDivisions: total };
+
+            const allCompleted = Array.from(next.divisionCompleted.values());
+            const withViolations = allCompleted.filter(dc => dc.violations && dc.violations.length > 0);
+            const summary: SummaryState = {
+              totalDivisions: total,
+              completedDivisions: completed,
+              totalElapsed: 0,
+              perfectDivisions: total - withViolations.length,
+              divisionsWithViolations: withViolations.length,
+              allViolations: withViolations.map(dc => ({
+                divisionLabel: dc.divisionLabel,
+                divisionId: dc.divisionId,
+                violations: dc.violations,
+              })),
+              failureAnalysis: (activeGen as any).failureAnalysis ?? [],
+            };
+            next.summary = summary;
+            dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
+            try {
+              localStorage.setItem('last-generation-result', JSON.stringify({
+                summary,
+                divisionCompleted: Object.fromEntries(next.divisionCompleted),
+              }));
+            } catch { /* ignore */ }
+          }
+        }
+
+        return next;
+      });
+    }
+  }, [activeGen, genState.active, dispatch]);
+
+  // Subscribe to WebSocket generation events (enhanced path when WS is available)
+  useEffect(() => {
+    return onGenerationEvent((event) => {
+      setGenState((prev) => {
+        const next = { ...prev };
+
+        switch (event.type) {
+          case 'generation_phase': {
+            const p = event.payload as unknown as PhaseState;
+            // New generation starting — clear old results
+            if (p.phase === 'loading') {
+              next.summary = null;
+              next.divisionCompleted = new Map();
+              next.divisionProgress = new Map();
+              next.currentStep = null;
+              next.phases = [];
+              localStorage.removeItem('last-generation-result');
+            }
+            next.active = p.phase !== 'complete';
+            next.currentPhase = p;
+            if (!next.phases.includes(p.phase)) {
+              next.phases = [...next.phases, p.phase];
+            }
+            if (p.phase === 'complete') {
+              // Refetch class list to update statuses
+              dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
+            }
+            break;
+          }
+          case 'generation_step': {
+            next.currentStep = event.payload as unknown as StepState;
+            break;
+          }
+          case 'division_progress': {
+            const dp = event.payload as unknown as DivisionProgressState;
+            next.divisionProgress = new Map(prev.divisionProgress);
+            next.divisionProgress.set(dp.divisionId, dp);
+            break;
+          }
+          case 'division_completed': {
+            const dc = event.payload as unknown as DivisionCompletedState;
+            next.divisionCompleted = new Map(prev.divisionCompleted);
+            next.divisionCompleted.set(dc.divisionId, dc);
+            // Remove from in-progress
+            next.divisionProgress = new Map(prev.divisionProgress);
+            next.divisionProgress.delete(dc.divisionId);
+            // Refetch to update status badges
+            dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
+            break;
+          }
+          case 'generation_summary': {
+            next.summary = event.payload as unknown as SummaryState;
+            next.active = false;
+            dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
+            // Persist to localStorage for viewing after navigation
+            try {
+              const toSave = {
+                summary: next.summary,
+                divisionCompleted: Object.fromEntries(next.divisionCompleted),
+              };
+              localStorage.setItem('last-generation-result', JSON.stringify(toSave));
+            } catch { /* ignore quota errors */ }
+            break;
+          }
+        }
+        return next;
+      });
+    });
+  }, [dispatch]);
 
   // Flatten all divisions across classes
   const allDivisions = (classes ?? []).flatMap((cls) =>
@@ -142,19 +278,6 @@ export function Component() {
   const generated = allDivisions.filter((d) => d.timetable?.status === 'GENERATED').length;
   const outdated = allDivisions.filter((d) => d.timetable?.status === 'OUTDATED').length;
   const pending = allDivisions.filter((d) => !d.timetable).length;
-
-  // Progress tracking during polling — use high-water mark to prevent flickering
-  const rawCompleted = polling
-    ? allDivisions.filter((d) => {
-        if (!targetDivisionIdsRef.current.has(d.id)) return false;
-        if (d.timetable?.status !== 'GENERATED') return false;
-        const before = preGenerateSnapshotRef.current.get(d.id);
-        return d.timetable.generatedAt !== before;
-      }).length
-    : 0;
-  if (rawCompleted > highWaterRef.current) highWaterRef.current = rawCompleted;
-  const completedOfQueued = polling ? highWaterRef.current : 0;
-  const progressPct = queuedCount > 0 ? Math.round((completedOfQueued / queuedCount) * 100) : 0;
 
   const getDivisionIdsForScope = (scope: GenerateScope) => {
     switch (scope) {
@@ -175,28 +298,33 @@ export function Component() {
       toast.info('No divisions to generate for the selected scope.');
       return;
     }
-    try {
-      // Snapshot each target division's current generatedAt BEFORE triggering
-      const snapshot = new Map<string, string | null>();
-      for (const div of allDivisions) {
-        if (ids.includes(div.id)) {
-          snapshot.set(div.id, div.timetable?.generatedAt ?? null);
-        }
-      }
-      preGenerateSnapshotRef.current = snapshot;
 
+    // Clear old results and show progress immediately
+    localStorage.removeItem('last-generation-result');
+    setGenState({
+      ...INITIAL_GENERATION_STATE,
+      active: true,
+      currentPhase: {
+        phase: 'loading',
+        message: `Queuing ${ids.length} division(s)...`,
+        totalDivisions: ids.length,
+        completedDivisions: 0,
+      },
+      phases: ['loading'],
+    });
+
+    try {
       await generateMutation({ divisionIds: ids, adjacencyConstraintEnabled: adjacencyEnabled }).unwrap();
-      // Start polling for completion
-      targetDivisionIdsRef.current = new Set(ids);
-      setQueuedCount(ids.length);
-      pollStartRef.current = Date.now();
-      lastProgressRef.current = { count: 0, at: Date.now() };
-      highWaterRef.current = 0;
-      setPolling(true);
-      toast.info(`Queued ${ids.length} division(s) — tracking progress...`);
-    } catch {
-      dispatch(classApi.util.invalidateTags([{ type: 'Class', id: 'LIST' }]));
-      toast.error('Some timetables failed to generate. Check individual divisions.');
+      toast.info(`Queued ${ids.length} division(s) — generation starting...`);
+    } catch (err: unknown) {
+      const error = err as { status?: number; data?: { error?: { code?: string; message?: string } } };
+      // Reset progress on failure
+      setGenState(INITIAL_GENERATION_STATE);
+      if (error?.status === 409 && error?.data?.error?.code === 'GENERATION_IN_PROGRESS') {
+        toast.error('A generation is already in progress. Please wait for it to complete.');
+      } else {
+        toast.error(error?.data?.error?.message ?? 'Failed to start generation.');
+      }
     }
   };
 
@@ -232,7 +360,7 @@ export function Component() {
               <Button
                 variant="gradient"
                 onClick={() => setShowGenerateDialog(true)}
-                disabled={isGeneratingAll}
+                disabled={isGeneratingAll || genState.active}
                 className="gap-2"
               >
                 {isGeneratingAll ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
@@ -265,25 +393,13 @@ export function Component() {
       )}
 
       {/* Generation progress */}
-      {polling && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 backdrop-blur-sm px-5 py-4 space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin text-amber-500" />
-              <span className="font-medium">Generating timetables...</span>
-            </div>
-            <span className="text-muted-foreground">
-              {completedOfQueued} / {queuedCount} completed
-            </span>
-          </div>
-          <div className="h-2 rounded-full bg-amber-500/20 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-amber-500 transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-        </div>
-      )}
+      <GenerationProgress
+        state={genState}
+        onDismiss={() => {
+          setGenState(INITIAL_GENERATION_STATE);
+          localStorage.removeItem('last-generation-result');
+        }}
+      />
 
       {isLoading && (
         <div className="space-y-3">

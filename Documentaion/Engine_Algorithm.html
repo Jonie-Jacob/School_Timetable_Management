@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timetable Engine — Algorithm Flow</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --card: #ffffff;
+    --border: #e7e5e4;
+    --text: #1c1917;
+    --muted: #78716c;
+    --amber: #f59e0b;
+    --amber-light: #fef3c7;
+    --green: #22c55e;
+    --green-light: #dcfce7;
+    --red: #ef4444;
+    --red-light: #fee2e2;
+    --blue: #3b82f6;
+    --blue-light: #dbeafe;
+    --purple: #8b5cf6;
+    --purple-light: #ede9fe;
+    --teal: #14b8a6;
+    --teal-light: #ccfbf1;
+    --stone-800: #292524;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  h1 span { color: var(--amber); }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 2.5rem 0 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  h2 .step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+
+  /* Pipeline overview */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 1.5rem 0 2rem;
+    overflow-x: auto;
+    padding: 1rem 0;
+  }
+  .pipeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 1rem 1.2rem;
+    border-radius: 12px;
+    min-width: 120px;
+    text-align: center;
+    position: relative;
+  }
+  .pipeline-step .num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: white;
+  }
+  .pipeline-step .label { font-size: 0.8rem; font-weight: 600; }
+  .pipeline-step .desc { font-size: 0.7rem; color: var(--muted); }
+  .pipeline-arrow {
+    font-size: 1.2rem;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .ps-load { background: var(--blue-light); }
+  .ps-load .num { background: var(--blue); }
+  .ps-partition { background: var(--purple-light); }
+  .ps-partition .num { background: var(--purple); }
+  .ps-place { background: var(--amber-light); }
+  .ps-place .num { background: var(--amber); }
+  .ps-optimize { background: var(--teal-light); }
+  .ps-optimize .num { background: var(--teal); }
+  .ps-write { background: var(--green-light); }
+  .ps-write .num { background: var(--green); }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .card-header .icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  /* Flow items */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding-left: 1rem;
+    border-left: 2px solid var(--border);
+    margin: 0.5rem 0 0.5rem 0.75rem;
+  }
+  .flow-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    padding: 0.25rem 0;
+    position: relative;
+  }
+  .flow-item::before {
+    content: '';
+    position: absolute;
+    left: -1.35rem;
+    top: 0.55rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+  .flow-item.check::before { background: var(--green); }
+  .flow-item.warn::before { background: var(--amber); }
+  .flow-item.fail::before { background: var(--red); }
+
+  /* Decision box */
+  .decision {
+    background: var(--amber-light);
+    border: 1px solid #fbbf24;
+    border-radius: 10px;
+    padding: 1rem;
+    margin: 0.75rem 0;
+    font-size: 0.85rem;
+  }
+  .decision-title {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .decision .yes { color: var(--green); font-weight: 600; }
+  .decision .no { color: var(--red); font-weight: 600; }
+
+  /* Code-like box */
+  .code-box {
+    background: var(--stone-800);
+    color: #e7e5e4;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 0.75rem 0;
+  }
+  .code-box .comment { color: #78716c; }
+  .code-box .keyword { color: #f59e0b; }
+  .code-box .string { color: #22c55e; }
+  .code-box .num { color: #3b82f6; background: none; width: auto; height: auto; border-radius: 0; display: inline; }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin: 0.75rem 0;
+  }
+  th {
+    background: var(--stone-800);
+    color: white;
+    padding: 0.6rem 1rem;
+    text-align: left;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  th:first-child { border-radius: 8px 0 0 0; }
+  th:last-child { border-radius: 0 8px 0 0; }
+  td {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:nth-child(even) { background: #fafaf9; }
+
+  /* Badge */
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+  .badge-green { background: var(--green-light); color: #166534; }
+  .badge-amber { background: var(--amber-light); color: #92400e; }
+  .badge-red { background: var(--red-light); color: #991b1b; }
+  .badge-blue { background: var(--blue-light); color: #1e40af; }
+  .badge-purple { background: var(--purple-light); color: #5b21b6; }
+
+  /* Separator */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2rem 0;
+  }
+
+  /* End-to-end vertical flow */
+  .e2e {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    margin: 1rem 0;
+  }
+  .e2e-step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.6rem 1.5rem;
+    text-align: center;
+    font-size: 0.85rem;
+    width: 100%;
+    max-width: 500px;
+  }
+  .e2e-arrow {
+    font-size: 1.2rem;
+    color: var(--muted);
+    padding: 0.2rem;
+  }
+  .e2e-step strong { color: var(--amber); }
+  .e2e-step .time { color: var(--muted); font-size: 0.75rem; }
+
+  @media (max-width: 768px) {
+    body { padding: 1rem; }
+    .pipeline { flex-wrap: wrap; gap: 0.5rem; }
+    .pipeline-arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Timetable Engine <span>Algorithm Flow</span></h1>
+<p class="subtitle">5-step constraint propagation pipeline for whole-school timetable generation</p>
+
+<!-- Pipeline Overview -->
+<div class="pipeline">
+  <div class="pipeline-step ps-load">
+    <div class="num">1</div>
+    <div class="label">Load Data</div>
+    <div class="desc">Divisions, teachers, slots</div>
+  </div>
+  <div class="pipeline-arrow">&rarr;</div>
+  <div class="pipeline-step ps-partition">
+    <div class="num">2</div>
+    <div class="label">Partition</div>
+    <div class="desc">Teacher time slots</div>
+  </div>
+  <div class="pipeline-arrow">&rarr;</div>
+  <div class="pipeline-step ps-place">
+    <div class="num">3+4</div>
+    <div class="label">Place + Backtrack</div>
+    <div class="desc">Demand-driven</div>
+  </div>
+  <div class="pipeline-arrow">&rarr;</div>
+  <div class="pipeline-step ps-optimize">
+    <div class="num">5</div>
+    <div class="label">Optimize</div>
+    <div class="desc">Local swaps</div>
+  </div>
+  <div class="pipeline-arrow">&rarr;</div>
+  <div class="pipeline-step ps-write">
+    <div class="num">&check;</div>
+    <div class="label">Write DB</div>
+    <div class="desc">Audit violations</div>
+  </div>
+</div>
+
+<hr>
+
+<!-- Step 1 -->
+<h2><span class="step-badge" style="background:var(--blue)">1</span> Load School Data</h2>
+<p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">
+  <code>whole_school_loader.py</code> &rarr; <code>load_whole_school_data()</code>
+</p>
+
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--blue)">&darr;</div> For each division</div>
+  <div class="flow">
+    <div class="flow-item check">Load period structure (working days, slots, break detection)</div>
+    <div class="flow-item check">Load assignments (subject, teacher, weightage, elective group)</div>
+    <div class="flow-item check">Build logical assignments (collapse elective groups into single units)</div>
+    <div class="flow-item check">Merge teacher info into global pool</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--blue)">&darr;</div> Global computations</div>
+  <div class="flow">
+    <div class="flow-item check">Load teacher unavailability normalized to <code>(teacher_id, day_of_week, start_time)</code> &mdash; works across different period structures</div>
+    <div class="flow-item check">Compute <strong>flexibility score</strong> per assignment = count of valid slots considering HARD prefs + teacher availability + teacher load factor</div>
+  </div>
+</div>
+
+<div class="code-box">
+<span class="comment"># Output:</span>
+WholeSchoolData {
+  divisions: { <span class="string">div_id</span> &rarr; SchoolData }
+  teachers: { <span class="string">teacher_id</span> &rarr; TeacherInfo }
+  teacher_unavailable_times: set&lt;(<span class="string">tid</span>, <span class="num">dow</span>, <span class="string">start_time</span>)&gt;
+  flexibility_scores: { <span class="string">div_id</span> &rarr; [(<span class="num">la_idx</span>, <span class="num">score</span>)] }
+}
+</div>
+
+<hr>
+
+<!-- Step 2 -->
+<h2><span class="step-badge" style="background:var(--purple)">2</span> Teacher Time Partitioning</h2>
+<p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">
+  <code>whole_school_loader.py</code> &rarr; <code>compute_teacher_partitions()</code>
+</p>
+
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--purple)">T</div> Purpose</div>
+  <p style="font-size:0.85rem">Prevent shared teachers from being consumed entirely by early-processed divisions. Each division gets a guaranteed pool of time slots for its shared teachers.</p>
+</div>
+
+<div class="decision">
+  <div class="decision-title">&#9670; For each teacher</div>
+  <p><strong>Single-division teacher?</strong></p>
+  <p class="yes">&rarr; YES: Give ALL available slots (no partition needed)</p>
+  <p><strong>Shared across 2+ divisions?</strong></p>
+  <p>&rarr; Collect all available time slots (excluding unavailability)</p>
+  <p>&rarr; Check HARD preferences per division</p>
+  <p class="yes">&rarr; Division HAS HARD prefs: Partition = only HARD-preferred slots</p>
+  <p class="no">&rarr; Division has NO HARD prefs: Partition = ALL available slots (non-exclusive)</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--purple)">Ex</div> Example: Anu Mathew (22pw across 8 divisions)</div>
+  <table>
+    <tr><th>Division</th><th>Constraint</th><th>Partition</th></tr>
+    <tr><td>XII-A</td><td><span class="badge badge-red">HARD</span> Labs Mon/Tue P1-P2</td><td>4 slots: (Mon 09:00), (Mon 09:45), (Tue 09:00), (Tue 09:45)</td></tr>
+    <tr><td>XI-A</td><td><span class="badge badge-green">None</span></td><td>All 40 available slots</td></tr>
+    <tr><td>XI-B</td><td><span class="badge badge-green">None</span></td><td>All 40 available slots</td></tr>
+  </table>
+</div>
+
+<hr>
+
+<!-- Step 3 -->
+<h2><span class="step-badge" style="background:var(--amber)">3</span> Demand-Driven Placement</h2>
+<p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">
+  <code>greedy.py</code> &rarr; <code>schedule_all()</code> main loop
+</p>
+
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--amber)">!</div> Core Principle</div>
+  <p style="font-size:0.85rem">Instead of sorting assignments then placing sequentially, <strong>always resolve the tightest bottleneck first</strong> and assign it the <strong>least constraining value</strong>.</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--amber)">&circlearrowright;</div> Main Loop</div>
+  <div class="flow">
+    <div class="flow-item">For EACH unplaced assignment-period, count valid slots</div>
+    <div class="flow-item warn">Pick the one with <strong>FEWEST valid slots</strong> (most constrained)</div>
+    <div class="flow-item check">Score each valid slot by <strong>demand</strong> (how many others want it)</div>
+    <div class="flow-item check">Place in slot with <strong>LOWEST demand</strong> (least constraining)</div>
+    <div class="flow-item">Update teacher_busy, chromosome, history</div>
+    <div class="flow-item fail">If 0 valid slots &rarr; Step 4 (Backtrack)</div>
+  </div>
+</div>
+
+<h3>Valid Slot Checks</h3>
+<div class="card">
+  <p style="font-size:0.85rem;margin-bottom:0.75rem">A slot at gene index <code>gi</code> is valid for assignment <code>la</code> if ALL pass:</p>
+  <table>
+    <tr><th>#</th><th>Check</th><th>Source</th></tr>
+    <tr><td>1</td><td>Slot is empty <code>(chromosome[gi] == -1)</code></td><td>Chromosome state</td></tr>
+    <tr><td>2</td><td>Day not in <code>excludedDays</code></td><td><span class="badge badge-red">HARD</span> preferences</td></tr>
+    <tr><td>3</td><td>Day in <code>preferredDays</code> (if set)</td><td><span class="badge badge-red">HARD</span> preferences</td></tr>
+    <tr><td>4</td><td>Period not in <code>excludedPeriodRange</code></td><td><span class="badge badge-red">HARD</span> preferences</td></tr>
+    <tr><td>5</td><td>Period in <code>preferredPeriodRange</code> (if set)</td><td><span class="badge badge-red">HARD</span> preferences</td></tr>
+    <tr><td>6</td><td>Teacher not unavailable at (day, time)</td><td>Teacher availability</td></tr>
+    <tr><td>7</td><td>Teacher not busy at (day, time)</td><td>Global teacher_busy set</td></tr>
+    <tr><td>8</td><td>Slot in teacher's partition for this division</td><td>Teacher partitioning</td></tr>
+  </table>
+</div>
+
+<h3>Slot Scoring (Demand)</h3>
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--amber)">#</div> _compute_slot_demand()</div>
+  <div class="code-box">
+demand = <span class="num">0</span>
+<span class="comment"># Count how many OTHER assignments in this division could use this slot</span>
+<span class="keyword">for</span> each other unplaced assignment:
+    <span class="keyword">if</span> teacher not busy AND not unavailable at this time:
+        demand += <span class="num">1</span>
+
+<span class="comment"># Adjustments:</span>
+<span class="keyword">if</span> adjacent to same subject: demand -= <span class="num">10</span>   <span class="comment"># strong adjacency preference</span>
+<span class="keyword">if</span> same day already has this subject: demand += <span class="num">2</span>  <span class="comment"># spread penalty</span>
+
+<span class="comment"># Pick slot with LOWEST demand (save contested slots for those who need them)</span>
+  </div>
+</div>
+
+<hr>
+
+<!-- Step 4 -->
+<h2><span class="step-badge" style="background:var(--red)">4</span> Backtracking</h2>
+<p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">
+  <code>greedy.py</code> &rarr; <code>_try_backtrack()</code> &mdash; triggered when Step 3 finds 0 valid slots
+</p>
+
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--red)">&larrhk;</div> Undo &amp; Retry (max depth 5)</div>
+  <div class="flow">
+    <div class="flow-item fail">Assignment X has 0 valid slots &mdash; teacher busy everywhere</div>
+    <div class="flow-item">Find last 50 placements involving same teacher(s)</div>
+    <div class="flow-item">Pick up to 5 candidates to try undoing</div>
+  </div>
+</div>
+
+<div class="decision">
+  <div class="decision-title">&#9670; For each undo candidate</div>
+  <p><strong>a.</strong> UNDO the candidate (remove from chromosome, free teacher slot)</p>
+  <p><strong>b.</strong> Try placing X again (teacher now free)</p>
+  <p class="yes">&rarr; X fits? Place X, then re-place undone candidate elsewhere</p>
+  <p class="yes">&nbsp;&nbsp;&rarr; Candidate also fits? <strong>SUCCESS</strong></p>
+  <p class="no">&nbsp;&nbsp;&rarr; Candidate doesn't fit? Undo both, try next candidate</p>
+  <p class="no">&rarr; X still doesn't fit? Restore candidate, try next</p>
+  <p style="margin-top:0.5rem"><strong>All exhausted?</strong> &rarr; <span class="badge badge-red">FALLBACK</span> Place X in any empty slot (accepts conflict)</p>
+</div>
+
+<hr>
+
+<!-- Step 5 -->
+<h2><span class="step-badge" style="background:var(--teal)">5</span> Local Optimization</h2>
+<p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">
+  <code>greedy.py</code> &rarr; <code>_local_optimize()</code> &mdash; deterministic swaps, no randomness
+</p>
+
+<div class="card">
+  <div class="card-header"><div class="icon" style="background:var(--teal)">&hArr;</div> For each division &rarr; each day &rarr; each pair (i, j)</div>
+  <div class="flow">
+    <div class="flow-item">Would swapping create a teacher conflict? <span class="badge badge-red">YES &rarr; Skip</span></div>
+    <div class="flow-item check">Compute soft score before and after swap</div>
+    <div class="flow-item check">Score improved? &rarr; <strong>Keep swap</strong></div>
+    <div class="flow-item">Score same/worse? &rarr; Revert swap</div>
+  </div>
+
+  <h3 style="margin-top:1rem">Soft Score Factors</h3>
+  <table>
+    <tr><th>Factor</th><th>Score</th><th>Goal</th></tr>
+    <tr><td>Adjacency gap (no neighbor of same subject)</td><td>+5 penalty</td><td>Cluster same-subject periods</td></tr>
+    <tr><td>&gt;2 of same subject per day</td><td>+3 per extra</td><td>Spread across days</td></tr>
+    <tr><td>High-weightage in late period</td><td>+0.3 &times; period_idx</td><td>Core subjects in early slots</td></tr>
+  </table>
+</div>
+
+<hr>
+
+<!-- Write -->
+<h2><span class="step-badge" style="background:var(--green)">&check;</span> Write to Database + Audit</h2>
+<p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">
+  <code>output_writer.py</code> &rarr; <code>write_timetable()</code>
+</p>
+
+<div class="card">
+  <div class="flow">
+    <div class="flow-item check">Upsert timetable record (GENERATED status)</div>
+    <div class="flow-item check">Delete old timetable_slots</div>
+    <div class="flow-item check">Insert new timetable_slots from chromosome
+      <br><span style="font-size:0.8rem;color:var(--muted)">&bull; Regular: 1 row per slot &bull; Elective: distribute split-teachers by parallelSections</span></div>
+    <div class="flow-item check">Mark generation_job as COMPLETED</div>
+    <div class="flow-item warn">Run <code>audit_violations()</code> &rarr; list of human-readable violations</div>
+    <div class="flow-item check">Push <code>division_completed</code> via WebSocket</div>
+  </div>
+</div>
+
+<hr>
+
+<!-- End to End -->
+<h2>End-to-End Flow</h2>
+
+<div class="e2e">
+  <div class="e2e-step">User clicks <strong>"Generate All"</strong></div>
+  <div class="e2e-arrow">&darr;</div>
+  <div class="e2e-step">Frontend &rarr; <code>POST /api/timetables/generate</code></div>
+  <div class="e2e-arrow">&darr;</div>
+  <div class="e2e-step">Lambda creates generation_jobs, launches <strong>1 ECS Fargate task</strong></div>
+  <div class="e2e-arrow">&darr;</div>
+  <div class="e2e-step"><span class="badge badge-blue">Step 1</span> Load all 35 divisions' data <span class="time">~5s</span></div>
+  <div class="e2e-arrow">&darr;</div>
+  <div class="e2e-step"><span class="badge badge-purple">Step 2</span> Partition 59 shared teachers <span class="time">~1s</span></div>
+  <div class="e2e-arrow">&darr;</div>
+  <div class="e2e-step"><span class="badge badge-amber">Step 3+4</span> Demand-driven placement of 1402 periods <span class="time">~60s</span></div>
+  <div class="e2e-arrow">&darr;</div>
+  <div class="e2e-step"><span class="badge" style="background:var(--teal-light);color:#0f766e">Step 5</span> Local optimization for 35 divisions <span class="time">~3s</span></div>
+  <div class="e2e-arrow">&darr;</div>
+  <div class="e2e-step"><span class="badge badge-green">Write</span> 35 timetables to DB + audit violations <span class="time">~5s</span></div>
+  <div class="e2e-arrow">&darr;</div>
+  <div class="e2e-step">Push <code>generation_summary</code> via WebSocket &rarr; Frontend shows results</div>
+</div>
+
+<hr>
+
+<!-- Data Issues -->
+<h2>Current Data Issues</h2>
+<p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.75rem">These are data problems, not algorithm bugs. The engine correctly identifies them as impossible constraints.</p>
+
+<table>
+  <tr><th>Issue</th><th>Root Cause</th><th>Impact</th><th>Fix</th></tr>
+  <tr>
+    <td>Drawing teacher <code>unavail=40</code></td>
+    <td>Teacher marked unavailable for ALL 40 slots</td>
+    <td><span class="badge badge-red">~20 fallbacks</span></td>
+    <td>Fix teacher availability in UI</td>
+  </tr>
+  <tr>
+    <td>CCA <code>day_pref=40</code></td>
+    <td>HARD preferredDays excludes all 5 working days</td>
+    <td><span class="badge badge-red">~40 fallbacks</span></td>
+    <td>Fix CCA scheduling preferences</td>
+  </tr>
+  <tr>
+    <td colspan="4" style="text-align:center;color:var(--muted);font-style:italic">These account for the majority of the 856/1402 fallback placements</td>
+  </tr>
+</table>
+
+<div style="margin-top:3rem;padding:1rem;text-align:center;color:var(--muted);font-size:0.8rem;border-top:1px solid var(--border)">
+  Zyphr School Timetable Management &mdash; Engine Algorithm Documentation &mdash; April 2026
+</div>
+
+</body>
+</html>

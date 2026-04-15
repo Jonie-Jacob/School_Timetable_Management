@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..data_loader import SchoolData
-from .chromosome import create_random_chromosome
+from .chromosome import create_random_chromosome, create_seeded_chromosome
 from .fitness import evaluate
 from .operators import (
     initialize_population,
@@ -59,6 +59,7 @@ def run_ga(
     data: SchoolData,
     on_progress: callable | None = None,
     seed: int | None = None,
+    seed_chromosome: 'numpy.ndarray | None' = None,
 ) -> GAResult:
     """
     Run the genetic algorithm for a single division.
@@ -81,7 +82,13 @@ def run_ga(
     conv_threshold = ADJ_CONVERGENCE_THRESHOLD if data.adjacency_constraint_enabled else CONVERGENCE_THRESHOLD
 
     # ── Initialize population ──────────────────────────────────────────────
-    population = initialize_population(data, pop_size, rng)
+    if seed_chromosome is not None:
+        # Seed the population with the greedy placement + variations
+        population = [seed_chromosome.copy()]  # elite: exact greedy result
+        for _ in range(pop_size - 1):
+            population.append(create_seeded_chromosome(seed_chromosome, data, rng))
+    else:
+        population = initialize_population(data, pop_size, rng)
 
     # Repair all chromosomes to ensure valid weightage distribution
     population = [repair_chromosome(c, data, rng) for c in population]

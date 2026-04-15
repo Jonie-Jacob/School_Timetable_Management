@@ -91,6 +91,23 @@ def mark_job_running(job_id: str) -> None:
         conn.close()
 
 
+def save_batch_result_summary(job_id: str, summary: dict) -> None:
+    """Save the batch result summary (including failure analyses) on a job."""
+    import json
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE generation_jobs
+                SET result_summary = %s,
+                    updated_at = %s
+                WHERE id = %s
+            """, (json.dumps(summary), datetime.now(timezone.utc), job_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+
 def mark_job_failed(job_id: str, error_message: str) -> None:
     """Update generation_jobs status to FAILED with error message."""
     conn = psycopg2.connect(DATABASE_URL)

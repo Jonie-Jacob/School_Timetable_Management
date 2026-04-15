@@ -529,3 +529,152 @@ def _s6_teacher_max_periods(data: SchoolData, chromosome: np.ndarray) -> float:
         if total > tinfo.max_periods_per_week:
             penalty += (total - tinfo.max_periods_per_week) * SOFT_WEIGHT_MAX_PERIODS
     return penalty
+
+
+# ── Violation Audit ──────────────────────────────────────────────────────
+
+def audit_violations(
+    data: SchoolData,
+    chromosome: np.ndarray,
+) -> list[dict]:
+    """Decompose fitness into individual, human-readable violations.
+
+    Returns a list of dicts with keys: type, severity ('hard'|'soft'), message.
+    """
+    violations: list[dict] = []
+    total = data.total_periods
+    logicals = data.logical_assignments
+    ppd = data.periods_per_day
+
+    # ── H1: Teacher double-bookings ──────────────────────────────────────
+    slot_teachers: dict[tuple[str, str], list[tuple[str, int]]] = defaultdict(list)
+    for gi in range(total):
+        a_idx = int(chromosome[gi])
+        if a_idx < 0:
+            continue
+        _, _, wd_id, slot_id = decode_gene(data, gi)
+        for tid in logicals[a_idx].teacher_ids:
+            slot_teachers[(wd_id, slot_id)].append((tid, a_idx))
+            if (tid, wd_id, slot_id) in data.existing_teacher_slots:
+                tname = data.teachers.get(tid)
+                violations.append({
+                    "type": "TEACHER_CONFLICT",
+                    "severity": "hard",
+                    "message": f"{tname.name if tname else tid} double-booked at {_slot_label(data, gi)} with another division",
+                })
+
+    for _, teachers in slot_teachers.items():
+        seen: set[str] = set()
+        for tid, a_idx in teachers:
+            if tid in seen:
+                tname = data.teachers.get(tid)
+                violations.append({
+                    "type": "TEACHER_CONFLICT",
+                    "severity": "hard",
+                    "message": f"{tname.name if tname else tid} assigned twice in same slot",
+                })
+            else:
+                seen.add(tid)
+
+    # ── H3: Teacher unavailability ───────────────────────────────────────
+    for gi in range(total):
+        a_idx = int(chromosome[gi])
+        if a_idx < 0:
+            continue
+        for tid in logicals[a_idx].teacher_ids:
+            _, _, wd_id, slot_id = decode_gene(data, gi)
+            if (tid, wd_id, slot_id) in data.teacher_unavailable:
+                tname = data.teachers.get(tid)
+                violations.append({
+                    "type": "TEACHER_UNAVAILABLE",
+                    "severity": "hard",
+                    "message": f"{tname.name if tname else tid} placed at {_slot_label(data, gi)} but is unavailable",
+                })
+
+    # ── H7: HARD preference violations ───────────────────────────────────
+    for gi in range(total):
+        a_idx = int(chromosome[gi])
+        if a_idx < 0:
+            continue
+        la = logicals[a_idx]
+        prefs = _prefs_of(la)
+        if not prefs or prefs.get("constraintType") != "HARD":
+            continue
+        dow, period_num = _gene_to_day_period(data, gi)
+        if _violates_day_pref(prefs, dow):
+            violations.append({
+                "type": "PREFERENCE_VIOLATED",
+                "severity": "hard",
+                "message": f"{la.display_name} placed on day {dow} (preference violation) at {_slot_label(data, gi)}",
+            })
+        if _violates_period_pref(prefs, period_num):
+            violations.append({
+                "type": "PREFERENCE_VIOLATED",
+                "severity": "hard",
+                "message": f"{la.display_name} placed in P{period_num} (period range violation) at {_slot_label(data, gi)}",
+            })
+
+    # ── H2: Weightage violations ─────────────────────────────────────────
+    for idx, la in enumerate(logicals):
+        actual = int(np.count_nonzero(chromosome == idx))
+        expected = la.weightage
+        if actual != expected:
+            # Build an actionable reason
+            short = expected - actual
+            teachers = ", ".join(
+                data.teachers[tid].name if tid in data.teachers else tid[:8]
+                for tid in la.teacher_ids
+            ) or "(unassigned)"
+            if actual == 0:
+                reason = f"Could not place any periods — {teachers} may be overloaded or all valid slots taken"
+            else:
+                reason = f"Placed {actual}/{expected} — missing {short} period{'s' if short > 1 else ''}"
+            if total == sum(la2.weightage for la2 in logicals) and short > 0:
+                # Division is fully packed — hint at the cause
+                reason += f". Division has {total} slots fully assigned — reduce a subject's weightage or reassign {teachers} to fewer divisions"
+            violations.append({
+                "type": "WEIGHTAGE_MISMATCH",
+                "severity": "hard",
+                "message": f"{la.display_name} ({teachers}): {reason}",
+            })
+
+    # ── Soft: Adjacency gaps (when adjacency is enabled) ─────────────────
+    if data.adjacency_constraint_enabled:
+        placements: dict[int, dict[int, list[int]]] = defaultdict(lambda: defaultdict(list))
+        for gi in range(total):
+            a_idx = int(chromosome[gi])
+            if a_idx < 0:
+                continue
+            placements[a_idx][gi // ppd].append(gi % ppd)
+
+        for a_idx, by_day in placements.items():
+            la = logicals[a_idx]
+            for day_idx, positions in by_day.items():
+                if len(positions) < 2:
+                    continue
+                ps = sorted(positions)
+                for i in range(len(ps) - 1):
+                    if ps[i + 1] - ps[i] > 1:
+                        day_label = data.period_slots[day_idx * ppd].day_label if day_idx * ppd < len(data.period_slots) else f"Day{day_idx}"
+                        violations.append({
+                            "type": "ADJACENCY_GAP",
+                            "severity": "soft",
+                            "message": f"{la.display_name} has non-adjacent periods on {day_label}",
+                        })
+                        break  # one gap per (assignment, day) is enough
+
+    return violations
+
+
+def _slot_label(data: SchoolData, gi: int) -> str:
+    """Human-readable label like 'Monday P3'."""
+    ppd = data.periods_per_day
+    day_idx = gi // ppd
+    period_idx = gi % ppd
+    if day_idx < len(data.working_day_ids):
+        wd_id = data.working_day_ids[day_idx]
+        slots = data.slots_by_day.get(wd_id, [])
+        day_label = slots[0].day_label if slots else f"Day{day_idx}"
+        period_num = slots[period_idx].slot_number if period_idx < len(slots) else period_idx + 1
+        return f"{day_label} P{period_num}"
+    return f"Day{day_idx} P{period_idx + 1}"

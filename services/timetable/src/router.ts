@@ -19,6 +19,11 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.triggerGeneration(event);
   }
 
+  // Get active generation: GET /timetables/generate/active
+  if (method === 'GET' && path === '/api/timetables/generate/active') {
+    return controller.getActiveGeneration(event);
+  }
+
   // Get generation status: GET /timetables/generate/status/:jobId
   const statusMatch = path.match(/^\/api\/timetables\/generate\/status\/([^/]+)$/);
   if (method === 'GET' && statusMatch) {

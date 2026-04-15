@@ -156,6 +156,11 @@ export function TeacherTimetableGrid({ teacherId, teacherName }: Props) {
                   // group name above the subject so it's clear at a glance.
                   const electiveName = period?.isElective ? assignment.electiveGroup?.name : null;
                   const colorClass = getSubjectColor(electiveName ?? assignment.subject.name);
+                  // For cross-division electives, show all division labels
+                  const allDivisions = period?.assignments.map(a => a.teacher?.name).filter(Boolean);
+                  const divisionLabel = allDivisions && allDivisions.length > 1
+                    ? allDivisions.join(', ')
+                    : assignment.teacher?.name ?? '(Unassigned)';
                   return (
                     <td key={slot.id} className="px-1 py-1 border-r border-border/40">
                       <div className={`rounded-lg px-1.5 py-1 text-center ${colorClass}`}>
@@ -163,7 +168,7 @@ export function TeacherTimetableGrid({ teacherId, teacherName }: Props) {
                           <div className="text-[8px] uppercase tracking-wider opacity-80 truncate">{electiveName}</div>
                         )}
                         <div className="text-[10px] font-bold truncate">{assignment.subject.name}</div>
-                        <div className="text-[8px] opacity-75 truncate">{assignment.teacher?.name ?? '(Unassigned)'}</div>
+                        <div className="text-[8px] opacity-75 truncate">{divisionLabel}</div>
                       </div>
                     </td>
                   );

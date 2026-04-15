@@ -88,6 +88,13 @@ class LogicalAssignment:
     # we don't enforce that here).
     scheduling_preferences: Optional[dict] = None
 
+    # For elective groups: subject_id → (list of teacher_ids, parallel_sections).
+    # During scheduling, only `parallel_sections` teachers per subject need to be
+    # free simultaneously — not ALL teachers.  The output writer later decides
+    # which specific teacher teaches which slot.
+    # Empty for non-elective assignments (use teacher_ids directly).
+    subject_teacher_map: dict[str, tuple[list[str], int]] = field(default_factory=dict)
+
     @property
     def is_elective(self) -> bool:
         return self.elective_group_id is not None
@@ -102,6 +109,63 @@ class LogicalAssignment:
         if self.is_elective and self.elective_group_name:
             return self.elective_group_name
         return self.members[0].subject_name if self.members else "?"
+
+    def pick_available_teachers(
+        self,
+        day_of_week: int,
+        start_time: str,
+        teacher_busy,
+        teacher_unavailable: set,
+        teacher_partitions: Optional[dict] = None,
+        div_id: Optional[str] = None,
+        end_time: Optional[str] = None,
+    ) -> Optional[list[str]]:
+        """Pick the minimum set of teachers needed for a slot.
+
+        For non-elective: all teacher_ids must be free → returns them or None.
+        For elective with subject_teacher_map: for each subject, pick
+        `parallel_sections` free teachers → returns the picked set or None.
+
+        teacher_busy can be a TeacherBusyTracker (with time-range overlap
+        detection) or a plain set (legacy, exact match only).
+
+        Returns None if not enough teachers available.
+        """
+        def _is_teacher_busy(tid: str) -> bool:
+            # Check unavailability (exact start_time match)
+            if (tid, day_of_week, start_time) in teacher_unavailable:
+                return True
+            # Check teacher_busy with time-range overlap if tracker, else exact
+            if hasattr(teacher_busy, 'is_busy'):
+                if teacher_busy.is_busy(tid, day_of_week, start_time, end_time or start_time):
+                    return True
+            else:
+                if (tid, day_of_week, start_time) in teacher_busy:
+                    return True
+            # Check partition
+            if teacher_partitions and div_id:
+                partition = teacher_partitions.get(tid, {}).get(div_id)
+                if partition is not None and (day_of_week, start_time) not in partition:
+                    return True
+            return False
+
+        if not self.subject_teacher_map:
+            for tid in self.teacher_ids:
+                if _is_teacher_busy(tid):
+                    return None
+            return self.teacher_ids
+
+        picked: list[str] = []
+        for subject_id, (tids, parallel) in self.subject_teacher_map.items():
+            need = min(parallel, len(tids))
+            free = []
+            for tid in tids:
+                if not _is_teacher_busy(tid):
+                    free.append(tid)
+            if len(free) < need:
+                return None
+            picked.extend(free[:need])
+        return picked
 
 
 @dataclass
@@ -477,19 +541,106 @@ def _load_existing_teacher_slots(cur, data: SchoolData) -> None:
 
 
 def _load_teacher_unavailability(cur, data: SchoolData) -> None:
-    """Load teacher availability records (slots where teachers are UNavailable)."""
+    """Load teacher availability records (slots where teachers are UNavailable).
+
+    Teacher availability may be recorded against ANY period structure's slots
+    (e.g. "Senior Block" or "Default"). We need to map those to the CURRENT
+    division's slot coordinates using day_of_week + start_time matching,
+    just like _load_existing_teacher_slots does for cross-division conflicts.
+    """
     cur.execute("""
-        SELECT teacher_id, working_day_id, slot_id
-        FROM teacher_availability
-        WHERE school_id = %s AND academic_year_id = %s
+        SELECT ta.teacher_id, wd.day_of_week, s.start_time
+        FROM teacher_availability ta
+        JOIN working_days wd ON wd.id = ta.working_day_id
+        JOIN slots s ON s.id = ta.slot_id
+        WHERE ta.school_id = %s AND ta.academic_year_id = %s
+          AND s.slot_type = 'PERIOD'
     """, (data.school_id, data.academic_year_id))
 
+    # Build lookup from current division's slots
+    current_slot_map: dict[tuple[int, str], tuple[str, str]] = {}
+    for slot in data.period_slots:
+        key = (slot.day_of_week, slot.start_time)
+        current_slot_map[key] = (slot.working_day_id, slot.id)
+
     for row in cur.fetchall():
-        data.teacher_unavailable.add((
-            row["teacher_id"],
-            row["working_day_id"],
-            row["slot_id"],
-        ))
+        teacher_id = row["teacher_id"]
+        day_of_week = row["day_of_week"]
+        start_time = str(row["start_time"])
+
+        mapped = current_slot_map.get((day_of_week, start_time))
+        if mapped:
+            data.teacher_unavailable.add((teacher_id, mapped[0], mapped[1]))
+
+
+def _merge_elective_prefs(members: list[Assignment]) -> Optional[dict]:
+    """Merge scheduling preferences across elective group members.
+
+    All members share the same time slots, so we combine their preferences
+    into the most restrictive superset:
+      - constraintType: HARD if ANY member is HARD
+      - preferredDays: intersection (days ALL members prefer)
+      - excludedDays: union (days ANY member excludes)
+      - preferAdjacentPeriods: True if ANY member wants it
+      - preferredPeriodRange: tightest (max of mins, min of maxes)
+      - excludedPeriodRange: widest (min of mins, max of maxes)
+      - minPeriodsPerDay: max across members
+      - maxPeriodsPerDay: min across members
+    """
+    all_prefs = [m.scheduling_preferences for m in members if m.scheduling_preferences]
+    if not all_prefs:
+        return None
+
+    merged: dict = {}
+
+    # constraintType: HARD wins
+    merged["constraintType"] = "HARD" if any(
+        p.get("constraintType") == "HARD" for p in all_prefs
+    ) else all_prefs[0].get("constraintType", "SOFT")
+
+    # preferredDays: intersection
+    pref_days_sets = [set(p["preferredDays"]) for p in all_prefs if p.get("preferredDays")]
+    if pref_days_sets:
+        merged["preferredDays"] = sorted(set.intersection(*pref_days_sets))
+
+    # excludedDays: union
+    excl_days = set()
+    for p in all_prefs:
+        excl_days.update(p.get("excludedDays") or [])
+    if excl_days:
+        merged["excludedDays"] = sorted(excl_days)
+
+    # preferAdjacentPeriods: True if any
+    if any(p.get("preferAdjacentPeriods") for p in all_prefs):
+        merged["preferAdjacentPeriods"] = True
+
+    # preferredPeriodRange: tightest
+    pref_ranges = [p["preferredPeriodRange"] for p in all_prefs if p.get("preferredPeriodRange")]
+    if pref_ranges:
+        merged["preferredPeriodRange"] = {
+            "min": max(r["min"] for r in pref_ranges),
+            "max": min(r["max"] for r in pref_ranges),
+        }
+
+    # excludedPeriodRange: widest
+    excl_ranges = [p["excludedPeriodRange"] for p in all_prefs if p.get("excludedPeriodRange")]
+    if excl_ranges:
+        merged["excludedPeriodRange"] = {
+            "min": min(r["min"] for r in excl_ranges),
+            "max": max(r["max"] for r in excl_ranges),
+        }
+
+    # minPeriodsPerDay: max
+    mins = [p["minPeriodsPerDay"] for p in all_prefs if p.get("minPeriodsPerDay") is not None]
+    if mins:
+        merged["minPeriodsPerDay"] = max(mins)
+
+    # maxPeriodsPerDay: min
+    maxes = [p["maxPeriodsPerDay"] for p in all_prefs if p.get("maxPeriodsPerDay") is not None]
+    if maxes:
+        merged["maxPeriodsPerDay"] = min(maxes)
+
+    return merged if len(merged) > 1 else None  # >1 because constraintType is always set
 
 
 def _build_logical_assignments(data: SchoolData) -> None:
@@ -546,11 +697,25 @@ def _build_logical_assignments(data: SchoolData) -> None:
             key=lambda m: (m.subject_name or '', m.teacher_name or ''),
         )
 
-        # Pick the first non-null preferences from any member.
-        prefs = next(
-            (m.scheduling_preferences for m in members_sorted if m.scheduling_preferences),
-            None,
-        )
+        # Merge preferences across all members. For an elective group, all
+        # members share the same slots, so we take the MOST RESTRICTIVE
+        # combination: intersection of preferredDays, union of excludedDays,
+        # tightest preferredPeriodRange, widest excludedPeriodRange.
+        prefs = _merge_elective_prefs(members_sorted)
+
+        # Build subject → (teacher_ids, parallel_sections) map for scheduling.
+        # This tells the scheduler how many teachers per subject need to be
+        # free simultaneously (parallel_sections), rather than requiring ALL.
+        stm: dict[str, tuple[list[str], int]] = {}
+        for m in members_sorted:
+            if m.teacher_id is None:
+                continue
+            sid = m.subject_id
+            if sid not in stm:
+                ps = eg.subject_parallel_sections.get(sid, 1)
+                stm[sid] = ([], ps)
+            if m.teacher_id not in stm[sid][0]:
+                stm[sid][0].append(m.teacher_id)
 
         logical.append(LogicalAssignment(
             members=members_sorted,
@@ -558,6 +723,7 @@ def _build_logical_assignments(data: SchoolData) -> None:
             elective_group_id=eg.id,
             elective_group_name=eg.name,
             scheduling_preferences=prefs,
+            subject_teacher_map=stm,
         ))
 
     data.logical_assignments = logical

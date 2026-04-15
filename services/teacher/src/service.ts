@@ -92,20 +92,65 @@ export class TeacherService {
       orderBy: { name: 'asc' },
     });
 
-    const loads = await prisma.divisionAssignment.groupBy({
-      by: ['teacherId'],
+    // Fetch all assignments with elective group info to handle cross-division
+    // electives correctly. For cross-div electives (same elective group spanning
+    // multiple divisions), the teacher teaches all divisions simultaneously in
+    // the same slot — so we count the group's periods_per_week ONCE, not per-division.
+    const assignments = await prisma.divisionAssignment.findMany({
       where: {
         schoolId,
         academicYearId,
         deletedAt: null,
         teacherId: { not: null },
       },
-      _sum: { weightage: true },
+      select: {
+        teacherId: true,
+        weightage: true,
+        electiveGroupId: true,
+        divisionId: true,
+        electiveGroup: {
+          select: { id: true, periodsPerWeek: true },
+        },
+      },
     });
 
+    // Identify cross-division elective groups (spanning 2+ divisions)
+    const egDivisions = new Map<string, Set<string>>();
+    for (const a of assignments) {
+      if (a.electiveGroupId) {
+        if (!egDivisions.has(a.electiveGroupId)) egDivisions.set(a.electiveGroupId, new Set());
+        egDivisions.get(a.electiveGroupId)!.add(a.divisionId);
+      }
+    }
+    const crossDivGroups = new Set<string>();
+    for (const [egId, divs] of egDivisions) {
+      if (divs.size > 1) crossDivGroups.add(egId);
+    }
+
+    // Compute load per teacher, deduplicating cross-div elective groups
     const loadByTeacher = new Map<string, number>();
-    for (const l of loads) {
-      if (l.teacherId) loadByTeacher.set(l.teacherId, l._sum.weightage ?? 0);
+    // Track which cross-div groups we've already counted per teacher
+    const countedCrossDivPerTeacher = new Map<string, Set<string>>();
+
+    for (const a of assignments) {
+      const tid = a.teacherId!;
+      const current = loadByTeacher.get(tid) ?? 0;
+
+      if (a.electiveGroupId && crossDivGroups.has(a.electiveGroupId)) {
+        // Cross-division elective: count only once per teacher per group
+        if (!countedCrossDivPerTeacher.has(tid)) countedCrossDivPerTeacher.set(tid, new Set());
+        const seen = countedCrossDivPerTeacher.get(tid)!;
+        if (!seen.has(a.electiveGroupId)) {
+          seen.add(a.electiveGroupId);
+          // Use the elective group's periods_per_week (shared across divisions)
+          const pw = a.electiveGroup?.periodsPerWeek ?? a.weightage;
+          loadByTeacher.set(tid, current + pw);
+        }
+        // Skip duplicate divisions for the same cross-div group
+      } else {
+        // Regular assignment or per-division elective: count normally
+        loadByTeacher.set(tid, current + a.weightage);
+      }
     }
 
     return teachers.map((t) => ({

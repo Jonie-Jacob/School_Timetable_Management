@@ -119,6 +119,11 @@ export const timetableApi = createApi({
       invalidatesTags: ['Timetable', 'GenerationJob'],
     }),
 
+    getActiveGeneration: builder.query<{ active: boolean; totalDivisions?: number; jobs?: unknown[]; startedAt?: string }, void>({
+      query: () => 'timetables/generate/active',
+      transformResponse: (response: { data: { active: boolean; totalDivisions?: number; jobs?: unknown[]; startedAt?: string } }) => response.data,
+    }),
+
     getGenerationStatus: builder.query<GenerationJob, string>({
       query: (jobId) => `timetables/generate/status/${jobId}`,
       transformResponse: (response: { data: GenerationJob }) => response.data,
@@ -183,6 +188,7 @@ export const {
   useGetGenerationStatusQuery,
   useGetDivisionTimetableQuery,
   useGetTeacherTimetableQuery,
+  useGetActiveGenerationQuery,
   useOverrideSlotMutation,
   useSwapSlotsMutation,
   useCreateEmptySlotMutation,

@@ -8,16 +8,35 @@ import { notificationApi } from '@/features/notifications/notificationApi';
 const WS_URL = import.meta.env.VITE_WS_URL as string | undefined;
 const MAX_RETRIES = 5;
 
+// ── Global event bus for generation progress events ──
+// Components can subscribe via useGenerationEvents() hook.
+type GenerationEventHandler = (event: { type: string; payload: Record<string, unknown> }) => void;
+const generationListeners = new Set<GenerationEventHandler>();
+
+export function onGenerationEvent(handler: GenerationEventHandler) {
+  generationListeners.add(handler);
+  return () => { generationListeners.delete(handler); };
+}
+
+const GENERATION_EVENT_TYPES = new Set([
+  'generation_phase',
+  'generation_step',
+  'division_progress',
+  'division_completed',
+  'generation_summary',
+]);
+
 export function useWebSocket() {
   const dispatch = useAppDispatch();
   const token = useAppSelector((state) => state.auth.token);
+  const schoolId = useAppSelector((state) => state.auth.schoolId);
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
   const wsRef = useRef<WebSocket | null>(null);
   const retriesRef = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const connect = useCallback(() => {
-    if (!WS_URL || !token || !isAuthenticated) return;
+    if (!WS_URL || !token || !schoolId || !isAuthenticated) return;
 
     // Close existing connection if any
     if (wsRef.current) {
@@ -26,7 +45,7 @@ export function useWebSocket() {
     }
 
     try {
-      const ws = new WebSocket(`${WS_URL}?token=${token}`);
+      const ws = new WebSocket(`${WS_URL}?token=${token}&schoolId=${schoolId}`);
 
       ws.onopen = () => {
         retriesRef.current = 0;
@@ -36,18 +55,31 @@ export function useWebSocket() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+
+          // Dispatch generation progress events to subscribed components
+          if (GENERATION_EVENT_TYPES.has(msg.type)) {
+            for (const listener of generationListeners) {
+              listener(msg);
+            }
+          }
+
           switch (msg.type) {
             case 'GENERATION_COMPLETE':
+            case 'generation_completed':
               dispatch(dashboardApi.util.invalidateTags(['DashboardStats', 'SetupWizard']));
               dispatch(notificationApi.util.invalidateTags(['NotificationCount']));
-              toast.success('Timetable generated successfully!');
               break;
             case 'GENERATION_FAILED':
+            case 'generation_failed':
               toast.error(`Generation failed: ${msg.payload?.error ?? 'Unknown error'}`);
               break;
             case 'TIMETABLE_OUTDATED':
               dispatch(notificationApi.util.invalidateTags(['NotificationCount']));
               dispatch(dashboardApi.util.invalidateTags(['DashboardStats']));
+              break;
+            case 'generation_summary':
+              dispatch(dashboardApi.util.invalidateTags(['DashboardStats', 'SetupWizard']));
+              dispatch(notificationApi.util.invalidateTags(['NotificationCount']));
               break;
           }
         } catch {
@@ -77,7 +109,7 @@ export function useWebSocket() {
       // WebSocket construction can fail if URL is invalid
       dispatch(setWsConnected(false));
     }
-  }, [token, isAuthenticated, dispatch]);
+  }, [token, schoolId, isAuthenticated, dispatch]);
 
   useEffect(() => {
     connect();

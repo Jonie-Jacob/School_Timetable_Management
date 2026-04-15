@@ -30,6 +30,37 @@ export class TimetableService {
   async triggerGeneration(schoolId: string, academicYearId: string, dto: TriggerGenerationDto) {
     const { divisionIds, adjacencyConstraintEnabled } = dto;
 
+    // ── Stale job cleanup: auto-fail jobs stuck for > 15 minutes ──
+    await prisma.generationJob.updateMany({
+      where: {
+        schoolId,
+        academicYearId,
+        status: { in: [JobStatus.PENDING, JobStatus.RUNNING] },
+        startedAt: { lt: new Date(Date.now() - 15 * 60 * 1000) },
+      },
+      data: {
+        status: JobStatus.FAILED,
+        errorMessage: 'Timed out after 15 minutes',
+        completedAt: new Date(),
+      },
+    });
+
+    // ── Generation lock: prevent concurrent generation for same school ──
+    const existingActive = await prisma.generationJob.findFirst({
+      where: {
+        schoolId,
+        academicYearId,
+        status: { in: [JobStatus.PENDING, JobStatus.RUNNING] },
+      },
+    });
+    if (existingActive) {
+      throw new AppError(
+        'A generation is already in progress for this school. Please wait for it to complete.',
+        409,
+        'GENERATION_IN_PROGRESS',
+      );
+    }
+
     // Validate all divisions exist
     const divisions = await prisma.division.findMany({
       where: { id: { in: divisionIds }, schoolId, academicYearId, deletedAt: null },
@@ -40,10 +71,9 @@ export class TimetableService {
       throw new AppError(`Divisions not found: ${missing.join(', ')}`, 400, 'INVALID_DIVISIONS');
     }
 
-    // Create a generation job per division and kick off work.
-    // Use allSettled so a single division's failure to launch doesn't
-    // cancel the whole batch — the successful ones should still run.
-    const settled = await Promise.allSettled(divisionIds.map(async (divisionId) => {
+    // Create a generation job per division
+    const jobs: Array<{ jobId: string; divisionId: string }> = [];
+    for (const divisionId of divisionIds) {
       const job = await prisma.generationJob.create({
         data: {
           schoolId,
@@ -53,79 +83,78 @@ export class TimetableService {
           startedAt: new Date(),
         },
       });
+      jobs.push({ jobId: job.id, divisionId });
+    }
 
-      if (USE_FARGATE_ENGINE) {
-        // Kick off a Fargate task and return immediately. The task updates
-        // generation_jobs to RUNNING/COMPLETED/FAILED itself.
-        try {
-          await this.startEngineTask({
-            jobId: job.id,
-            schoolId,
-            divisionId,
-            academicYearId,
-            adjacencyConstraintEnabled: adjacencyConstraintEnabled ?? false,
-          });
-        } catch (err) {
-          // If task launch fails, mark the job FAILED so the UI doesn't spin
-          await prisma.generationJob.update({
-            where: { id: job.id },
-            data: {
-              status: JobStatus.FAILED,
-              errorMessage: err instanceof Error ? err.message : 'Failed to launch engine task',
-              completedAt: new Date(),
-            },
-          });
-          throw err;
-        }
-        // The timetable row is upserted by the engine itself on success.
-        // Look up the existing row (if any) so the response shape stays stable.
-        const existing = await prisma.timetable.findUnique({
-          where: { schoolId_divisionId_academicYearId: { schoolId, divisionId, academicYearId } },
+    if (USE_FARGATE_ENGINE) {
+      // ── Batch mode: single ECS task generates all divisions sequentially.
+      // Each division sees previous ones' results in existing_teacher_slots,
+      // preventing cross-division teacher conflicts.
+      try {
+        await this.startBatchEngineTask({
+          jobIds: jobs.map(j => j.jobId),
+          schoolId,
+          divisionIds,
+          academicYearId,
+          adjacencyConstraintEnabled: adjacencyConstraintEnabled ?? false,
         });
-        return { jobId: job.id, timetableId: existing?.id ?? null, divisionId };
+      } catch (err) {
+        // Mark all jobs FAILED
+        await prisma.generationJob.updateMany({
+          where: { id: { in: jobs.map(j => j.jobId) } },
+          data: {
+            status: JobStatus.FAILED,
+            errorMessage: err instanceof Error ? err.message : 'Failed to launch engine task',
+            completedAt: new Date(),
+          },
+        });
+        throw err;
       }
 
-      // ── Dev path: inline mock round-robin ─────────────────────────────
+      // Look up existing timetable rows for the response shape
+      const existingTimetables = await prisma.timetable.findMany({
+        where: { schoolId, academicYearId, divisionId: { in: divisionIds } },
+        select: { id: true, divisionId: true },
+      });
+      const ttByDiv = new Map(existingTimetables.map(t => [t.divisionId, t.id]));
+
+      const results = jobs.map(j => ({
+        jobId: j.jobId,
+        timetableId: ttByDiv.get(j.divisionId) ?? null,
+        divisionId: j.divisionId,
+      }));
+
+      if (divisionIds.length === 1) return results[0];
+      return { results, errors: [] };
+    }
+
+    // ── Dev path: inline mock round-robin (sequential) ────────────────
+    const results: Array<{ jobId: string; timetableId: string; divisionId: string }> = [];
+    for (const { jobId, divisionId } of jobs) {
       const timetable = await this.mockGenerateTimetable(
         schoolId, divisionId, academicYearId,
         adjacencyConstraintEnabled ?? false,
       );
       await prisma.generationJob.update({
-        where: { id: job.id },
+        where: { id: jobId },
         data: { status: JobStatus.COMPLETED, completedAt: new Date() },
       });
-      return { jobId: job.id, timetableId: timetable.id, divisionId };
-    }));
-
-    // Collect the per-division outcomes. Successful ones go in results;
-    // failed ones surface in errors so the UI can show a partial failure.
-    const results = settled
-      .filter((r): r is PromiseFulfilledResult<{ jobId: string; timetableId: string | null; divisionId: string }> => r.status === 'fulfilled')
-      .map((r) => r.value);
-    const errors = settled
-      .map((r, i) => (r.status === 'rejected' ? { divisionId: divisionIds[i], message: r.reason instanceof Error ? r.reason.message : String(r.reason) } : null))
-      .filter((e): e is { divisionId: string; message: string } => e !== null);
-
-    if (errors.length > 0 && results.length === 0) {
-      // Every division failed — surface the first error so the HTTP layer
-      // returns a 5xx with the real reason.
-      throw new AppError(
-        `Failed to launch engine task(s): ${errors.map((e) => e.message).join('; ')}`,
-        500,
-        'ECS_RUN_TASK_FAILED',
-      );
+      results.push({ jobId, timetableId: timetable.id, divisionId });
     }
 
-    if (divisionIds.length === 1) {
-      return results[0];
-    }
-    return { results, errors };
+    if (divisionIds.length === 1) return results[0];
+    return { results, errors: [] };
   }
 
-  private async startEngineTask(params: {
-    jobId: string;
+  /**
+   * Launch a single ECS Fargate task that generates ALL divisions sequentially.
+   * Each division sees previous ones' timetable results, preventing
+   * cross-division teacher conflicts.
+   */
+  private async startBatchEngineTask(params: {
+    jobIds: string[];
     schoolId: string;
-    divisionId: string;
+    divisionIds: string[];
     academicYearId: string;
     adjacencyConstraintEnabled: boolean;
   }) {
@@ -139,9 +168,9 @@ export class TimetableService {
     }
 
     const command = [
-      '--job-id', params.jobId,
+      '--job-ids', params.jobIds.join(','),
       '--school-id', params.schoolId,
-      '--division-id', params.divisionId,
+      '--division-ids', params.divisionIds.join(','),
       '--academic-year-id', params.academicYearId,
     ];
     if (params.adjacencyConstraintEnabled) {
@@ -170,11 +199,6 @@ export class TimetableService {
       },
     }));
 
-    // ecs:RunTask returns 200 with a failures[] array even when it fails to
-    // schedule the task (capacity, ENI limit, quota, throttling, etc). If
-    // we don't inspect this, per-task failures silently leave the job
-    // hanging in PENDING forever. Turn any failure into a thrown error so
-    // the outer try/catch in triggerGeneration can mark the job FAILED.
     const failures = response.failures ?? [];
     if (failures.length > 0 || !response.tasks || response.tasks.length === 0) {
       const reasons = failures
@@ -272,6 +296,59 @@ export class TimetableService {
   }
 
   // ── Generation Status ──
+
+  async getActiveGeneration(schoolId: string, academicYearId: string) {
+    // Find the most recent batch: jobs created within 5 seconds of the latest
+    // (all jobs in a single Generate All call are created within milliseconds)
+    const latestJob = await prisma.generationJob.findFirst({
+      where: { schoolId, academicYearId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    if (!latestJob) {
+      return { active: false, jobs: [], totalDivisions: 0, completedDivisions: 0, failedDivisions: 0 };
+    }
+    const batchStart = new Date(latestJob.createdAt.getTime() - 5_000);
+    const recentJobs = await prisma.generationJob.findMany({
+      where: {
+        schoolId,
+        academicYearId,
+        createdAt: { gt: batchStart },
+      },
+      include: {
+        division: { select: { id: true, label: true, class: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (recentJobs.length === 0) {
+      return { active: false, jobs: [], totalDivisions: 0, completedDivisions: 0 };
+    }
+
+    const pending = recentJobs.filter(j => j.status === 'PENDING' || j.status === 'RUNNING');
+    const completed = recentJobs.filter(j => j.status === 'COMPLETED');
+    const failed = recentJobs.filter(j => j.status === 'FAILED');
+
+    // Find the batch result summary (stored on the first job)
+    const batchSummary = recentJobs.find(j => j.resultSummary != null);
+    const failureAnalysis = (batchSummary?.resultSummary as any)?.failureAnalysis ?? [];
+
+    return {
+      active: pending.length > 0,
+      totalDivisions: recentJobs.length,
+      completedDivisions: completed.length,
+      failedDivisions: failed.length,
+      failureAnalysis,
+      jobs: recentJobs.map(j => ({
+        id: j.id,
+        divisionId: j.divisionId,
+        divisionLabel: `${j.division?.class?.name ?? ''} ${j.division?.label ?? ''}`.trim(),
+        status: j.status,
+        startedAt: j.startedAt,
+        completedAt: j.completedAt,
+      })),
+    };
+  }
 
   async getGenerationStatus(schoolId: string, jobId: string) {
     const job = await prisma.generationJob.findFirst({

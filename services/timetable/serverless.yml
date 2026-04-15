@@ -44,6 +44,11 @@ functions:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
+          path: /api/timetables/generate/active
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
           path: /api/timetables/generate/status/{jobId}
           authorizer:
             name: cognitoAuthorizer

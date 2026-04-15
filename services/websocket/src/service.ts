@@ -1,15 +1,24 @@
 /**
  * WebSocket Connection Management Service.
  *
- * In PRODUCTION: Uses DynamoDB (WebSocketConnections table) with GSI on schoolId
- * and TTL for automatic stale connection cleanup.
+ * In PRODUCTION (STAGE !== 'dev'): Uses DynamoDB for connection storage and
+ * API Gateway Management API to push messages to connected browsers.
  *
- * In LOCAL DEV: Uses an in-memory Map to avoid DynamoDB Local compatibility
- * issues. Connections reset when the service restarts.
- *
- * The broadcastToSchool() method is the main integration point — other services
- * invoke it (via Lambda or direct call) to push real-time notifications.
+ * In LOCAL DEV (STAGE === 'dev'): Uses an in-memory Map. Broadcasts are
+ * logged to console.
  */
+
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  PutCommand,
+  DeleteCommand,
+  QueryCommand,
+} from '@aws-sdk/lib-dynamodb';
+import {
+  ApiGatewayManagementApiClient,
+  PostToConnectionCommand,
+} from '@aws-sdk/client-apigatewaymanagementapi';
 
 export interface ConnectionRecord {
   connectionId: string;
@@ -24,17 +33,41 @@ export interface BroadcastMessage {
   payload: Record<string, unknown>;
 }
 
+const STAGE = process.env.STAGE ?? 'dev';
+const IS_PROD = STAGE !== 'dev';
+const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE ?? 'WebSocketConnections';
+const API_GATEWAY_ENDPOINT = process.env.API_GATEWAY_ENDPOINT ?? '';
+
 // In-memory connection store for local development
-const connections = new Map<string, ConnectionRecord>();
+const localConnections = new Map<string, ConnectionRecord>();
 
 const TTL_HOURS = 24;
 
+// AWS clients (initialized lazily for prod)
+let dynamoClient: DynamoDBDocumentClient | null = null;
+let apigwClient: ApiGatewayManagementApiClient | null = null;
+
+function getDynamo(): DynamoDBDocumentClient {
+  if (!dynamoClient) {
+    const client = new DynamoDBClient({ region: 'ap-south-1' });
+    dynamoClient = DynamoDBDocumentClient.from(client);
+  }
+  return dynamoClient;
+}
+
+function getApigw(): ApiGatewayManagementApiClient | null {
+  if (!API_GATEWAY_ENDPOINT) return null;
+  if (!apigwClient) {
+    apigwClient = new ApiGatewayManagementApiClient({
+      region: 'ap-south-1',
+      endpoint: API_GATEWAY_ENDPOINT,
+    });
+  }
+  return apigwClient;
+}
+
 export class WebSocketService {
 
-  /**
-   * Register a new WebSocket connection.
-   * Equivalent to $connect handler in production.
-   */
   async connect(connectionId: string, schoolId: string, userId: string): Promise<ConnectionRecord> {
     const now = new Date();
     const ttl = Math.floor(now.getTime() / 1000) + TTL_HOURS * 3600;
@@ -47,52 +80,55 @@ export class WebSocketService {
       ttl,
     };
 
-    connections.set(connectionId, record);
+    if (IS_PROD) {
+      await getDynamo().send(new PutCommand({
+        TableName: CONNECTIONS_TABLE,
+        Item: record,
+      }));
+    } else {
+      localConnections.set(connectionId, record);
+    }
 
     return record;
   }
 
-  /**
-   * Remove a WebSocket connection.
-   * Equivalent to $disconnect handler in production.
-   */
   async disconnect(connectionId: string): Promise<void> {
-    connections.delete(connectionId);
+    if (IS_PROD) {
+      await getDynamo().send(new DeleteCommand({
+        TableName: CONNECTIONS_TABLE,
+        Key: { connectionId },
+      }));
+    } else {
+      localConnections.delete(connectionId);
+    }
   }
 
-  /**
-   * Get all active connections for a school.
-   */
   async getSchoolConnections(schoolId: string): Promise<ConnectionRecord[]> {
+    if (IS_PROD) {
+      const result = await getDynamo().send(new QueryCommand({
+        TableName: CONNECTIONS_TABLE,
+        IndexName: 'schoolId-index',
+        KeyConditionExpression: 'schoolId = :sid',
+        ExpressionAttributeValues: { ':sid': schoolId },
+      }));
+      return (result.Items ?? []) as ConnectionRecord[];
+    }
+
+    // Local dev: filter in-memory
     const result: ConnectionRecord[] = [];
     const now = Math.floor(Date.now() / 1000);
-
-    for (const [id, record] of connections) {
-      // Clean up expired connections
+    for (const [id, record] of localConnections) {
       if (record.ttl < now) {
-        connections.delete(id);
+        localConnections.delete(id);
         continue;
       }
       if (record.schoolId === schoolId) {
         result.push(record);
       }
     }
-
     return result;
   }
 
-  /**
-   * Broadcast a message to all connections for a school.
-   *
-   * In production, this uses API Gateway Management API (PostToConnection).
-   * In local dev, we log the message and return info about which connections
-   * would have received it.
-   *
-   * Other services call this to push real-time notifications:
-   *   - Timetable generation progress
-   *   - Generation completed/failed
-   *   - Conflict notifications
-   */
   async broadcastToSchool(schoolId: string, message: BroadcastMessage): Promise<{
     schoolId: string;
     message: BroadcastMessage;
@@ -105,20 +141,29 @@ export class WebSocketService {
 
     const delivered: string[] = [];
     const failed: string[] = [];
+    const messageStr = JSON.stringify(message);
+
+    const client = IS_PROD ? getApigw() : null;
 
     for (const conn of schoolConns) {
       try {
-        // In production: use ApiGatewayManagementApi.postToConnection()
-        // In local dev: simulate delivery by logging
-        console.log(
-          `[WS] Broadcasting to ${conn.connectionId} (school: ${schoolId}, user: ${conn.userId}):`,
-          JSON.stringify(message),
-        );
+        if (IS_PROD && client) {
+          await client.send(new PostToConnectionCommand({
+            ConnectionId: conn.connectionId,
+            Data: Buffer.from(messageStr),
+          }));
+        } else {
+          console.log(
+            `[WS] Broadcasting to ${conn.connectionId} (school: ${schoolId}):`,
+            messageStr.substring(0, 200),
+          );
+        }
         delivered.push(conn.connectionId);
       } catch (err: unknown) {
-        const statusCode = (err as { statusCode?: number })?.statusCode;
+        const statusCode = (err as { $metadata?: { httpStatusCode?: number } })
+          ?.$metadata?.httpStatusCode;
         if (statusCode === 410) {
-          // Stale connection — remove
+          // Stale connection — remove from DynamoDB
           await this.disconnect(conn.connectionId);
         }
         failed.push(conn.connectionId);

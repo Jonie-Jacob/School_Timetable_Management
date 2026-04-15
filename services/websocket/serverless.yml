@@ -2,7 +2,10 @@ service: timetable-websocket
 
 plugins:
   - serverless-offline
-  - ../../plugins/serverless-prod-config
+  # NOTE: serverless-prod-config NOT included — WebSocket service only uses
+  # DynamoDB + API Gateway Management API (public AWS services), not RDS.
+  # VPC would block access without VPC endpoints.
+  # But we still need the shared Lambda layer for @timetable/shared + Prisma engine.
 
 provider:
   name: aws
@@ -13,8 +16,26 @@ provider:
   environment:
     DATABASE_URL: ${env:DATABASE_URL, 'postgresql://timetable_admin:localdev123@localhost:5433/timetable_dev'}
     DYNAMODB_ENDPOINT: ${env:DYNAMODB_ENDPOINT, 'http://localhost:8000'}
-    CONNECTIONS_TABLE: ${env:CONNECTIONS_TABLE, 'WebSocketConnections'}
+    CONNECTIONS_TABLE: ${env:DYNAMODB_TABLE_NAME, 'timetable-prod-ws-connections'}
     STAGE: ${self:provider.stage}
+    PRISMA_QUERY_ENGINE_LIBRARY: /opt/nodejs/node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:ap-south-1:648485682362:table/timetable-prod-ws-connections
+            - arn:aws:dynamodb:ap-south-1:648485682362:table/timetable-prod-ws-connections/index/*
+        - Effect: Allow
+          Action:
+            - execute-api:ManageConnections
+          Resource:
+            - arn:aws:execute-api:ap-south-1:648485682362:*/@connections/*
 
 custom:
   serverless-offline:
@@ -23,9 +44,15 @@ custom:
     noPrependStageInUrl: true
 
 functions:
+  # HTTP API handler — receives broadcast POSTs from the engine
   websocket:
     handler: src/handler.handler
     timeout: 30
+    layers:
+      - arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:13
+    environment:
+      API_GATEWAY_ENDPOINT:
+        !Sub "https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${sls:stage}"
     events:
       - httpApi:
           method: GET
@@ -42,3 +69,20 @@ functions:
       - httpApi:
           method: GET
           path: /api/ws/connections
+
+  # WebSocket protocol handler — browsers connect via wss://
+  wsHandler:
+    handler: src/wsHandler.handler
+    timeout: 30
+    layers:
+      - arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:13
+    environment:
+      API_GATEWAY_ENDPOINT:
+        !Sub "https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${sls:stage}"
+    events:
+      - websocket:
+          route: $connect
+      - websocket:
+          route: $disconnect
+      - websocket:
+          route: $default

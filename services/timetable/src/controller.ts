@@ -21,6 +21,13 @@ export class TimetableController {
     return accepted(result);
   }
 
+  async getActiveGeneration(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const result = await service.getActiveGeneration(ctx.schoolId, ctx.academicYearId);
+    return success(result);
+  }
+
   async getGenerationStatus(event: APIGatewayProxyEventV2, jobId: string): Promise<APIGatewayProxyResultV2> {
     const auth = await authMiddleware(event);
     const result = await service.getGenerationStatus(auth.schoolId!, jobId);
