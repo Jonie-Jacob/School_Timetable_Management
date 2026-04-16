@@ -135,6 +135,25 @@ def _build_elective_slot_reserves(state: PlacementState, wsd: WholeSchoolData) -
                                 shared_names)
 
 
+def _get_block_size(la: LogicalAssignment) -> int:
+    """Determine placement block size for an assignment.
+
+    Returns block_size >= 2 if block-atomic mode, else 1 for single mode.
+    Block mode requires: HARD + preferAdjacentPeriods + minPeriodsPerDay >= 2.
+    """
+    prefs = la.scheduling_preferences
+    if not prefs or not isinstance(prefs, dict):
+        return 1
+    if prefs.get("constraintType") != "HARD":
+        return 1
+    if not prefs.get("preferAdjacentPeriods"):
+        return 1
+    min_pd = prefs.get("minPeriodsPerDay")
+    if min_pd is not None and min_pd >= 2:
+        return int(min_pd)
+    return 1
+
+
 def schedule_all(
     wsd: WholeSchoolData,
     on_progress: ProgressCallback = None,
@@ -146,29 +165,48 @@ def schedule_all(
     """
     if div_labels is None:
         div_labels = {d: d[:8] for d in wsd.divisions}
-    # ── Step 1: Build unplaced items ──────────────────────────────────────
+
+    # ── Step 1: Build unplaced items with block classification ────────────
+    # Each item is (div_id, la_idx, block_size).
+    # Block-mode: block_size >= 2 (from minPeriodsPerDay + adjacency).
+    # Single-mode: block_size == 1.
     # Cross-division electives appear ONCE using (first_div_id, la_idx).
-    # Per-division items appear normally.
     cross_div_seen: set[str] = set()
-    items: list[tuple[str, int]] = []
+    # remaining keyed by (div_id, la_idx, block_size) → count
+    remaining: dict[tuple[str, int, int], int] = defaultdict(int)
+
+    block_mode_count = 0
+    single_mode_count = 0
 
     for div_id, div_data in wsd.divisions.items():
         for la_idx, la in enumerate(div_data.logical_assignments):
             eg_id = wsd.cross_div_la_map.get((div_id, la_idx))
             if eg_id:
                 if eg_id in cross_div_seen:
-                    continue  # already added from first division
+                    continue
                 cross_div_seen.add(eg_id)
-            for _ in range(la.weightage):
-                items.append((div_id, la_idx))
+
+            block_size = _get_block_size(la)
+            if block_size >= 2:
+                full_blocks = la.weightage // block_size
+                remainder = la.weightage % block_size
+                remaining[(div_id, la_idx, block_size)] += full_blocks
+                block_mode_count += full_blocks * block_size
+                if remainder > 0:
+                    remaining[(div_id, la_idx, 1)] += remainder
+                    single_mode_count += remainder
+            else:
+                remaining[(div_id, la_idx, 1)] += la.weightage
+                single_mode_count += la.weightage
 
     total_items = sum(
         sum(la.weightage for la in d.logical_assignments)
         for d in wsd.divisions.values()
     )
     logger.info("Step 3: Demand-driven placement — %d assignment-periods across %d divisions "
-                "(%d cross-division elective groups)",
-                total_items, len(wsd.divisions), len(wsd.cross_div_electives))
+                "(%d cross-division elective groups, %d in block-mode, %d in single-mode)",
+                total_items, len(wsd.divisions), len(wsd.cross_div_electives),
+                block_mode_count, single_mode_count)
 
     # ── Initialize state ──────────────────────────────────────────────────
     state = PlacementState(
@@ -181,11 +219,6 @@ def schedule_all(
         history=[],
     )
 
-    # Track remaining items to place: (div_id, la_idx) → remaining count
-    remaining: dict[tuple[str, int], int] = defaultdict(int)
-    for div_id, la_idx in items:
-        remaining[(div_id, la_idx)] += 1
-
     # ── Pre-compute elective slot reservations ───────────────────────────
     _build_elective_slot_reserves(state, wsd)
 
@@ -195,13 +228,13 @@ def schedule_all(
     # ── Step 3: Demand-driven placement loop ──────────────────────────────
     placed_total = 0
     while remaining:
-        # Find the most constrained unplaced item (fewest valid slots)
-        best_item = None
+        # Find the most constrained unplaced item (fewest valid positions)
+        best_item: Optional[tuple[str, int, int]] = None
         best_valid_count = float('inf')
         best_candidates: list[tuple[int, float]] = []
         best_is_cross_div: Optional[str] = None
 
-        for (div_id, la_idx), rem_count in remaining.items():
+        for (div_id, la_idx, bsize), rem_count in remaining.items():
             if rem_count <= 0:
                 continue
             div_data = wsd.divisions[div_id]
@@ -209,14 +242,20 @@ def schedule_all(
 
             eg_id = wsd.cross_div_la_map.get((div_id, la_idx))
             if eg_id:
-                candidates = _find_valid_slots_cross_div(eg_id, state, wsd)
+                if bsize >= 2:
+                    candidates = _find_valid_blocks_cross_div(eg_id, bsize, state, wsd)
+                else:
+                    candidates = _find_valid_slots_cross_div(eg_id, state, wsd)
             else:
-                candidates = _find_valid_slots(la, la_idx, div_id, div_data, state, wsd)
+                if bsize >= 2:
+                    candidates = _find_valid_blocks(la, la_idx, div_id, div_data, bsize, state, wsd)
+                else:
+                    candidates = _find_valid_slots(la, la_idx, div_id, div_data, state, wsd)
             valid_count = len(candidates)
 
             if valid_count < best_valid_count:
                 best_valid_count = valid_count
-                best_item = (div_id, la_idx)
+                best_item = (div_id, la_idx, bsize)
                 best_candidates = candidates
                 best_is_cross_div = eg_id
 
@@ -226,7 +265,7 @@ def schedule_all(
         if best_item is None:
             break
 
-        div_id, la_idx = best_item
+        div_id, la_idx, bsize = best_item
         div_data = wsd.divisions[div_id]
         la = div_data.logical_assignments[la_idx]
 
@@ -234,10 +273,18 @@ def schedule_all(
             best_candidates.sort(key=lambda x: x[1])
             gi = best_candidates[0][0]
             if best_is_cross_div:
-                _place_cross_div(state, best_is_cross_div, gi, wsd)
+                if bsize >= 2:
+                    _place_block_cross_div(state, best_is_cross_div, gi, bsize, wsd)
+                else:
+                    _place_cross_div(state, best_is_cross_div, gi, wsd)
                 n_divs = len(wsd.cross_div_electives[best_is_cross_div])
-                state.placed_ok += n_divs
-                placed_total += n_divs
+                n_placed = bsize * n_divs
+                state.placed_ok += n_placed
+                placed_total += n_placed
+            elif bsize >= 2:
+                _place_block(state, div_id, la_idx, gi, bsize, div_data, la, wsd)
+                state.placed_ok += bsize
+                placed_total += bsize
             else:
                 _place_assignment(state, div_id, la_idx, gi, div_data, la, wsd)
                 state.placed_ok += 1
@@ -248,20 +295,22 @@ def schedule_all(
         else:
             analysis = _build_failure_analysis(la, la_idx, div_id, div_data, state, wsd, div_labels)
             failure_analyses.append(analysis)
-            logger.warning("Fallback #%d: %s in %s — %s (valid_count=%d)",
+            n_fallback = bsize if not best_is_cross_div else bsize * len(wsd.cross_div_electives.get(best_is_cross_div, [div_id]))
+            logger.warning("Fallback #%d: %s in %s — %s (valid_count=%d, block=%d)",
                            state.fallback + 1, la.display_name, div_labels.get(div_id, div_id[:8]),
-                           analysis.get("reason", ""), int(best_valid_count) if best_valid_count != float('inf') else 0)
+                           analysis.get("reason", ""),
+                           int(best_valid_count) if best_valid_count != float('inf') else 0,
+                           bsize)
 
             if best_is_cross_div:
-                # Fallback for cross-div: place in any empty slot across all divisions
                 placed = False
-                for gi in range(div_data.total_periods):
+                for fgi in range(div_data.total_periods):
                     all_empty = all(
-                        state.chromosomes[d][gi] == -1
+                        state.chromosomes[d][fgi] == -1
                         for d in wsd.cross_div_electives[best_is_cross_div]
                     )
                     if all_empty:
-                        _place_cross_div(state, best_is_cross_div, gi, wsd)
+                        _place_cross_div(state, best_is_cross_div, fgi, wsd)
                         state.fallback += len(wsd.cross_div_electives[best_is_cross_div])
                         placed_total += len(wsd.cross_div_electives[best_is_cross_div])
                         placed = True
@@ -270,20 +319,32 @@ def schedule_all(
                     logger.warning("Cannot place %s cross-div — no common empty slot", la.display_name)
                     placed_total += len(wsd.cross_div_electives[best_is_cross_div])
             else:
-                placed = False
-                for gi in range(div_data.total_periods):
-                    if state.chromosomes[div_id][gi] == -1:
-                        _place_assignment(state, div_id, la_idx, gi, div_data, la, wsd)
-                        state.fallback += 1
-                        placed = True
-                        break
-                if not placed:
-                    logger.warning("Cannot place %s in %s — all slots full", la.display_name, div_id[:8])
-                placed_total += 1
+                if bsize >= 2:
+                    # Block fallback: try placing as individual singles
+                    placed_count = 0
+                    for fgi in range(div_data.total_periods):
+                        if state.chromosomes[div_id][fgi] == -1:
+                            _place_assignment(state, div_id, la_idx, fgi, div_data, la, wsd)
+                            placed_count += 1
+                            if placed_count >= bsize:
+                                break
+                    state.fallback += bsize
+                    placed_total += bsize
+                else:
+                    placed = False
+                    for fgi in range(div_data.total_periods):
+                        if state.chromosomes[div_id][fgi] == -1:
+                            _place_assignment(state, div_id, la_idx, fgi, div_data, la, wsd)
+                            state.fallback += 1
+                            placed = True
+                            break
+                    if not placed:
+                        logger.warning("Cannot place %s in %s — all slots full", la.display_name, div_id[:8])
+                    placed_total += 1
 
-        remaining[(div_id, la_idx)] -= 1
-        if remaining[(div_id, la_idx)] <= 0:
-            del remaining[(div_id, la_idx)]
+        remaining[(div_id, la_idx, bsize)] -= 1
+        if remaining[(div_id, la_idx, bsize)] <= 0:
+            del remaining[(div_id, la_idx, bsize)]
 
         # Progress callback
         if on_progress and (placed_total % 20 == 0 or placed_total >= total_items or not remaining):
@@ -382,39 +443,8 @@ def _find_valid_slots_cross_div(
                 if day_count >= max_pd:
                     continue
 
-        # HARD minPeriodsPerDay for cross-div electives (only with adjacency)
-        if is_hard and prefs and prefs.get("preferAdjacentPeriods"):
-            min_pd = prefs.get("minPeriodsPerDay")
-            if min_pd is not None and min_pd >= 2:
-                first_la_idx_min = next(
-                    (i for i, la2 in enumerate(first_data.logical_assignments)
-                     if la2.elective_group_id == eg_id), -1
-                )
-                day_count_min = sum(
-                    1 for g in range(day_idx * ppd, min((day_idx + 1) * ppd, first_data.total_periods))
-                    if int(state.chromosomes[first_div][g]) == first_la_idx_min
-                ) if first_la_idx_min >= 0 else 0
-                if day_count_min == 0:
-                    chromosome_cd = state.chromosomes[first_div]
-                    max_block = 1
-                    left = period_idx - 1
-                    while left >= 0:
-                        if (day_idx, left + 1) in first_data.period_after_break:
-                            break
-                        if chromosome_cd[day_idx * ppd + left] != -1:
-                            break
-                        max_block += 1
-                        left -= 1
-                    right = period_idx + 1
-                    while right < ppd:
-                        if (day_idx, right) in first_data.period_after_break:
-                            break
-                        if chromosome_cd[day_idx * ppd + right] != -1:
-                            break
-                        max_block += 1
-                        right += 1
-                    if max_block < min_pd:
-                        continue
+        # NOTE: minPeriodsPerDay for cross-div electives is now handled by
+        # _find_valid_blocks_cross_div() in block-atomic mode.
 
         # Teacher check — teachers are shared, only need to check once
         picked = first_la.pick_available_teachers(
@@ -526,6 +556,355 @@ def _place_cross_div(
                 added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
 
     state.history.append((first_div, first_la_idx, gi, added_slots))
+
+
+def _find_valid_blocks(
+    la: LogicalAssignment,
+    la_idx: int,
+    div_id: str,
+    div_data: SchoolData,
+    block_size: int,
+    state: PlacementState,
+    wsd: WholeSchoolData,
+) -> list[tuple[int, float]]:
+    """Find valid block starting positions for block-atomic placement.
+
+    A valid block at gi_start means gi_start..gi_start+block_size-1 are ALL:
+    - Empty, on the same day, no breaks between consecutive slots
+    - Within HARD period range, day preferences
+    - Teacher(s) available at all slots
+    - existing + block_size <= maxPeriodsPerDay
+
+    Returns: [(gi_start, demand_score), ...]
+    """
+    prefs = la.scheduling_preferences if la.scheduling_preferences and isinstance(la.scheduling_preferences, dict) else None
+    is_hard = prefs and prefs.get("constraintType") == "HARD"
+    preferred_days = set(prefs.get("preferredDays", [])) if prefs else set()
+    excluded_days = set(prefs.get("excludedDays", [])) if prefs else set()
+    pref_range = prefs.get("preferredPeriodRange") if prefs else None
+    max_pd = prefs.get("maxPeriodsPerDay") if prefs else None
+
+    chromosome = state.chromosomes[div_id]
+    ppd = div_data.periods_per_day
+    candidates: list[tuple[int, float]] = []
+
+    # Count existing placements per day
+    day_counts: dict[int, int] = defaultdict(int)
+    for gi2 in range(div_data.total_periods):
+        if int(chromosome[gi2]) == la_idx:
+            day_counts[gi2 // ppd] += 1
+
+    for gi_start in range(div_data.total_periods - block_size + 1):
+        day_idx = gi_start // ppd
+        period_start = gi_start % ppd
+
+        # Block must fit within the same day
+        if period_start + block_size > ppd:
+            continue
+
+        # Check all slots in the block
+        block_valid = True
+        block_slots: list = []
+
+        for offset in range(block_size):
+            gi = gi_start + offset
+            p_idx = period_start + offset
+
+            # Must be empty
+            if chromosome[gi] != -1:
+                block_valid = False
+                break
+
+            # No break between consecutive slots in the block
+            if offset > 0 and (day_idx, p_idx) in div_data.period_after_break:
+                block_valid = False
+                break
+
+            slot = div_data.period_slots[gi] if gi < len(div_data.period_slots) else None
+            if not slot:
+                block_valid = False
+                break
+
+            # HARD day constraints
+            if is_hard:
+                if slot.day_of_week in excluded_days:
+                    block_valid = False
+                    break
+                if preferred_days and slot.day_of_week not in preferred_days:
+                    block_valid = False
+                    break
+
+            # HARD period range
+            period_num = slot.slot_number
+            if is_hard and period_num is not None and pref_range:
+                if period_num < pref_range.get("min", 1) or period_num > pref_range.get("max", 99):
+                    block_valid = False
+                    break
+
+            # Teacher availability
+            picked = la.pick_available_teachers(
+                slot.day_of_week, slot.start_time,
+                state.teacher_busy, wsd.teacher_unavailable_times,
+                wsd.teacher_partitions, div_id,
+                end_time=slot.end_time,
+            )
+            if picked is None:
+                block_valid = False
+                break
+
+            block_slots.append(slot)
+
+        if not block_valid:
+            continue
+
+        # HARD maxPeriodsPerDay: existing + block_size must not exceed max
+        if is_hard and max_pd is not None:
+            if day_counts.get(day_idx, 0) + block_size > max_pd:
+                continue
+
+        # Score: average demand across all slots in the block
+        total_demand = 0.0
+        for gi in range(gi_start, gi_start + block_size):
+            total_demand += _compute_slot_demand(gi, div_id, div_data, state, wsd)
+        demand = total_demand / block_size
+
+        # Spread penalty
+        demand += day_counts.get(day_idx, 0) * 2
+
+        # maxPerDay-aware scoring
+        if max_pd is not None and max_pd > 0:
+            placed_on_day = day_counts.get(day_idx, 0)
+            remaining_for_this = la.weightage - state.placement_counts.get((div_id, la_idx), 0)
+            if remaining_for_this > 0:
+                days_needed = -(-remaining_for_this // max_pd)
+                days_with_room = sum(
+                    1 for d in range(div_data.num_days)
+                    if day_counts.get(d, 0) + block_size <= max_pd
+                )
+                if placed_on_day > 0 and days_needed >= days_with_room:
+                    demand += 20
+                elif placed_on_day + block_size >= max_pd:
+                    demand += 10
+
+        # Elective teacher conflict scoring
+        elective_conflict_partners: list[int] = []
+        conflict_info = state.elective_slot_reserves.get((div_id, la_idx))
+        if conflict_info:
+            elective_conflict_partners = [-(v + 1) for v in conflict_info if v < 0]
+        if elective_conflict_partners:
+            for partner_idx in elective_conflict_partners:
+                partner_remaining = (
+                    div_data.logical_assignments[partner_idx].weightage
+                    - state.placement_counts.get((div_id, partner_idx), 0)
+                )
+                if partner_remaining <= 0:
+                    continue
+                partner_on_day = sum(
+                    1 for g2 in range(day_idx * ppd, min((day_idx + 1) * ppd, div_data.total_periods))
+                    if int(chromosome[g2]) == partner_idx
+                )
+                if partner_on_day == 0 and partner_remaining >= 3:
+                    demand += 5
+
+        candidates.append((gi_start, demand))
+
+    return candidates
+
+
+def _find_valid_blocks_cross_div(
+    eg_id: str,
+    block_size: int,
+    state: PlacementState,
+    wsd: WholeSchoolData,
+) -> list[tuple[int, float]]:
+    """Find valid block starting positions for a cross-division elective.
+
+    All divisions must have the block of slots empty, break-free, and
+    teachers available at all slot positions.
+    """
+    div_ids = wsd.cross_div_electives[eg_id]
+    first_div = div_ids[0]
+    first_data = wsd.divisions[first_div]
+    first_la = None
+    for la in first_data.logical_assignments:
+        if la.elective_group_id == eg_id:
+            first_la = la
+            break
+    if first_la is None:
+        return []
+
+    prefs = first_la.scheduling_preferences if first_la.scheduling_preferences and isinstance(first_la.scheduling_preferences, dict) else None
+    is_hard = prefs and prefs.get("constraintType") == "HARD"
+    preferred_days = set(prefs.get("preferredDays", [])) if prefs else set()
+    excluded_days = set(prefs.get("excludedDays", [])) if prefs else set()
+    pref_range = prefs.get("preferredPeriodRange") if prefs else None
+    max_pd = prefs.get("maxPeriodsPerDay") if prefs else None
+
+    ppd = first_data.periods_per_day
+    candidates: list[tuple[int, float]] = []
+
+    first_la_idx = next(
+        i for i, la2 in enumerate(first_data.logical_assignments)
+        if la2.elective_group_id == eg_id
+    )
+    day_counts: dict[int, int] = defaultdict(int)
+    for gi2 in range(first_data.total_periods):
+        if int(state.chromosomes[first_div][gi2]) == first_la_idx:
+            day_counts[gi2 // ppd] += 1
+
+    for gi_start in range(first_data.total_periods - block_size + 1):
+        day_idx = gi_start // ppd
+        period_start = gi_start % ppd
+
+        if period_start + block_size > ppd:
+            continue
+
+        block_valid = True
+
+        for offset in range(block_size):
+            gi = gi_start + offset
+            p_idx = period_start + offset
+
+            # All divisions must have this slot empty
+            if not all(state.chromosomes[d][gi] == -1 for d in div_ids):
+                block_valid = False
+                break
+
+            # No break between consecutive slots
+            if offset > 0 and (day_idx, p_idx) in first_data.period_after_break:
+                block_valid = False
+                break
+
+            slot = first_data.period_slots[gi] if gi < len(first_data.period_slots) else None
+            if not slot:
+                block_valid = False
+                break
+
+            if is_hard:
+                if slot.day_of_week in excluded_days:
+                    block_valid = False
+                    break
+                if preferred_days and slot.day_of_week not in preferred_days:
+                    block_valid = False
+                    break
+
+            period_num = slot.slot_number
+            if is_hard and period_num is not None and pref_range:
+                if period_num < pref_range.get("min", 1) or period_num > pref_range.get("max", 99):
+                    block_valid = False
+                    break
+
+            picked = first_la.pick_available_teachers(
+                slot.day_of_week, slot.start_time,
+                state.teacher_busy, wsd.teacher_unavailable_times,
+                wsd.teacher_partitions, first_div,
+                end_time=slot.end_time,
+            )
+            if picked is None:
+                block_valid = False
+                break
+
+        if not block_valid:
+            continue
+
+        if is_hard and max_pd is not None:
+            if day_counts.get(day_idx, 0) + block_size > max_pd:
+                continue
+
+        demand = 0.0
+        demand += day_counts.get(day_idx, 0) * 2
+
+        candidates.append((gi_start, demand))
+
+    return candidates
+
+
+def _place_block(
+    state: PlacementState,
+    div_id: str,
+    la_idx: int,
+    gi_start: int,
+    block_size: int,
+    div_data: SchoolData,
+    la: LogicalAssignment,
+    wsd: WholeSchoolData,
+) -> None:
+    """Atomically place a block of block_size consecutive slots."""
+    all_added_slots: list[tuple[str, int, str, str]] = []
+
+    for offset in range(block_size):
+        gi = gi_start + offset
+        state.chromosomes[div_id][gi] = la_idx
+        state.placement_counts[(div_id, la_idx)] += 1
+
+        slot = div_data.period_slots[gi] if gi < len(div_data.period_slots) else None
+        if slot:
+            picked = la.pick_available_teachers(
+                slot.day_of_week, slot.start_time,
+                state.teacher_busy, wsd.teacher_unavailable_times,
+                wsd.teacher_partitions, div_id,
+                end_time=slot.end_time,
+            )
+            if picked is None:
+                picked = la.teacher_ids
+            for tid in picked:
+                state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
+                all_added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
+
+    # Single history entry for the entire block (atomic backtracking)
+    state.history.append((div_id, la_idx, gi_start, all_added_slots))
+
+
+def _place_block_cross_div(
+    state: PlacementState,
+    eg_id: str,
+    gi_start: int,
+    block_size: int,
+    wsd: WholeSchoolData,
+) -> None:
+    """Atomically place a block for a cross-division elective in ALL divisions."""
+    div_ids = wsd.cross_div_electives[eg_id]
+
+    # Stamp all divisions' chromosomes
+    for div_id in div_ids:
+        div_data = wsd.divisions[div_id]
+        for la_idx, la in enumerate(div_data.logical_assignments):
+            if la.elective_group_id == eg_id:
+                for offset in range(block_size):
+                    state.chromosomes[div_id][gi_start + offset] = la_idx
+                    state.placement_counts[(div_id, la_idx)] += 1
+                break
+
+    # Mark teachers busy ONCE using first division
+    first_div = div_ids[0]
+    first_data = wsd.divisions[first_div]
+    first_la = None
+    first_la_idx = 0
+    for idx, la in enumerate(first_data.logical_assignments):
+        if la.elective_group_id == eg_id:
+            first_la = la
+            first_la_idx = idx
+            break
+
+    all_added_slots: list[tuple[str, int, str, str]] = []
+    if first_la:
+        for offset in range(block_size):
+            gi = gi_start + offset
+            slot = first_data.period_slots[gi] if gi < len(first_data.period_slots) else None
+            if slot:
+                picked = first_la.pick_available_teachers(
+                    slot.day_of_week, slot.start_time,
+                    state.teacher_busy, wsd.teacher_unavailable_times,
+                    wsd.teacher_partitions, first_div,
+                    end_time=slot.end_time,
+                )
+                if picked is None:
+                    picked = first_la.teacher_ids
+                for tid in picked:
+                    state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
+                    all_added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
+
+    state.history.append((first_div, first_la_idx, gi_start, all_added_slots))
 
 
 def _place_assignment(
@@ -917,34 +1296,11 @@ def _find_valid_slots(
             if max_pd is not None and day_counts.get(day_idx, 0) >= max_pd:
                 continue
 
-        # HARD minPeriodsPerDay — only enforced when preferAdjacentPeriods is
-        # also true. If placing the FIRST period on this day, verify that
-        # enough truly-adjacent empty slots exist to reach the minimum.
-        # Prevents isolated single periods on a day when pairs are required.
-        # (0 periods on a day is fine — the min only applies to days where
-        # the subject IS scheduled.)
-        if is_hard and prefs and prefs.get("preferAdjacentPeriods"):
-            min_pd = prefs.get("minPeriodsPerDay")
-            if min_pd is not None and min_pd >= 2 and day_counts.get(day_idx, 0) == 0:
-                max_block = 1
-                left = period_idx - 1
-                while left >= 0:
-                    if (day_idx, left + 1) in div_data.period_after_break:
-                        break
-                    if chromosome[day_idx * ppd + left] != -1:
-                        break
-                    max_block += 1
-                    left -= 1
-                right = period_idx + 1
-                while right < ppd:
-                    if (day_idx, right) in div_data.period_after_break:
-                        break
-                    if chromosome[day_idx * ppd + right] != -1:
-                        break
-                    max_block += 1
-                    right += 1
-                if max_block < min_pd:
-                    continue
+        # NOTE: minPeriodsPerDay is now enforced via block-atomic placement.
+        # Assignments with adjacency + minPerDay >= 2 use _find_valid_blocks()
+        # which guarantees contiguous blocks. This single-mode path only handles
+        # assignments without block requirements (or remainder periods from
+        # odd-weightage block assignments).
 
         # HARD adjacency — if periods already placed, ONLY allow adjacent slots.
         # Break-aware: P2 and P3 are NOT adjacent if there's an interval between them.

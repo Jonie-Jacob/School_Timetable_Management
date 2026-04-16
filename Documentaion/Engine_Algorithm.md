@@ -2,7 +2,7 @@
 
 ## Overview
 
-The engine generates timetables for an entire school (or selected divisions) using a 5-step constraint propagation pipeline with cross-division elective awareness.
+The engine generates timetables for an entire school (or selected divisions) using a 5-step constraint propagation pipeline with cross-division elective awareness and block-atomic placement for adjacent-period subjects.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -30,6 +30,9 @@ The engine generates timetables for an entire school (or selected divisions) usi
 │                                                                │
 │  For each division:                                            │
 │    ├── Load period structure (slots, days, start/end times)    │
+│    │   ├── Mark period_after_break: (day_idx, period_idx)      │
+│    │   │   set for periods preceded by INTERVAL or LUNCH_BREAK │
+│    │   └── Used for break-aware adjacency enforcement          │
 │    ├── Load assignments (subject, teacher, weightage)          │
 │    ├── Load elective groups + parallel_sections                │
 │    ├── Build logical assignments                               │
@@ -48,6 +51,9 @@ The engine generates timetables for an entire school (or selected divisions) usi
 │            - Day not excluded (HARD prefs)                      │
 │            - Period not excluded (HARD prefs)                   │
 │            - Teacher available                                  │
+│          For adjacency subjects: valid_slots = count of        │
+│            valid BLOCK starting positions (not individual       │
+│            slots), accounting for breaks between periods.       │
 │          teacher_load = total weightage across all divisions   │
 │            (tiebreaker only — busier teacher placed first       │
 │             when valid_slots are equal)                         │
@@ -70,7 +76,7 @@ Assignments are sorted for placement priority using two keys:
 2. **Secondary: `teacher_load` (descending)** — busier teacher = placed first when slots are equal
 3. **Tertiary: `class_sort_order` (descending)** — higher classes (XII) before lower (XI) as tiebreaker
 
-This prevents the problem where heavily-shared-but-unconstrained teachers (e.g., English teacher in 14 divisions) get artificially prioritized over genuinely-restricted assignments (e.g., Life Skills with only 6 valid slots).
+For **block-mode** assignments (adjacency + minPeriodsPerDay), `valid_slots` counts the number of valid contiguous block starting positions — not individual slots. This gives them appropriately higher priority since a block of 2 on Senior Block P2-P8 has only 3 valid pairs per day (P3+P4, P5+P6, P7+P8) vs 7 individual slots.
 
 ---
 
@@ -141,11 +147,73 @@ This prevents the problem where heavily-shared-but-unconstrained teachers (e.g.,
 
 ---
 
+## Step 2c: Elective Teacher Conflict Detection
+
+**File:** `greedy.py` → `_build_elective_slot_reserves()`
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│        STEP 2c: ELECTIVE TEACHER CONFLICT DETECTION           │
+│                                                                │
+│  For each division, scan per-division elective groups:         │
+│                                                                │
+│  If two per-division electives in the SAME division share a    │
+│  teacher (e.g., Devassia teaches History in Acc/His AND        │
+│  Political Science in Bs/Polsci in XII C):                     │
+│                                                                │
+│    → Record the conflict pair                                  │
+│    → During slot scoring, add demand penalty (+5) when         │
+│      placing one elective on a day where the conflicting       │
+│      elective hasn't placed yet (spreads them across days)     │
+│                                                                │
+│  This is SOFT scoring, not hard filtering — the constraint     │
+│  is too tight for hard enforcement when combined with          │
+│  period preferences and maxPeriodsPerDay.                      │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Step 3: Demand-Driven Placement
 
 **File:** `greedy.py` → `schedule_all()` main loop
 
-The core scheduling step. Always resolves the tightest bottleneck first.
+The core scheduling step. Always resolves the tightest bottleneck first. Supports two placement modes: **single-mode** (1 slot at a time) and **block-mode** (N contiguous slots at once).
+
+### Block-Atomic Placement
+
+Assignments are classified into placement modes based on scheduling preferences:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│              PLACEMENT MODE CLASSIFICATION                     │
+│                                                                │
+│  preferAdjacentPeriods=true AND minPeriodsPerDay >= 2 (HARD)?  │
+│                                                                │
+│    YES → BLOCK MODE                                            │
+│    │   block_size = minPeriodsPerDay (e.g., 2, 3, 4)           │
+│    │   full_blocks = weightage // block_size                   │
+│    │   remainder = weightage % block_size                      │
+│    │                                                           │
+│    │   Examples:                                               │
+│    │     Physics w=8, minPerDay=2 → 4 block placements         │
+│    │     English w=7, minPerDay=2 → 3 blocks + 1 single        │
+│    │     Lab w=4, minPerDay=4 → 1 block of 4 slots             │
+│    │     CCA w=2, minPerDay=2 → 1 block of 2 slots             │
+│    │                                                           │
+│    NO → SINGLE MODE                                            │
+│        Place 1 slot at a time (standard behavior)              │
+│        Examples: Economics w=8, English w=6 (no adjacency)     │
+│                                                                │
+│  Block-mode guarantees:                                        │
+│    • No isolated single periods (block is atomic)              │
+│    • No breaks/intervals within the block                      │
+│    • All N slots on the SAME day                               │
+│    • minPeriodsPerDay satisfied by construction                 │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Main Placement Loop
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
@@ -153,51 +221,61 @@ The core scheduling step. Always resolves the tightest bottleneck first.
 │                                                                     │
 │  Initialize:                                                        │
 │    - Empty chromosome per division (all slots = -1)                  │
-│    - teacher_busy = {} (global set)                                  │
-│    - remaining = all items (cross-div electives appear ONCE)         │
+│    - TeacherBusyTracker (time-range overlap detection)               │
+│    - remaining items:                                                │
+│      Block-mode: full_blocks entries of size N + optional remainder  │
+│      Single-mode: weightage entries of size 1                        │
+│    - Cross-div electives appear ONCE (first division)                │
 │                                                                     │
 │  ┌───────────────────────────────────────────────────────┐          │
 │  │  MAIN LOOP (repeat until all placed)                   │          │
 │  │                                                         │          │
-│  │  1. For EACH unplaced assignment-period:                 │          │
+│  │  1. For EACH unplaced item:                              │          │
 │  │     ├── Is it a cross-div elective?                      │          │
 │  │     │   YES → _find_valid_slots_cross_div()              │          │
 │  │     │         (slot must be empty in ALL divisions)       │          │
 │  │     │                                                    │          │
 │  │     └── NO  → _find_valid_slots()                        │          │
-│  │               (per-division check)                       │          │
+│  │               ├── Block-mode? Find valid BLOCK positions  │          │
+│  │               │   (N contiguous empty + break-free slots) │          │
+│  │               └── Single-mode? Find valid individual slots│          │
 │  │                                                         │          │
-│  │  2. Pick assignment with FEWEST valid slots              │          │
+│  │  2. Pick item with FEWEST valid positions                │          │
 │  │     (most constrained = highest priority)                │          │
 │  │                                                         │          │
 │  │  3. valid_count > 0?                                      │          │
 │  │     │                                                    │          │
-│  │     ├── YES: Score each valid slot by demand              │          │
-│  │     │   │    Place in slot with LOWEST demand             │          │
+│  │     ├── YES: Score each valid position by demand          │          │
+│  │     │   │    Place at position with LOWEST demand         │          │
+│  │     │   │                                                 │          │
+│  │     │   ├── Block-mode: stamp N consecutive slots         │          │
+│  │     │   │   + mark teacher busy for all N                 │          │
 │  │     │   │                                                 │          │
 │  │     │   ├── Cross-div? → _place_cross_div()               │          │
 │  │     │   │   Stamp ALL divisions, mark teachers ONCE       │          │
 │  │     │   │                                                 │          │
-│  │     │   └── Per-div?  → _place_assignment()               │          │
-│  │     │       Stamp one division, mark picked teachers      │          │
+│  │     │   └── Per-div single? → _place_assignment()         │          │
+│  │     │       Stamp one slot, mark picked teachers          │          │
 │  │     │                                                    │          │
-│  │     └── NO (0 valid slots): → Go to STEP 4 (Backtrack)   │          │
+│  │     └── NO (0 valid positions): → Step 4 (Backtrack)      │          │
 │  │                                                         │          │
 │  └───────────────────────────────────────────────────────┘          │
 │                                                                     │
 │  Output: chromosomes { div_id → numpy array }                       │
 │  Stats: placed_ok, backtracked, fallback counts                     │
+│  Failure analysis: actionable diagnoses for each fallback           │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
 ### Slot Validity Checks
 
-A slot is VALID for placement if ALL of the following pass:
+A slot (or block starting position) is VALID if ALL of the following pass:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│              SLOT VALIDITY (_find_valid_slots)                 │
+│          SLOT VALIDITY (_find_valid_slots)                     │
 │                                                                │
+│  For SINGLE MODE:                                              │
 │  ✓ Slot is empty (chromosome[gi] == -1)                        │
 │  ✓ HARD day constraint: day not in excludedDays                │
 │  ✓ HARD day constraint: day in preferredDays (if set)          │
@@ -206,37 +284,69 @@ A slot is VALID for placement if ALL of the following pass:
 │  ✓ HARD maxPeriodsPerDay: not already at max for this day      │
 │  ✓ HARD adjacency: if preferAdjacentPeriods + already placed,  │
 │    slot MUST be adjacent to an existing placement              │
-│  ✓ Teacher check via pick_available_teachers():                │
-│    - For non-elective: ALL teachers must be free               │
-│    - For elective: min(parallel_sections, unique_teachers)     │
-│      teachers per subject must be free                         │
-│    Checks: not unavailable, not busy, in partition             │
+│    (break-aware: no interval/lunch between them)               │
+│  ✓ Teacher check via pick_available_teachers()                 │
+│                                                                │
+│  For BLOCK MODE (size N):                                      │
+│  ✓ ALL N consecutive slots are empty                           │
+│  ✓ NO breaks/intervals between any consecutive pair            │
+│    (uses period_after_break set from period structure)          │
+│  ✓ ALL N slots on the same day                                 │
+│  ✓ ALL N slots within HARD period range                        │
+│  ✓ ALL N slots satisfy HARD day constraints                    │
+│  ✓ existing_count + N <= maxPeriodsPerDay for that day         │
+│  ✓ Teacher(s) available at ALL N slot times                    │
 │                                                                │
 │  For CROSS-DIVISION electives, additionally:                   │
-│  ✓ Slot must be empty in ALL participating divisions           │
+│  ✓ Slot(s) must be empty in ALL participating divisions        │
 └──────────────────────────────────────────────────────────────┘
+```
+
+### Break-Aware Adjacency
+
+The engine uses `period_after_break` (computed from the period structure) to determine which periods are truly contiguous. Two periods are only considered adjacent if there is no INTERVAL, LUNCH_BREAK, or any non-PERIOD slot between them.
+
+```
+Senior Block example (Monday):
+  P1  09:00-09:45
+  P2  09:45-10:30      ← P1+P2 adjacent (no break)
+  -- INTERVAL 10:30-10:45 --
+  P3  10:45-11:30      ← P2+P3 NOT adjacent (interval between)
+  P4  11:30-12:15      ← P3+P4 adjacent
+  -- LUNCH 12:15-12:45 --
+  P5  12:45-13:30      ← P4+P5 NOT adjacent (lunch between)
+  P6  13:30-14:15      ← P5+P6 adjacent
+  -- INTERVAL 14:15-14:30 --
+  P7  14:30-15:15      ← P6+P7 NOT adjacent (interval between)
+  P8  15:15-16:00      ← P7+P8 adjacent
+
+Valid block-of-2 positions (P2-P8 range): P3+P4, P5+P6, P7+P8
+                                          (3 per day × 5 days = 15)
+Invalid: P2+P3 (interval), P4+P5 (lunch), P6+P7 (interval)
 ```
 
 ### Slot Scoring (Demand)
 
-Among valid slots, the engine picks the one with the LOWEST score:
+Among valid positions, the engine picks the one with the LOWEST score:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    SLOT SCORING                                │
 │                                                                │
-│  demand = count of OTHER unplaced assignments that could       │
-│           use this slot (via pick_available_teachers)           │
+│  Base demand = count of OTHER unplaced assignments that could  │
+│                use this slot (via pick_available_teachers)      │
+│  For block-mode: average demand across all N slots in block    │
 │                                                                │
 │  Higher demand = more contested = WORSE choice                 │
 │  (save this slot for someone who needs it more)                │
 │                                                                │
 │  Then adjust:                                                  │
 │                                                                │
-│  HARD adjacency (preferAdjacentPeriods + HARD):                │
+│  HARD adjacency (HARD + preferAdjacentPeriods):                │
 │    Non-adjacent slots SKIPPED entirely (not just penalized)    │
+│    (only applies to single-mode; block-mode is always valid)   │
 │                                                                │
-│  SOFT adjacency (preferAdjacentPeriods or global flag):        │
+│  SOFT adjacency (SOFT preferAdjacentPeriods or global flag):   │
 │    Adjacent to same subject?    → demand -= 10 (bonus)         │
 │    Already placed, not adjacent → demand += 5  (penalty)       │
 │                                                                │
@@ -251,7 +361,20 @@ Among valid slots, the engine picks the one with the LOWEST score:
 │  Spread penalty:                                               │
 │    +2 per existing placement of this subject on same day       │
 │                                                                │
-│  Pick slot with LOWEST final score                             │
+│  maxPeriodsPerDay-aware scoring:                               │
+│    Days running low on room for this subject → +20             │
+│    Days about to hit the cap → +10                             │
+│    (prevents day starvation for subjects needing many days)     │
+│                                                                │
+│  Scarcity-aware P2-P8 scoring:                                 │
+│    Unrestricted subjects penalized for using P2-P8 slots       │
+│    when restricted subjects still need them                    │
+│                                                                │
+│  Elective teacher conflict scoring:                            │
+│    Per-div elective sharing teacher with another elective       │
+│    in same division → +5 on days where partner hasn't placed   │
+│                                                                │
+│  Pick position with LOWEST final score                         │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -261,24 +384,26 @@ Among valid slots, the engine picks the one with the LOWEST score:
 
 **File:** `greedy.py` → `_try_backtrack()`
 
-Triggered when Step 3 finds 0 valid slots for an assignment.
+Triggered when Step 3 finds 0 valid positions for an assignment.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                  STEP 4: BACKTRACKING                          │
 │                                                                │
-│  Assignment X has 0 valid slots. Why?                          │
+│  Assignment X has 0 valid positions. Why?                      │
 │  → Teacher is busy everywhere (placed in other divisions)      │
 │                                                                │
 │  1. Get teacher IDs from stuck assignment X                     │
 │                                                                │
 │  2. Search ALL placement history for entries involving          │
 │     the SAME teacher(s). Pick up to 5 candidates.              │
+│     (History entries store full block for block-mode items)     │
 │                                                                │
 │  3. For each candidate:                                         │
 │     ┌──────────────────────────────────────────┐               │
 │     │  a. UNDO the candidate placement          │               │
 │     │     (remove from chromosome, free teacher) │               │
+│     │     For blocks: undo all N slots atomically│               │
 │     │                                            │               │
 │     │  b. Try placing X again                    │               │
 │     │     (teacher now free at that slot)         │               │
@@ -295,10 +420,27 @@ Triggered when Step 3 finds 0 valid slots for an assignment.
 │                                                                │
 │  4. All candidates exhausted?                                   │
 │     → FALLBACK: Place in any empty slot (accepts conflict)      │
+│     → Failure analysis generated (actionable suggestion)        │
 │     → Violation reported in audit_violations()                  │
 │                                                                │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+### Failure Analysis
+
+When a placement fails and falls back, the engine generates a structured failure analysis with:
+
+- **Type**: `TEACHER_OVERLOAD`, `TEACHER_BUSY`, `ELECTIVE_TEACHER_CONFLICT`, `PERIOD_PREFERENCE_CONFLICT`, `MAX_PER_DAY_CONFLICT`, `DAY_PREFERENCE_CONFLICT`, `DIVISION_FULL`, `PLACEMENT_FAILED`
+- **Division and subject names** (human-readable)
+- **Teacher names and loads** (total pw across all divisions)
+- **Message**: what went wrong
+- **Suggestion**: actionable data fix the user can make
+- **Details**: slot breakdown (full, dayBlocked, periodBlocked, maxPerDayBlocked, teacherBusy, etc.)
+
+Failure analyses are:
+1. Sent via WebSocket in the `generation_summary` event
+2. Persisted to `generation_jobs.result_summary` JSONB column
+3. Displayed in the frontend's Generation Progress panel
 
 ---
 
@@ -320,7 +462,8 @@ After all assignments are placed, improve soft constraints via deterministic swa
 │        YES → Skip                                              │
 │                                                                │
 │        NO → Compute soft score before and after swap:          │
-│          - Adjacency (same subject adjacent? lower = better)   │
+│          - Adjacency (break-aware: same subject adjacent       │
+│            with no interval between? lower = better)           │
 │          - Spread (>2 of same subject per day? penalty)        │
 │          - Period preference (high-weightage in early periods) │
 │                                                                │
@@ -354,6 +497,8 @@ After all assignments are placed, improve soft constraints via deterministic swa
 │    6. Push division_completed via WebSocket                  │
 │                                                            │
 │  After all divisions:                                       │
+│    Save batch result_summary (including failure analyses)    │
+│    to generation_jobs.result_summary JSONB column            │
 │    Push generation_summary via WebSocket                     │
 │                                                            │
 │  Elective teacher distribution:                             │
@@ -435,8 +580,9 @@ Each assignment can have scheduling preferences (JSONB column `scheduling_prefer
 | `excludedDays` | Slot filtered out if day in list | +3 demand penalty |
 | `preferredPeriodRange` | Slot filtered out if outside range | +3 demand penalty |
 | `excludedPeriodRange` | Slot filtered out if inside range | +3 demand penalty |
-| `maxPeriodsPerDay` | Slot filtered out if day already at max | Not enforced |
-| `preferAdjacentPeriods` | Non-adjacent slots SKIPPED entirely (after first placement) | -10 bonus if adjacent, +5 penalty if not |
+| `maxPeriodsPerDay` | Slot filtered out if day already at max. Scoring: +20 if running low on days, +10 if day near cap | Not enforced as filter |
+| `minPeriodsPerDay` | With adjacency ON: first placement on a day requires N contiguous break-free empty slots | Not enforced |
+| `preferAdjacentPeriods` | Break-aware: non-adjacent slots SKIPPED (after first placement). With minPerDay: enables block-atomic placement mode | -10 bonus if adjacent, +5 penalty if not |
 
 For elective groups, preferences are **merged** across members:
 - `constraintType`: HARD if ANY member is HARD
@@ -444,6 +590,22 @@ For elective groups, preferences are **merged** across members:
 - `excludedDays`: union (days ANY member excludes)
 - `preferredPeriodRange`: tightest (max of mins, min of maxes)
 - `preferAdjacentPeriods`: true if ANY member wants it
+
+---
+
+## Teacher Busy Tracking
+
+**File:** `greedy.py` → `TeacherBusyTracker`
+
+The engine uses time-range overlap detection instead of exact start-time matching. This is critical for schools with multiple period structures (e.g., Default for I-IX and Senior Block for X-XII) where periods overlap in time but have different start/end times.
+
+```
+Default P1:  09:20-10:00
+Senior P1:   09:00-09:45    ← overlaps with Default P1!
+
+TeacherBusyTracker stores: (teacher_id, day_of_week) → [(start, end), ...]
+Overlap check: s < end_time AND start_time < e
+```
 
 ---
 
@@ -466,6 +628,8 @@ User clicks "Generate All"
         │
         ▼
 Frontend → POST /api/timetables/generate { divisionIds: [...] }
+  • Clears old generation results from UI + localStorage
+  • Shows progress immediately (loading phase)
         │
         ▼
 Lambda creates generation_jobs, launches 1 ECS Fargate task
@@ -475,19 +639,24 @@ ECS Task runs main.py in batch mode
         │
         ▼
 Step 1:  Load all 35 divisions' data ──────────────────── ~2s
-         + compute flexibility (valid_slots, teacher_load)
+         + compute flexibility (valid_slots / block_positions)
+         + mark period_after_break for adjacency
         │
         ▼
 Step 2:  Partition shared teachers ────────────────────── ~1s
          + detect cross-division electives (5 groups)
+         + detect intra-division elective teacher conflicts
         │
         ▼
 Step 3:  Demand-driven placement of ~1400 periods ────── ~5s
+         • Block-mode: adjacent subjects placed as atomic blocks
          • Cross-div electives placed once, stamped to all divs
          • parallel_sections: only needed teachers checked
+         • Break-aware adjacency: no blocks spanning intervals
          • HARD prefs: day, period, adjacency, maxPerDay enforced
          • SOFT prefs: demand penalties for preferred violations
          • Includes Step 4 backtracking on deadlocks
+         • Failure analysis generated for each fallback
         │
         ▼
 Step 5:  Local optimization for 35 divisions ──────────── ~3s
@@ -495,15 +664,17 @@ Step 5:  Local optimization for 35 divisions ───────────�
         ▼
 Write 35 timetables to database ──────────────────────── ~5s
          + audit violations per division (actionable messages)
+         + save batch result_summary with failure analyses
         │
         ▼
 Push generation_summary via WebSocket
         │
         ▼
-Frontend shows results with per-division violation details
-  • Hard violations: red badges (teacher conflicts, missing periods)
-  • Soft violations: amber badges (adjacency gaps, spread issues)
-  • Actionable messages: "reduce weightage or reassign teacher"
+Frontend shows results:
+  • Per-division violation details (expandable)
+  • Failure analysis section with actionable suggestions
+    grouped by division, color-coded by type, with
+    teacher load badges and green suggestion boxes
 ```
 
 ---
@@ -512,10 +683,10 @@ Frontend shows results with per-division violation details
 
 | File | Purpose |
 |------|---------|
-| `data_loader.py` | Load single division, build SchoolData, LogicalAssignment with subject_teacher_map |
-| `whole_school_loader.py` | Load all divisions, compute flexibility, partition teachers, detect cross-div electives |
-| `ga/greedy.py` | Constraint propagation scheduler: demand-driven + backtracking + local optimization |
+| `data_loader.py` | Load single division, build SchoolData with period_after_break, LogicalAssignment with subject_teacher_map |
+| `whole_school_loader.py` | Load all divisions, compute flexibility (block-aware), partition teachers, detect cross-div electives |
+| `ga/greedy.py` | Constraint propagation scheduler: block-atomic + single placement, demand-driven + backtracking + local optimization + failure analysis |
 | `ga/fitness.py` | Evaluate solution (hard + soft constraints), audit_violations() for UI reporting |
-| `output_writer.py` | Chromosome → database timetable_slots rows with elective teacher distribution |
-| `main.py` | Entry points: single_division vs batch generation |
-| `ws_pusher.py` | WebSocket progress events for real-time UI updates |
+| `output_writer.py` | Chromosome → database timetable_slots rows with elective teacher distribution + batch result summary |
+| `main.py` | Entry points: single_division vs batch generation, orchestrates all steps |
+| `ws_pusher.py` | WebSocket progress events for real-time UI updates including failure analysis |
