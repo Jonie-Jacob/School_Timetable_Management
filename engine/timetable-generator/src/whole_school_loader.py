@@ -227,6 +227,48 @@ def compute_flexibility(
 
         valid_slots += 1
 
+    # Adjacency-aware flexibility: if the assignment needs adjacent periods,
+    # only contiguous blocks (no breaks between them) can host the pair.
+    # Reduce valid_slots to reflect the actual number of adjacency-valid
+    # starting positions. This gives adjacency-constrained assignments
+    # higher priority (lower valid count → placed earlier).
+    want_adjacent = prefs and prefs.get("preferAdjacentPeriods")
+    if want_adjacent and valid_slots > 0:
+        # Count contiguous pairs within each day (no break between them)
+        adj_pairs = 0
+        ppd = div_data.periods_per_day
+        for day_idx in range(div_data.num_days):
+            for p in range(ppd - 1):
+                gi_a = day_idx * ppd + p
+                gi_b = day_idx * ppd + p + 1
+                if gi_a >= len(div_data.period_slots) or gi_b >= len(div_data.period_slots):
+                    continue
+                slot_a = div_data.period_slots[gi_a]
+                slot_b = div_data.period_slots[gi_b]
+                # Both must be valid (within preferred range, etc.)
+                # and no break between them
+                if (day_idx, p + 1) in div_data.period_after_break:
+                    continue
+                # Check both slots pass HARD constraints
+                a_valid = True
+                b_valid = True
+                if is_hard:
+                    if slot_a.day_of_week in excluded_days or (preferred_days and slot_a.day_of_week not in preferred_days):
+                        a_valid = False
+                    pn_a = slot_a.slot_number
+                    if pn_a is not None and pref_range:
+                        if pn_a < pref_range.get("min", 1) or pn_a > pref_range.get("max", 99):
+                            a_valid = False
+                    pn_b = slot_b.slot_number
+                    if pn_b is not None and pref_range:
+                        if pn_b < pref_range.get("min", 1) or pn_b > pref_range.get("max", 99):
+                            b_valid = False
+                if a_valid and b_valid:
+                    adj_pairs += 1
+        # Use adjacency pairs as the effective valid slots (more constrained)
+        if adj_pairs < valid_slots:
+            valid_slots = adj_pairs
+
     # Teacher load as tiebreaker (higher = busier = should place first)
     teacher_load = 0.0
     if teacher_ids:

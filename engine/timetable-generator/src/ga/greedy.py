@@ -78,9 +78,61 @@ class PlacementState:
     # History for backtracking: list of (div_id, la_idx, gene_index, teacher_slots_added)
     # Each teacher_slot is now (teacher_id, day_of_week, start_time, end_time)
     history: list[tuple[str, int, int, list[tuple[str, int, str, str]]]]
+    # Elective slot reservations: (div_id, la_idx) → set of allowed gene indices.
+    # Used when per-division elective groups share a teacher in the same division.
+    # Each group gets a non-overlapping set of slots so they don't starve each other.
+    elective_slot_reserves: dict[tuple[str, int], set[int]] = field(default_factory=dict)
     placed_ok: int = 0
     backtracked: int = 0
     fallback: int = 0
+
+
+def _build_elective_slot_reserves(state: PlacementState, wsd: WholeSchoolData) -> None:
+    """Detect per-division elective groups that share a teacher within the
+    same division and store the conflict info for soft scoring.
+
+    We don't hard-reserve slots (too restrictive with maxPeriodsPerDay +
+    period preferences), but we store which (div_id, la_idx) pairs conflict
+    so _find_valid_slots can apply dynamic scoring.
+    """
+    for div_id, div_data in wsd.divisions.items():
+        per_div_electives: list[tuple[int, LogicalAssignment]] = []
+        for la_idx, la in enumerate(div_data.logical_assignments):
+            if not la.is_elective or not la.elective_group_id:
+                continue
+            if la.elective_group_id in wsd.cross_div_electives:
+                continue
+            per_div_electives.append((la_idx, la))
+
+        if len(per_div_electives) < 2:
+            continue
+
+        # Find conflicting pairs (share a teacher)
+        for i, (la_idx_a, la_a) in enumerate(per_div_electives):
+            for j in range(i + 1, len(per_div_electives)):
+                la_idx_b, la_b = per_div_electives[j]
+                if set(la_a.teacher_ids) & set(la_b.teacher_ids):
+                    # Mark both as having elective conflicts — store the
+                    # conflicting la_idx so scoring can check remaining demand.
+                    # Use elective_slot_reserves with a sentinel value (empty set)
+                    # to signal "has conflict" without hard-filtering.
+                    key_a = (div_id, la_idx_a)
+                    key_b = (div_id, la_idx_b)
+                    if key_a not in state.elective_slot_reserves:
+                        state.elective_slot_reserves[key_a] = set()
+                    if key_b not in state.elective_slot_reserves:
+                        state.elective_slot_reserves[key_b] = set()
+                    # Store conflicting partner indices (overload the set with negative sentinels)
+                    state.elective_slot_reserves[key_a].add(-la_idx_b - 1)  # negative to distinguish
+                    state.elective_slot_reserves[key_b].add(-la_idx_a - 1)
+
+                    shared_names = []
+                    for tid in set(la_a.teacher_ids) & set(la_b.teacher_ids):
+                        tinfo = wsd.teachers.get(tid)
+                        shared_names.append(tinfo.name if tinfo else tid[:8])
+                    logger.info("Elective teacher conflict in %s: %s and %s share %s",
+                                div_id[:8], la_a.display_name, la_b.display_name,
+                                shared_names)
 
 
 def schedule_all(
@@ -133,6 +185,9 @@ def schedule_all(
     remaining: dict[tuple[str, int], int] = defaultdict(int)
     for div_id, la_idx in items:
         remaining[(div_id, la_idx)] += 1
+
+    # ── Pre-compute elective slot reservations ───────────────────────────
+    _build_elective_slot_reserves(state, wsd)
 
     # Collect failure analyses for the summary
     failure_analyses: list[dict] = []
@@ -327,6 +382,40 @@ def _find_valid_slots_cross_div(
                 if day_count >= max_pd:
                     continue
 
+        # HARD minPeriodsPerDay for cross-div electives (only with adjacency)
+        if is_hard and prefs and prefs.get("preferAdjacentPeriods"):
+            min_pd = prefs.get("minPeriodsPerDay")
+            if min_pd is not None and min_pd >= 2:
+                first_la_idx_min = next(
+                    (i for i, la2 in enumerate(first_data.logical_assignments)
+                     if la2.elective_group_id == eg_id), -1
+                )
+                day_count_min = sum(
+                    1 for g in range(day_idx * ppd, min((day_idx + 1) * ppd, first_data.total_periods))
+                    if int(state.chromosomes[first_div][g]) == first_la_idx_min
+                ) if first_la_idx_min >= 0 else 0
+                if day_count_min == 0:
+                    chromosome_cd = state.chromosomes[first_div]
+                    max_block = 1
+                    left = period_idx - 1
+                    while left >= 0:
+                        if (day_idx, left + 1) in first_data.period_after_break:
+                            break
+                        if chromosome_cd[day_idx * ppd + left] != -1:
+                            break
+                        max_block += 1
+                        left -= 1
+                    right = period_idx + 1
+                    while right < ppd:
+                        if (day_idx, right) in first_data.period_after_break:
+                            break
+                        if chromosome_cd[day_idx * ppd + right] != -1:
+                            break
+                        max_block += 1
+                        right += 1
+                    if max_block < min_pd:
+                        continue
+
         # Teacher check — teachers are shared, only need to check once
         picked = first_la.pick_available_teachers(
             slot.day_of_week, slot.start_time,
@@ -352,10 +441,13 @@ def _find_valid_slots_cross_div(
         chromosome = state.chromosomes[first_div]
         has_neighbor = False
         if want_adjacent:
-            if period_idx > 0 and int(chromosome[day_idx * ppd + period_idx - 1]) == first_la_idx_adj:
-                has_neighbor = True
-            if period_idx < ppd - 1 and int(chromosome[day_idx * ppd + period_idx + 1]) == first_la_idx_adj:
-                has_neighbor = True
+            # Break-aware adjacency: no break between slots
+            if period_idx > 0 and (day_idx, period_idx) not in first_data.period_after_break:
+                if int(chromosome[day_idx * ppd + period_idx - 1]) == first_la_idx_adj:
+                    has_neighbor = True
+            if period_idx < ppd - 1 and (day_idx, period_idx + 1) not in first_data.period_after_break:
+                if int(chromosome[day_idx * ppd + period_idx + 1]) == first_la_idx_adj:
+                    has_neighbor = True
 
         # HARD adjacency: enforce only within same day
         placed_this_day = sum(
@@ -598,15 +690,7 @@ def _build_failure_analysis(
     message = ""
     suggestion = ""
 
-    # Check for placeholder/missing teachers
-    has_placeholder = any(tid.startswith("xyz") or tid.startswith("000") for tid in la.teacher_ids)
-    if has_placeholder:
-        placeholder_names = [n for tid, n in zip(la.teacher_ids, teacher_names) if tid.startswith("xyz") or tid.startswith("000")]
-        analysis_type = "MISSING_TEACHER"
-        message = f"'{', '.join(placeholder_names)}' is a placeholder — no real teacher assigned for {subject_name} in {div_label}."
-        suggestion = f"Assign a real teacher for {subject_name} in {div_label}."
-
-    elif teacher_busy_count > 0 and teacher_busy_count >= (total_slots - full - day_blocked - period_blocked - max_per_day_blocked):
+    if teacher_busy_count > 0 and teacher_busy_count >= (total_slots - full - day_blocked - period_blocked - max_per_day_blocked):
         # Primary blocker is teacher busy
         busiest = max(teacher_loads, key=teacher_loads.get) if teacher_loads else ""
         busiest_load = teacher_loads.get(busiest, 0)
@@ -785,6 +869,12 @@ def _find_valid_slots(
         or (prefs and prefs.get("preferAdjacentPeriods"))
     )
 
+    # Check if this elective has teacher conflicts with another elective
+    elective_conflict_partners: list[int] = []
+    conflict_info = state.elective_slot_reserves.get((div_id, la_idx))
+    if conflict_info:
+        elective_conflict_partners = [-(v + 1) for v in conflict_info if v < 0]
+
     for gi in range(div_data.total_periods):
         if chromosome[gi] != -1:
             continue
@@ -827,14 +917,48 @@ def _find_valid_slots(
             if max_pd is not None and day_counts.get(day_idx, 0) >= max_pd:
                 continue
 
-        # HARD adjacency — if periods already placed, ONLY allow adjacent slots
+        # HARD minPeriodsPerDay — only enforced when preferAdjacentPeriods is
+        # also true. If placing the FIRST period on this day, verify that
+        # enough truly-adjacent empty slots exist to reach the minimum.
+        # Prevents isolated single periods on a day when pairs are required.
+        # (0 periods on a day is fine — the min only applies to days where
+        # the subject IS scheduled.)
+        if is_hard and prefs and prefs.get("preferAdjacentPeriods"):
+            min_pd = prefs.get("minPeriodsPerDay")
+            if min_pd is not None and min_pd >= 2 and day_counts.get(day_idx, 0) == 0:
+                max_block = 1
+                left = period_idx - 1
+                while left >= 0:
+                    if (day_idx, left + 1) in div_data.period_after_break:
+                        break
+                    if chromosome[day_idx * ppd + left] != -1:
+                        break
+                    max_block += 1
+                    left -= 1
+                right = period_idx + 1
+                while right < ppd:
+                    if (day_idx, right) in div_data.period_after_break:
+                        break
+                    if chromosome[day_idx * ppd + right] != -1:
+                        break
+                    max_block += 1
+                    right += 1
+                if max_block < min_pd:
+                    continue
+
+        # HARD adjacency — if periods already placed, ONLY allow adjacent slots.
+        # Break-aware: P2 and P3 are NOT adjacent if there's an interval between them.
         hard_adjacent = is_hard and prefs and prefs.get("preferAdjacentPeriods")
         has_neighbor = False
         if want_adjacent:
-            if period_idx > 0 and int(chromosome[day_idx * ppd + period_idx - 1]) == la_idx:
-                has_neighbor = True
-            if period_idx < ppd - 1 and int(chromosome[day_idx * ppd + period_idx + 1]) == la_idx:
-                has_neighbor = True
+            # Check left neighbor: gi-1 is adjacent only if no break before current slot
+            if period_idx > 0 and (day_idx, period_idx) not in div_data.period_after_break:
+                if int(chromosome[day_idx * ppd + period_idx - 1]) == la_idx:
+                    has_neighbor = True
+            # Check right neighbor: gi+1 is adjacent only if no break before next slot
+            if period_idx < ppd - 1 and (day_idx, period_idx + 1) not in div_data.period_after_break:
+                if int(chromosome[day_idx * ppd + period_idx + 1]) == la_idx:
+                    has_neighbor = True
 
         # HARD adjacency: enforce only within the same day. If this day already
         # has placements of this assignment, the new slot MUST be adjacent to one.
@@ -874,6 +998,30 @@ def _find_valid_slots(
         # Spread bonus — avoid piling on one day
         demand += day_counts.get(day_idx, 0) * 2
 
+        # maxPeriodsPerDay-aware scoring: penalize days approaching the cap.
+        # Without this, the engine piles periods on early-evaluated days,
+        # then runs out of days. E.g. English w=7, maxPerDay=2 → needs at
+        # least ceil(7/2)=4 days, so prefer spreading to fresh days.
+        effective_max_pd = None
+        if prefs:
+            effective_max_pd = prefs.get("maxPeriodsPerDay")
+        if effective_max_pd is not None and effective_max_pd > 0:
+            placed_on_day = day_counts.get(day_idx, 0)
+            remaining_for_this = la.weightage - state.placement_counts.get((div_id, la_idx), 0)
+            if remaining_for_this > 0:
+                days_needed = -(-remaining_for_this // effective_max_pd)  # ceil div
+                # Count days that still have room (haven't hit the cap)
+                days_with_room = sum(
+                    1 for d in range(div_data.num_days)
+                    if day_counts.get(d, 0) < effective_max_pd
+                )
+                if placed_on_day > 0 and days_needed >= days_with_room:
+                    # Running out of usable days — strongly prefer a fresh day
+                    demand += 20
+                elif placed_on_day >= effective_max_pd - 1:
+                    # This day is about to hit the cap — prefer another day
+                    demand += 10
+
         # Scarcity-aware scoring: if THIS assignment can use P1 but the slot
         # is P2-P8, penalize it so we preserve P2-P8 slots for assignments
         # that are RESTRICTED to P2-P8 only.
@@ -906,6 +1054,30 @@ def _find_valid_slots(
                 if pressure > 0.5:
                     # Steer unrestricted assignments toward P1 slots
                     demand += pressure * 8
+
+        # Elective teacher conflict: if this elective shares a teacher with
+        # another per-division elective in this division, prefer days where
+        # the OTHER elective has already placed (so they don't overlap on
+        # fresh days). The key insight: two electives sharing a teacher
+        # can't use the same slot, so we want them on DIFFERENT periods
+        # of the SAME day or on different days entirely.
+        if elective_conflict_partners:
+            for partner_idx in elective_conflict_partners:
+                partner_remaining = (
+                    div_data.logical_assignments[partner_idx].weightage
+                    - state.placement_counts.get((div_id, partner_idx), 0)
+                )
+                if partner_remaining <= 0:
+                    continue
+                # Check how many valid slots the partner has on this day
+                partner_on_day = sum(
+                    1 for g2 in range(day_idx * ppd, min((day_idx + 1) * ppd, div_data.total_periods))
+                    if int(chromosome[g2]) == partner_idx
+                )
+                # If the partner hasn't placed on this day yet and still
+                # has many periods to place, penalize — leave room for them
+                if partner_on_day == 0 and partner_remaining >= 3:
+                    demand += 5
 
         candidates.append((gi, demand))
 
@@ -1125,13 +1297,15 @@ def _soft_score_pair(
             or (prefs and prefs.get("preferAdjacentPeriods"))
         )
 
-        # Adjacency: reward being next to same assignment
+        # Adjacency: reward being next to same assignment (break-aware)
         if want_adjacent:
             has_neighbor = False
-            if period_idx > 0 and int(chromosome[day_idx * ppd + period_idx - 1]) == a_idx:
-                has_neighbor = True
-            if period_idx < ppd - 1 and int(chromosome[day_idx * ppd + period_idx + 1]) == a_idx:
-                has_neighbor = True
+            if period_idx > 0 and (day_idx, period_idx) not in div_data.period_after_break:
+                if int(chromosome[day_idx * ppd + period_idx - 1]) == a_idx:
+                    has_neighbor = True
+            if period_idx < ppd - 1 and (day_idx, period_idx + 1) not in div_data.period_after_break:
+                if int(chromosome[day_idx * ppd + period_idx + 1]) == a_idx:
+                    has_neighbor = True
             if not has_neighbor:
                 score += 5  # penalty for isolation
 
