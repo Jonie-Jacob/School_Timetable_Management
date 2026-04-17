@@ -123,7 +123,7 @@ def _dump_flexibility_rankings(wsd: WholeSchoolData, div_pressure: dict[str, flo
     for div_id, scores in wsd.flexibility_scores.items():
         div_data = wsd.divisions[div_id]
         pressure = div_pressure.get(div_id, 0)
-        for la_idx, (valid_slots, teacher_load) in scores:
+        for la_idx, (composite_score, teacher_load) in scores:
             la = div_data.logical_assignments[la_idx]
             block_size = 1
             prefs = la.scheduling_preferences if la.scheduling_preferences and isinstance(la.scheduling_preferences, dict) else None
@@ -135,7 +135,7 @@ def _dump_flexibility_rankings(wsd: WholeSchoolData, div_pressure: dict[str, flo
                 for tid in la.teacher_ids[:2]
             )
             items.append((
-                valid_slots, teacher_load, div_id[:8], la.display_name,
+                composite_score, teacher_load, div_id[:8], la.display_name,
                 la.weightage, teachers, pressure, block_size,
                 la.elective_group_name or "",
             ))
@@ -143,10 +143,10 @@ def _dump_flexibility_rankings(wsd: WholeSchoolData, div_pressure: dict[str, flo
     items.sort(key=lambda x: (x[0], -x[1]))
 
     logger.info("=== FLEXIBILITY RANKINGS (sorted, %d items) ===", len(items))
-    logger.info("%-4s %-8s %-22s %-3s %-5s %-5s %-5s %-3s %-20s %s",
-                "Rk", "Div", "Subject", "w", "Valid", "TLoad", "Press", "Blk", "Teacher(s)", "Elective")
+    logger.info("%-4s %-8s %-22s %-3s %-7s %-5s %-5s %-3s %-20s %s",
+                "Rk", "Div", "Subject", "w", "Score", "TLoad", "Press", "Blk", "Teacher(s)", "Elective")
     for i, t in enumerate(items):
-        logger.info("%-4d %-8s %-22s %-3d %-5d %-5.0f %-5.2f %-3d %-20s %s",
+        logger.info("%-4d %-8s %-22s %-3d %-7.2f %-5.0f %-5.2f %-3d %-20s %s",
                      i+1, t[2], t[3][:22], t[4], t[0], t[1], t[6], t[7], t[5][:20], t[8][:20])
 
 
@@ -209,6 +209,9 @@ def _compute_division_pressure(div_data: SchoolData, wsd: WholeSchoolData) -> fl
     """Compute a 0.0–1.0 pressure score for a division based on how many
     of its assignment-periods carry HARD constraints.
 
+    Only counts assignment-level HARD constraints (not teacher contention,
+    which is already handled separately in the teacher contention adjustment).
+
     Counts each assignment-period that has ANY of:
       - preferAdjacentPeriods (HARD)
       - preferredPeriodRange (HARD)
@@ -217,7 +220,6 @@ def _compute_division_pressure(div_data: SchoolData, wsd: WholeSchoolData) -> fl
       - excludedDays (HARD)
       - maxPeriodsPerDay (HARD)
       - minPeriodsPerDay (HARD)
-      - Teacher teaching in 3+ divisions (high contention)
 
     pressure = constrained_periods / total_periods
     A division where 32 of 40 periods are HARD-constrained gets pressure=0.80.
@@ -250,16 +252,6 @@ def _compute_division_pressure(div_data: SchoolData, wsd: WholeSchoolData) -> fl
             if prefs.get("minPeriodsPerDay"):
                 has_constraint = True
 
-        # Teacher contention: teacher in 3+ divisions
-        for tid in la.teacher_ids:
-            div_count = sum(
-                1 for d in wsd.divisions.values()
-                if any(a.teacher_id == tid for a in d.assignments)
-            )
-            if div_count >= 3:
-                has_constraint = True
-                break
-
         if has_constraint:
             constrained_periods += w
 
@@ -273,19 +265,24 @@ def compute_flexibility(
     div_data: SchoolData,
     wsd: WholeSchoolData,
     division_pressure: float = 0.0,
-) -> tuple[int, float]:
-    """Compute how constrained this assignment is.
+) -> tuple[float, float]:
+    """Compute a composite flexibility score for an assignment.
 
-    Returns (valid_slots, teacher_load_factor) for two-level sorting:
-      - Primary: valid_slots (fewer = more constrained = place first)
-      - Secondary: teacher_load_factor (higher load = busier = place first)
+    Returns (composite_score, teacher_load) where lower composite_score
+    means more constrained (placed first). The score is a continuous
+    float that combines multiple factors to minimize ties:
+
+      score = valid_slots
+            - teacher_contention * 0.5
+            - division_pressure * 3.0
+            - weightage * 0.1
+            - teacher_load * 0.01
+            - block_penalty (5.0 for block-mode)
 
     valid_slots counts positions that satisfy:
       1. HARD scheduling preferences (excluded/preferred days, period ranges)
       2. Teacher availability (from teacher_availability table)
-
-    teacher_load_factor is the total teaching load across all divisions
-    for this assignment's teachers — used only as tiebreaker.
+      3. Block-aware: counts block positions for adjacency subjects
     """
     prefs = la.scheduling_preferences if la.scheduling_preferences and isinstance(la.scheduling_preferences, dict) else None
 
@@ -305,14 +302,12 @@ def compute_flexibility(
     for slot in div_data.period_slots:
         dow = slot.day_of_week
 
-        # Check day constraints (only enforce for HARD)
         if is_hard:
             if dow in excluded_days:
                 continue
             if preferred_days and dow not in preferred_days:
                 continue
 
-        # Check period range constraints (only enforce for HARD)
         period_num = slot.slot_number
         if is_hard and period_num is not None:
             if pref_range:
@@ -322,7 +317,6 @@ def compute_flexibility(
                 if excl_range.get("min", 99) <= period_num <= excl_range.get("max", 0):
                     continue
 
-        # Check teacher availability
         teacher_blocked = False
         for tid in teacher_ids:
             if (tid, dow, slot.start_time) in wsd.teacher_unavailable_times:
@@ -333,27 +327,23 @@ def compute_flexibility(
 
         valid_slots += 1
 
-    # Block-aware flexibility: if the assignment uses block-atomic placement
-    # (adjacency + minPeriodsPerDay >= 2), count valid block starting positions
-    # instead of individual slots. This gives block-mode assignments higher
-    # priority (fewer valid positions → placed earlier).
+    # Block-aware: count block positions for adjacency subjects
     want_adjacent = prefs and prefs.get("preferAdjacentPeriods")
     min_pd = prefs.get("minPeriodsPerDay") if prefs else None
     block_size = int(min_pd) if (is_hard and want_adjacent and min_pd and min_pd >= 2) else (2 if want_adjacent else 0)
+    is_block = block_size >= 2
 
-    if block_size >= 2 and valid_slots > 0:
+    if is_block and valid_slots > 0:
         block_positions = 0
         ppd = div_data.periods_per_day
         for day_idx in range(div_data.num_days):
             for p in range(ppd - block_size + 1):
-                # Check all slots in the block are valid and break-free
                 block_ok = True
                 for offset in range(block_size):
                     gi = day_idx * ppd + p + offset
                     if gi >= len(div_data.period_slots):
                         block_ok = False
                         break
-                    # No break between consecutive slots in the block
                     if offset > 0 and (day_idx, p + offset) in div_data.period_after_break:
                         block_ok = False
                         break
@@ -372,7 +362,7 @@ def compute_flexibility(
         if block_positions < valid_slots:
             valid_slots = block_positions
 
-    # Teacher load as tiebreaker (higher = busier = should place first)
+    # Teacher load (total across all divisions)
     teacher_load = 0.0
     if teacher_ids:
         for tid in teacher_ids:
@@ -381,16 +371,10 @@ def compute_flexibility(
                     if a.teacher_id == tid:
                         teacher_load += a.weightage
 
-    # Teacher contention adjustment: if a teacher teaches across multiple
-    # divisions, their effective availability for THIS division is reduced.
-    # Each period in another division blocks one time slot. Subtract the
-    # other-division load from valid_slots for a more accurate ranking.
-    # This prevents low-weightage assignments (e.g. Library w=1) from being
-    # ranked as "very flexible" when their teacher is heavily committed
-    # across many divisions.
+    # Teacher contention: other-division load for the most contended teacher
+    teacher_contention = 0.0
     this_div_id = div_data.division_id
-    if teacher_ids and valid_slots > 0:
-        max_contention = 0
+    if teacher_ids:
         for tid in teacher_ids:
             other_div_load = 0
             for other_div_id, other_div_data in wsd.divisions.items():
@@ -399,22 +383,36 @@ def compute_flexibility(
                 for a in other_div_data.assignments:
                     if a.teacher_id == tid:
                         other_div_load += a.weightage
-            max_contention = max(max_contention, other_div_load)
-        if max_contention > 0:
-            valid_slots = max(1, valid_slots - max_contention)
+            teacher_contention = max(teacher_contention, float(other_div_load))
 
-    # Division constraint pressure adjustment: divisions with more
-    # HARD-constrained assignments are harder to schedule overall.
-    # Reduce valid_slots for assignments in high-pressure divisions
-    # so they get placed earlier, before shared teachers get consumed.
+    # Does this assignment have its own HARD constraints?
+    has_own_hard = False
+    if is_hard and prefs:
+        for k in ['preferAdjacentPeriods', 'preferredPeriodRange', 'excludedPeriodRange',
+                   'preferredDays', 'excludedDays', 'maxPeriodsPerDay', 'minPeriodsPerDay']:
+            if prefs.get(k):
+                has_own_hard = True
+                break
+
+    # ── Composite score (lower = more constrained = placed first) ──
     #
-    # Example: XI B has pressure=0.80 (32 of 40 periods HARD-constrained)
-    #   Library (Aleena, w=1): valid_slots=24 / (1 + 0.80) = 13
-    #   → Placed earlier than Library in a low-pressure division
-    if division_pressure > 0 and valid_slots > 1:
-        valid_slots = max(1, int(valid_slots / (1.0 + division_pressure)))
+    # Components:
+    #   valid_slots         : base (0-40), dominant factor
+    #   teacher_contention  : × 0.5 — reduce for busy teachers
+    #   division_pressure   : × 3.0 — only for non-HARD assignments
+    #   weightage           : × 0.1 — heavier subjects slightly prioritized
+    #   teacher_load        : × 0.01 — minor tiebreaker
+    #   block_penalty       : -5.0 for block-mode assignments
+    score = float(valid_slots)
+    score -= teacher_contention * 0.5
+    if not has_own_hard:
+        score -= division_pressure * 3.0
+    score -= la.weightage * 0.1
+    score -= teacher_load * 0.01
+    if is_block:
+        score -= 5.0
 
-    return (valid_slots, teacher_load)
+    return (score, teacher_load)
 
 
 def compute_teacher_partitions(wsd: WholeSchoolData) -> None:

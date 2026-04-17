@@ -68,48 +68,47 @@ The engine generates timetables for an entire school (or selected divisions) usi
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Flexibility Sorting (Two-Level)
+### Flexibility Scoring (Composite Float)
 
-Assignments are sorted for placement priority using two keys:
-
-1. **Primary: `valid_slots` (ascending)** — fewer valid slots = more constrained = placed first
-2. **Secondary: `teacher_load` (descending)** — busier teacher = placed first when slots are equal
-3. **Tertiary: `class_sort_order` (descending)** — higher classes (XII) before lower (XI) as tiebreaker
-
-For **block-mode** assignments (adjacency + minPeriodsPerDay), `valid_slots` counts the number of valid contiguous block starting positions — not individual slots. This gives them appropriately higher priority since a block of 2 on Senior Block P2-P8 has only 3 valid pairs per day (P3+P4, P5+P6, P7+P8) vs 7 individual slots.
-
-**Teacher contention adjustment:** For teachers who teach across multiple divisions, `valid_slots` is reduced by their other-division load. If Aleena teaches 17pw across 7 divisions and Library (w=1) in XI B has 40 raw valid slots, the effective valid slots is `40 - 16 = 24` (16 periods in other divisions will consume those time slots). This prevents low-weightage assignments like Library from being ranked as "very flexible" and placed last, when their teacher will actually be busy in most time slots.
+Each assignment gets a continuous floating-point flexibility score. Lower score = more constrained = placed first. The composite score eliminates ties by combining multiple factors:
 
 ```
-Example:
-  Library (Aleena, w=1) in XI B
-  Raw valid_slots = 40 (no HARD prefs)
-  Aleena's other-division load = 16pw
-  Effective valid_slots = 40 - 16 = 24
-  → Ranked HIGHER than a subject with 30 raw valid slots
-  → Placed earlier, before other subjects fill XI B's slots
+score = valid_slots
+      - teacher_contention × 0.5
+      - division_pressure × 3.0    (only for non-HARD assignments)
+      - weightage × 0.1
+      - teacher_load × 0.01
+      - block_penalty (5.0 for block-mode)
 ```
 
-**Division constraint pressure:** Each division gets a pressure score (0.0–1.0) based on how many of its assignment-periods carry HARD constraints (adjacency, period range, excluded days, maxPeriodsPerDay, minPeriodsPerDay, or teacher in 3+ divisions). High-pressure divisions have their assignments' `valid_slots` further reduced by `valid_slots / (1 + pressure)`, ensuring ALL assignments in hard-to-schedule divisions get placed before equivalent ones in easier divisions.
+**Components:**
+
+| Factor | Weight | Effect |
+|--------|--------|--------|
+| `valid_slots` | 1.0 | Base: raw count of structurally valid positions (block positions for adjacency subjects) |
+| `teacher_contention` | ×0.5 | Subtract half of teacher's other-division load — busier teachers get lower scores |
+| `division_pressure` | ×3.0 | Only applied to assignments WITHOUT own HARD constraints — boosts unconstrained subjects in hard divisions (e.g., Library in XI B) |
+| `weightage` | ×0.1 | Slightly prioritize heavier subjects (more to lose if they fail) |
+| `teacher_load` | ×0.01 | Minor tiebreaker — busier teachers first |
+| `block_penalty` | -5.0 | Block-mode assignments get extra priority |
+
+**Division pressure** counts only assignment-level HARD constraints (adjacency, period range, excluded days, maxPerDay, minPerDay). Teacher contention is handled separately and NOT included in pressure to avoid double-counting.
 
 ```
-Division pressure calculation:
-  For each assignment: check if ANY HARD constraint is set
-  pressure = constrained_periods / total_periods
+Example scores:
+  Physics XI A (block, P2-P8, Amalu 24pw):
+    valid=15, contention=20, pressure=0.80, w=4, load=24, block
+    score = 15 - 10 - 0 - 0.4 - 0.24 - 5.0 = -0.64
 
-Example:
-  XI B: 32 of 40 periods have HARD constraints → pressure = 0.80
-  VI B:  6 of 40 periods have HARD constraints → pressure = 0.15
+  Library XI B (no HARD, Aleena 17pw):
+    valid=40, contention=16, pressure=0.80, w=1, load=17, single
+    score = 40 - 8 - 2.4 - 0.1 - 0.17 - 0 = 29.33
 
-  Library (Aleena) in XI B:
-    After teacher contention: valid_slots = 24
-    After pressure (÷1.80):  valid_slots = 13
-    
-  Library in VI B:
-    After teacher contention: valid_slots = 30
-    After pressure (÷1.15):  valid_slots = 26
-    
-  → XI B Library placed BEFORE VI B Library
+  Library VI B (no HARD, light teacher):
+    valid=40, contention=5, pressure=0.15, w=1, load=10, single
+    score = 40 - 2.5 - 0.45 - 0.1 - 0.10 - 0 = 36.85
+
+Sorted: Physics XI A (-0.64) → Library XI B (29.33) → Library VI B (36.85)
 ```
 
 ---

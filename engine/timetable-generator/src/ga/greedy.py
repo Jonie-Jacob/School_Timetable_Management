@@ -539,29 +539,77 @@ def schedule_all(
 
             if best_is_cross_div:
                 placed = False
+                first_div = wsd.cross_div_electives[best_is_cross_div][0]
+                first_data = wsd.divisions[first_div]
+                first_la = next((l for l in first_data.logical_assignments if l.elective_group_id == best_is_cross_div), la)
                 for fgi in range(div_data.total_periods):
                     all_empty = all(
                         state.chromosomes[d][fgi] == -1
                         for d in wsd.cross_div_electives[best_is_cross_div]
                     )
-                    if all_empty:
-                        _place_cross_div(state, best_is_cross_div, fgi, wsd)
-                        state.fallback += len(wsd.cross_div_electives[best_is_cross_div])
-                        placed_total += len(wsd.cross_div_electives[best_is_cross_div])
-                        placed = True
-                        break
+                    if not all_empty:
+                        continue
+                    # Check teacher availability before fallback placement
+                    fslot = first_data.period_slots[fgi] if fgi < len(first_data.period_slots) else None
+                    if fslot:
+                        fpicked = first_la.pick_available_teachers(
+                            fslot.day_of_week, fslot.start_time,
+                            state.teacher_busy, wsd.teacher_unavailable_times,
+                            wsd.teacher_partitions, first_div,
+                            end_time=fslot.end_time,
+                        )
+                        if fpicked is None:
+                            continue  # teacher busy — skip this slot
+                    _place_cross_div(state, best_is_cross_div, fgi, wsd)
+                    state.fallback += len(wsd.cross_div_electives[best_is_cross_div])
+                    placed_total += len(wsd.cross_div_electives[best_is_cross_div])
+                    placed = True
+                    break
+                if not placed:
+                    # Last resort: place without teacher check (will create conflict)
+                    for fgi in range(div_data.total_periods):
+                        all_empty = all(
+                            state.chromosomes[d][fgi] == -1
+                            for d in wsd.cross_div_electives[best_is_cross_div]
+                        )
+                        if all_empty:
+                            _place_cross_div(state, best_is_cross_div, fgi, wsd)
+                            state.fallback += len(wsd.cross_div_electives[best_is_cross_div])
+                            placed_total += len(wsd.cross_div_electives[best_is_cross_div])
+                            placed = True
+                            logger.warning("Force-placed %s cross-div at gi=%d (teacher conflict expected)", la.display_name, fgi)
+                            break
                 if not placed:
                     logger.warning("Cannot place %s cross-div — no common empty slot", la.display_name)
                     placed_total += len(wsd.cross_div_electives[best_is_cross_div])
             else:
-                # Single-mode fallback
+                # Single-mode fallback — prefer slots where teacher is free
                 placed = False
                 for fgi in range(div_data.total_periods):
                     if state.chromosomes[div_id][fgi] == -1:
-                        _place_assignment(state, div_id, la_idx, fgi, div_data, la, wsd)
-                        state.fallback += 1
-                        placed = True
-                        break
+                        fslot = div_data.period_slots[fgi] if fgi < len(div_data.period_slots) else None
+                        if fslot:
+                            fpicked = la.pick_available_teachers(
+                                fslot.day_of_week, fslot.start_time,
+                                state.teacher_busy, wsd.teacher_unavailable_times,
+                                wsd.teacher_partitions, div_id,
+                                end_time=fslot.end_time,
+                            )
+                            if fpicked is not None:
+                                _place_assignment(state, div_id, la_idx, fgi, div_data, la, wsd)
+                                state.fallback += 1
+                                placed = True
+                                break
+                if not placed:
+                    # Last resort: place in any empty slot (will create teacher conflict)
+                    for fgi in range(div_data.total_periods):
+                        if state.chromosomes[div_id][fgi] == -1:
+                            _place_assignment(state, div_id, la_idx, fgi, div_data, la, wsd)
+                            state.fallback += 1
+                            placed = True
+                            logger.warning("Force-placed %s in %s at gi=%d (teacher conflict expected)",
+                                           la.display_name, div_id[:8], fgi)
+                            break
                 if not placed:
                     logger.warning("Cannot place %s in %s — all slots full", la.display_name, div_id[:8])
                 placed_total += 1
