@@ -91,13 +91,22 @@ def load_whole_school_data(
     # Load teacher unavailability in time-normalized form
     _load_global_teacher_unavailability(wsd)
 
+    # Pre-compute division constraint pressure for flexibility scoring
+    div_pressure: dict[str, float] = {}
+    for div_id, data in wsd.divisions.items():
+        div_pressure[div_id] = _compute_division_pressure(data, wsd)
+
     # Compute flexibility scores
     for div_id, data in wsd.divisions.items():
         scores = []
+        pressure = div_pressure[div_id]
         for la_idx, la in enumerate(data.logical_assignments):
-            score = compute_flexibility(la, data, wsd)
+            score = compute_flexibility(la, data, wsd, pressure)
             scores.append((la_idx, score))
         wsd.flexibility_scores[div_id] = scores
+
+    # ── Debug: dump sorted flexibility rankings ─────────────────────────
+    _dump_flexibility_rankings(wsd, div_pressure)
 
     # Compute teacher partitions
     compute_teacher_partitions(wsd)
@@ -106,6 +115,39 @@ def load_whole_school_data(
     _detect_cross_div_electives(wsd)
 
     return wsd
+
+
+def _dump_flexibility_rankings(wsd: WholeSchoolData, div_pressure: dict[str, float]) -> None:
+    """Log the sorted flexibility rankings for debugging."""
+    items = []
+    for div_id, scores in wsd.flexibility_scores.items():
+        div_data = wsd.divisions[div_id]
+        pressure = div_pressure.get(div_id, 0)
+        for la_idx, (valid_slots, teacher_load) in scores:
+            la = div_data.logical_assignments[la_idx]
+            block_size = 1
+            prefs = la.scheduling_preferences if la.scheduling_preferences and isinstance(la.scheduling_preferences, dict) else None
+            if prefs and prefs.get("constraintType") == "HARD" and prefs.get("preferAdjacentPeriods") and (prefs.get("minPeriodsPerDay") or 0) >= 2:
+                block_size = int(prefs.get("minPeriodsPerDay"))
+            teachers = ", ".join(
+                (wsd.teachers.get(tid) or div_data.teachers.get(tid)).name
+                if (wsd.teachers.get(tid) or div_data.teachers.get(tid)) else tid[:8]
+                for tid in la.teacher_ids[:2]
+            )
+            items.append((
+                valid_slots, teacher_load, div_id[:8], la.display_name,
+                la.weightage, teachers, pressure, block_size,
+                la.elective_group_name or "",
+            ))
+
+    items.sort(key=lambda x: (x[0], -x[1]))
+
+    logger.info("=== FLEXIBILITY RANKINGS (sorted, %d items) ===", len(items))
+    logger.info("%-4s %-8s %-22s %-3s %-5s %-5s %-5s %-3s %-20s %s",
+                "Rk", "Div", "Subject", "w", "Valid", "TLoad", "Press", "Blk", "Teacher(s)", "Elective")
+    for i, t in enumerate(items):
+        logger.info("%-4d %-8s %-22s %-3d %-5d %-5.0f %-5.2f %-3d %-20s %s",
+                     i+1, t[2], t[3][:22], t[4], t[0], t[1], t[6], t[7], t[5][:20], t[8][:20])
 
 
 def _load_global_teacher_unavailability(wsd: WholeSchoolData) -> None:
@@ -163,10 +205,74 @@ def _detect_cross_div_electives(wsd: WholeSchoolData) -> None:
     logger.info("Cross-division electives: %d groups spanning %d divisions", cross_count, total_divs)
 
 
+def _compute_division_pressure(div_data: SchoolData, wsd: WholeSchoolData) -> float:
+    """Compute a 0.0–1.0 pressure score for a division based on how many
+    of its assignment-periods carry HARD constraints.
+
+    Counts each assignment-period that has ANY of:
+      - preferAdjacentPeriods (HARD)
+      - preferredPeriodRange (HARD)
+      - excludedPeriodRange (HARD)
+      - preferredDays (HARD)
+      - excludedDays (HARD)
+      - maxPeriodsPerDay (HARD)
+      - minPeriodsPerDay (HARD)
+      - Teacher teaching in 3+ divisions (high contention)
+
+    pressure = constrained_periods / total_periods
+    A division where 32 of 40 periods are HARD-constrained gets pressure=0.80.
+    """
+    total_periods = 0
+    constrained_periods = 0
+
+    for la in div_data.logical_assignments:
+        w = la.weightage
+        total_periods += w
+
+        prefs = la.scheduling_preferences if la.scheduling_preferences and isinstance(la.scheduling_preferences, dict) else None
+        is_hard = prefs and prefs.get("constraintType") == "HARD"
+
+        has_constraint = False
+
+        if is_hard and prefs:
+            if prefs.get("preferAdjacentPeriods"):
+                has_constraint = True
+            if prefs.get("preferredPeriodRange"):
+                has_constraint = True
+            if prefs.get("excludedPeriodRange"):
+                has_constraint = True
+            if prefs.get("preferredDays"):
+                has_constraint = True
+            if prefs.get("excludedDays"):
+                has_constraint = True
+            if prefs.get("maxPeriodsPerDay"):
+                has_constraint = True
+            if prefs.get("minPeriodsPerDay"):
+                has_constraint = True
+
+        # Teacher contention: teacher in 3+ divisions
+        for tid in la.teacher_ids:
+            div_count = sum(
+                1 for d in wsd.divisions.values()
+                if any(a.teacher_id == tid for a in d.assignments)
+            )
+            if div_count >= 3:
+                has_constraint = True
+                break
+
+        if has_constraint:
+            constrained_periods += w
+
+    if total_periods == 0:
+        return 0.0
+    return constrained_periods / total_periods
+
+
 def compute_flexibility(
     la: LogicalAssignment,
     div_data: SchoolData,
     wsd: WholeSchoolData,
+    division_pressure: float = 0.0,
 ) -> tuple[int, float]:
     """Compute how constrained this assignment is.
 
@@ -274,6 +380,39 @@ def compute_flexibility(
                 for a in div_data2.assignments:
                     if a.teacher_id == tid:
                         teacher_load += a.weightage
+
+    # Teacher contention adjustment: if a teacher teaches across multiple
+    # divisions, their effective availability for THIS division is reduced.
+    # Each period in another division blocks one time slot. Subtract the
+    # other-division load from valid_slots for a more accurate ranking.
+    # This prevents low-weightage assignments (e.g. Library w=1) from being
+    # ranked as "very flexible" when their teacher is heavily committed
+    # across many divisions.
+    this_div_id = div_data.division_id
+    if teacher_ids and valid_slots > 0:
+        max_contention = 0
+        for tid in teacher_ids:
+            other_div_load = 0
+            for other_div_id, other_div_data in wsd.divisions.items():
+                if other_div_id == this_div_id:
+                    continue
+                for a in other_div_data.assignments:
+                    if a.teacher_id == tid:
+                        other_div_load += a.weightage
+            max_contention = max(max_contention, other_div_load)
+        if max_contention > 0:
+            valid_slots = max(1, valid_slots - max_contention)
+
+    # Division constraint pressure adjustment: divisions with more
+    # HARD-constrained assignments are harder to schedule overall.
+    # Reduce valid_slots for assignments in high-pressure divisions
+    # so they get placed earlier, before shared teachers get consumed.
+    #
+    # Example: XI B has pressure=0.80 (32 of 40 periods HARD-constrained)
+    #   Library (Aleena, w=1): valid_slots=24 / (1 + 0.80) = 13
+    #   → Placed earlier than Library in a low-pressure division
+    if division_pressure > 0 and valid_slots > 1:
+        valid_slots = max(1, int(valid_slots / (1.0 + division_pressure)))
 
     return (valid_slots, teacher_load)
 

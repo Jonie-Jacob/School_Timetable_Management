@@ -144,7 +144,8 @@
       "Bash(docker build:*)",
       "Bash(docker run --rm --entrypoint python timetable-engine:latest -c ':*)",
       "Bash(docker run:*)",
-      "Bash(python -c \"import py_compile; py_compile.compile\\('src/ga/greedy.py', doraise=True\\); py_compile.compile\\('src/whole_school_loader.py', doraise=True\\); print\\('OK'\\)\")"
+      "Bash(python -c \"import py_compile; py_compile.compile\\('src/ga/greedy.py', doraise=True\\); py_compile.compile\\('src/whole_school_loader.py', doraise=True\\); print\\('OK'\\)\")",
+      "Bash(MSYS_NO_PATHCONV=1 aws logs describe-log-streams --log-group-name \"/ecs/timetable-prod-timetable-engine\" --order-by LastEventTime --descending --limit 1 --query 'logStreams[0].[logStreamName,lastEventTimestamp]' --output text)"
     ]
   }
 }

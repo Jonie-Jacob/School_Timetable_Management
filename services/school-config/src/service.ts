@@ -81,7 +81,13 @@ export class SchoolConfigService {
         select: { id: true },
       });
       if (staleDays.length > 0) {
-        await prisma.slot.deleteMany({ where: { workingDayId: { in: staleDays.map(d => d.id) } } });
+        const staleDayIds = staleDays.map(d => d.id);
+        const staleSlotIds = (await prisma.slot.findMany({ where: { workingDayId: { in: staleDayIds } }, select: { id: true } })).map(s => s.id);
+        if (staleSlotIds.length > 0) {
+          await prisma.timetableSlot.deleteMany({ where: { slotId: { in: staleSlotIds } } });
+          await prisma.teacherAvailability.deleteMany({ where: { slotId: { in: staleSlotIds } } });
+        }
+        await prisma.slot.deleteMany({ where: { workingDayId: { in: staleDayIds } } });
       }
       await prisma.workingDay.deleteMany({ where: { periodStructureId: { in: staleIds } } });
       // Unlink any divisions still pointing to this structure
@@ -252,6 +258,13 @@ export class SchoolConfigService {
     });
     if (existingDays.length > 0) {
       const dayIds = existingDays.map((d) => d.id);
+      const oldSlotIds = (await prisma.slot.findMany({ where: { workingDayId: { in: dayIds } }, select: { id: true } })).map(s => s.id);
+
+      if (oldSlotIds.length > 0) {
+        await prisma.timetableSlot.deleteMany({ where: { slotId: { in: oldSlotIds } } });
+        await prisma.teacherAvailability.deleteMany({ where: { slotId: { in: oldSlotIds } } });
+      }
+
       await prisma.slot.deleteMany({ where: { workingDayId: { in: dayIds } } });
       await prisma.workingDay.deleteMany({ where: { periodStructureId } });
     }
@@ -341,6 +354,11 @@ export class SchoolConfigService {
 
     // Idempotent: delete existing slots, then recreate
     const dayIds = ps.workingDays.map((d) => d.id);
+    const existingSlotIds = (await prisma.slot.findMany({ where: { workingDayId: { in: dayIds } }, select: { id: true } })).map(s => s.id);
+    if (existingSlotIds.length > 0) {
+      await prisma.timetableSlot.deleteMany({ where: { slotId: { in: existingSlotIds } } });
+      await prisma.teacherAvailability.deleteMany({ where: { slotId: { in: existingSlotIds } } });
+    }
     await prisma.slot.deleteMany({ where: { workingDayId: { in: dayIds } } });
 
     const sorted = [...periods].sort((a, b) => a.order - b.order);
@@ -556,11 +574,13 @@ export class SchoolConfigService {
     }
 
     if (timetableSlotCount > 0 && confirm) {
-      // Nullify timetable slot references by deleting them
       await prisma.timetableSlot.deleteMany({
         where: { slotId, schoolId },
       });
     }
+
+    // Delete teacher availability referencing this slot
+    await prisma.teacherAvailability.deleteMany({ where: { slotId } });
 
     const wasPeriod = existing.slotType === 'PERIOD';
 
@@ -636,7 +656,12 @@ export class SchoolConfigService {
       orderBy: { sortOrder: 'asc' },
     });
 
-    // Delete existing target day slots
+    // Delete existing target day slots (clean up references first)
+    const targetSlotIds = (await prisma.slot.findMany({ where: { workingDayId: targetDayId, schoolId }, select: { id: true } })).map(s => s.id);
+    if (targetSlotIds.length > 0) {
+      await prisma.timetableSlot.deleteMany({ where: { slotId: { in: targetSlotIds } } });
+      await prisma.teacherAvailability.deleteMany({ where: { slotId: { in: targetSlotIds } } });
+    }
     await prisma.slot.deleteMany({
       where: { workingDayId: targetDayId, schoolId },
     });
@@ -725,9 +750,15 @@ export class SchoolConfigService {
 
     const dayIds = workingDays.map((d) => d.id);
 
-    // Delete orphaned timetable_slots that reference slots about to be deleted
+    // Delete records referencing slots about to be deleted
+    const oldSlotIds = (await prisma.slot.findMany({ where: { workingDayId: { in: dayIds } }, select: { id: true } })).map(s => s.id);
+
     await prisma.timetableSlot.deleteMany({
-      where: { slotId: { in: (await prisma.slot.findMany({ where: { workingDayId: { in: dayIds } }, select: { id: true } })).map(s => s.id) } },
+      where: { slotId: { in: oldSlotIds } },
+    });
+
+    await prisma.teacherAvailability.deleteMany({
+      where: { slotId: { in: oldSlotIds } },
     });
 
     await prisma.slot.deleteMany({ where: { workingDayId: { in: dayIds } } });

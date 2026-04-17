@@ -78,6 +78,40 @@ Assignments are sorted for placement priority using two keys:
 
 For **block-mode** assignments (adjacency + minPeriodsPerDay), `valid_slots` counts the number of valid contiguous block starting positions — not individual slots. This gives them appropriately higher priority since a block of 2 on Senior Block P2-P8 has only 3 valid pairs per day (P3+P4, P5+P6, P7+P8) vs 7 individual slots.
 
+**Teacher contention adjustment:** For teachers who teach across multiple divisions, `valid_slots` is reduced by their other-division load. If Aleena teaches 17pw across 7 divisions and Library (w=1) in XI B has 40 raw valid slots, the effective valid slots is `40 - 16 = 24` (16 periods in other divisions will consume those time slots). This prevents low-weightage assignments like Library from being ranked as "very flexible" and placed last, when their teacher will actually be busy in most time slots.
+
+```
+Example:
+  Library (Aleena, w=1) in XI B
+  Raw valid_slots = 40 (no HARD prefs)
+  Aleena's other-division load = 16pw
+  Effective valid_slots = 40 - 16 = 24
+  → Ranked HIGHER than a subject with 30 raw valid slots
+  → Placed earlier, before other subjects fill XI B's slots
+```
+
+**Division constraint pressure:** Each division gets a pressure score (0.0–1.0) based on how many of its assignment-periods carry HARD constraints (adjacency, period range, excluded days, maxPeriodsPerDay, minPeriodsPerDay, or teacher in 3+ divisions). High-pressure divisions have their assignments' `valid_slots` further reduced by `valid_slots / (1 + pressure)`, ensuring ALL assignments in hard-to-schedule divisions get placed before equivalent ones in easier divisions.
+
+```
+Division pressure calculation:
+  For each assignment: check if ANY HARD constraint is set
+  pressure = constrained_periods / total_periods
+
+Example:
+  XI B: 32 of 40 periods have HARD constraints → pressure = 0.80
+  VI B:  6 of 40 periods have HARD constraints → pressure = 0.15
+
+  Library (Aleena) in XI B:
+    After teacher contention: valid_slots = 24
+    After pressure (÷1.80):  valid_slots = 13
+    
+  Library in VI B:
+    After teacher contention: valid_slots = 30
+    After pressure (÷1.15):  valid_slots = 26
+    
+  → XI B Library placed BEFORE VI B Library
+```
+
 ---
 
 ## Step 2: Teacher Time Partitioning
@@ -213,6 +247,74 @@ Assignments are classified into placement modes based on scheduling preferences:
 └──────────────────────────────────────────────────────────────┘
 ```
 
+### Auto-Relaxation of Blocks
+
+**File:** `greedy.py` → `_auto_relax_blocks()`
+
+Before placement begins, the engine checks each division for block capacity overflows and automatically demotes the minimum number of blocks to single-mode.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│              AUTO-RELAXATION OF BLOCKS                         │
+│                                                                │
+│  For each division:                                            │
+│    1. Count total blocks needed (all block-mode assignments)   │
+│    2. Count available block positions in period structure       │
+│       (contiguous break-free slots per day × num_days)         │
+│    3. If demand > supply (deficit exists):                     │
+│                                                                │
+│       Relaxation priority (relax first → last):                │
+│         ① Per-division non-elective subjects (most flexible)   │
+│         ② Per-division elective subjects                       │
+│         ③ Cross-division electives (NEVER relax)               │
+│                                                                │
+│       Within same tier: relax the subject with highest         │
+│       weightage (most periods = most flexibility as singles)   │
+│                                                                │
+│       For each subject to relax:                               │
+│         Move 1 block entry → block_size single entries         │
+│         Repeat until deficit = 0                               │
+│                                                                │
+│  Example — XI A (Senior Block, P2-P8):                         │
+│    Valid block pairs per day: P3+P4, P5+P6, P7+P8 = 3          │
+│    Available: 3 × 5 days = 15 positions                        │
+│    Demand: Maths(4) + Physics(4) + Chemistry(4) + Biology(4)   │
+│          = 16 blocks → deficit = 1                             │
+│                                                                │
+│    Auto-relax: Chemistry (8pw, highest weightage in tier ①)    │
+│      → 3 blocks + 2 singles (was 4 blocks)                    │
+│    Result: 15 blocks needed = 15 available ✓                   │
+│                                                                │
+│  The relaxed periods still get placed — just not as            │
+│  adjacent pairs. SOFT adjacency scoring still tries to         │
+│  place them near other periods of the same subject.            │
+│                                                                │
+│  TWO-LEVEL RELAXATION:                                         │
+│                                                                │
+│  Level 1 (Pre-placement): structural capacity check.           │
+│    Fires before the loop when block demand > positions.        │
+│                                                                │
+│  Level 2 (Runtime demotion): if a block-mode item has 0        │
+│    valid block positions during placement (other subjects       │
+│    consumed the positions), demote it to singles on the fly.   │
+│    The singles re-enter the demand-driven loop with proper     │
+│    constraint checking — NOT force-placed in random slots.     │
+│    This handles cases where structural capacity was enough     │
+│    but runtime contention consumed the valid positions.        │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Subject-Level maxPeriodsPerDay
+
+The `maxPeriodsPerDay` constraint applies to the **subject** across all teachers, not per-assignment. If Maths has two teachers (Smitha w=4, Sahana w=3) and `maxPerDay=2`, a day can have at most 2 Maths periods total — regardless of which teacher.
+
+```
+Without subject-level:  Mon could get Smitha P1 + Smitha P3 + Sahana P5 = 3 Maths
+With subject-level:     Mon gets at most 2 Maths (from any combination of teachers)
+```
+
+This prevents day-starvation for split-teacher subjects (e.g., Maths w=7 with maxPerDay=2 needs 4 days, not 3).
+
 ### Main Placement Loop
 
 ```
@@ -246,7 +348,17 @@ Assignments are classified into placement modes based on scheduling preferences:
 │  │  3. valid_count > 0?                                      │          │
 │  │     │                                                    │          │
 │  │     ├── YES: Score each valid position by demand          │          │
-│  │     │   │    Place at position with LOWEST demand         │          │
+│  │     │   │                                                 │          │
+│  │     │   │  LOOKAHEAD (single-mode, non-cross-div):        │          │
+│  │     │   │  For top 5 candidates (by demand):              │          │
+│  │     │   │    1. Tentatively place assignment at slot       │          │
+│  │     │   │    2. Check: do ALL other remaining assignments  │          │
+│  │     │   │       in THIS division still have ≥1 valid slot?│          │
+│  │     │   │    3. YES → commit this slot (safe choice)       │          │
+│  │     │   │       NO  → undo, try next candidate            │          │
+│  │     │   │  This prevents "stranding" — e.g. placing       │          │
+│  │     │   │  English in a slot that blocks Library's only    │          │
+│  │     │   │  remaining teacher availability.                │          │
 │  │     │   │                                                 │          │
 │  │     │   ├── Block-mode: stamp N consecutive slots         │          │
 │  │     │   │   + mark teacher busy for all N                 │          │

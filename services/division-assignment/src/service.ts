@@ -269,7 +269,7 @@ export class AssignmentService {
       throw new ConflictError('This elective subject is already assigned to this division');
     }
 
-    return prisma.divisionAssignment.create({
+    const created = await prisma.divisionAssignment.create({
       data: {
         schoolId,
         academicYearId,
@@ -288,6 +288,62 @@ export class AssignmentService {
         electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
       },
     });
+
+    // Auto-sync: for cross-division elective groups, create the same assignment
+    // in all sibling divisions of the same class that don't already have it.
+    // This ensures all divisions in a cross-div elective stay in sync.
+    const siblingDivisions = await prisma.division.findMany({
+      where: {
+        classId: division.classId,
+        deletedAt: null,
+        id: { not: divisionId },
+      },
+      select: { id: true },
+    });
+
+    for (const sibling of siblingDivisions) {
+      // Check if sibling already has an assignment for this elective group
+      const siblingHasGroup = await prisma.divisionAssignment.findFirst({
+        where: {
+          divisionId: sibling.id,
+          electiveGroupId: input.electiveGroupId,
+          deletedAt: null,
+        },
+      });
+      // Only auto-create if the sibling already participates in this elective group
+      // (has at least one assignment for it) — otherwise it's a per-division elective
+      if (!siblingHasGroup) continue;
+
+      // Check if this specific (subject + teacher) already exists in the sibling
+      const exists = await prisma.divisionAssignment.findFirst({
+        where: {
+          schoolId,
+          academicYearId,
+          divisionId: sibling.id,
+          subjectId: input.subjectId,
+          teacherId: input.teacherId ?? null,
+          electiveGroupId: input.electiveGroupId,
+          deletedAt: null,
+        },
+      });
+      if (!exists) {
+        await prisma.divisionAssignment.create({
+          data: {
+            schoolId,
+            academicYearId,
+            divisionId: sibling.id,
+            subjectId: input.subjectId,
+            teacherId: input.teacherId ?? null,
+            assistantTeacherId: input.assistantTeacherId ?? null,
+            weightage: input.weightage,
+            electiveGroupId: input.electiveGroupId,
+            schedulingPreferences: input.schedulingPreferences ?? undefined,
+          },
+        });
+      }
+    }
+
+    return created;
   }
 
   // ── Elective Groups ──
