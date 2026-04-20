@@ -31,9 +31,15 @@
 | 13 | Export Service | 8/8 | ✅ COMPLETE | Division, class, teacher, multi-teacher × PDF/Excel |
 | 14 | WebSocket Service | 5/3 | ✅ COMPLETE | Connect, disconnect, broadcast, connections list |
 | 15 | Timetable Engine (Python) | — | ✅ COMPLETE | GA with H1–H10 hard + S1–S9 soft constraints |
-| 16 | Infrastructure (Terraform) | — | ⬜ NOT DEPLOYED | Terraform modules scaffolded, awaiting `terraform apply` |
+| 16 | Infrastructure (Terraform) | — | ✅ DEPLOYED | Deployed to AWS ap-south-1 (April 2026). CloudFront, API Gateway, Lambda, RDS, ECS, Cognito all operational. |
 
-**Summary**: 101 API routes implemented across 12 services. All business logic coded and TypeScript-clean. Python GA engine complete with Dockerfile. Only remaining work is AWS deployment (Phase 16).
+**Summary**: All 16 phases complete. 101+ API routes across 12 services. Full AWS deployment operational at `https://d25i05v9hwcs8q.cloudfront.net`.
+
+### Recent Backend Additions (April 2026)
+- `GET /api/teachers/{id}/breakdown` — per-class assignment breakdown with timetable period counts
+- `GET /api/timetables/{id}/valid-swap-targets` — valid swap target slots for drag-and-drop editing
+- Assistant teacher support in timetable and teacher services (`assistantTeacherId`, role field)
+- OUTDATED timetable visibility in view/export and teacher period counts
 
 ---
 

@@ -34,7 +34,7 @@ Before deploying any backend service, set these environment variables in your Po
 $env:LAMBDA_SG_ID = "sg-023ec7ce6f103470a"
 $env:PRIVATE_SUBNET_IDS = "subnet-00a02f0f32ba8fc7b,subnet-0bad413134e1811e2"
 $env:LAMBDA_ROLE_ARN = "arn:aws:iam::648485682362:role/timetable-prod-lambda-role"
-$env:SHARED_LAYER_ARN = "arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:1"
+$env:SHARED_LAYER_ARN = "arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:8"
 $env:DATABASE_URL = "postgresql://timetable_admin:Zyphr2026Prod!@timetable-prod-postgres.c186gu8203df.ap-south-1.rds.amazonaws.com:5432/timetable_prod"
 $env:COGNITO_USER_POOL_ID = "ap-south-1_rlYNHNPRZ"
 $env:COGNITO_CLIENT_ID = "42r2ih2m9c3l26lb4u1mrrl5sb"
@@ -200,7 +200,28 @@ terraform apply -var-file environments/prod.tfvars
 
 ---
 
-## 7. Full Stack Deployment (Everything)
+## 7. Deploy Timetable Engine (Docker/ECS)
+
+**When**: Engine algorithm changes (greedy.py, data_loader.py, output_writer.py, etc.)
+
+```powershell
+# Build image
+cd engine\timetable-generator
+docker build -t timetable-engine .
+
+# Login to ECR
+aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 648485682362.dkr.ecr.ap-south-1.amazonaws.com
+
+# Tag and push
+docker tag timetable-engine:latest 648485682362.dkr.ecr.ap-south-1.amazonaws.com/timetable-prod-timetable-engine:latest
+docker push 648485682362.dkr.ecr.ap-south-1.amazonaws.com/timetable-prod-timetable-engine:latest
+```
+
+The engine runs as on-demand Fargate tasks (not a persistent service). The new image is used automatically on the next generation run.
+
+---
+
+## 8. Full Stack Deployment (Everything)
 
 **When**: Major release or first-time setup
 
@@ -316,7 +337,7 @@ MSYS_NO_PATHCONV=1 aws ssm get-parameters --names "/timetable/prod/database-url"
 | RDS Endpoint | `timetable-prod-postgres.c186gu8203df.ap-south-1.rds.amazonaws.com:5432` |
 | Frontend S3 Bucket | `timetable-prod-frontend` |
 | Export S3 Bucket | `timetable-prod-exports` |
-| Lambda Layer | `arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:1` |
+| Lambda Layer | `arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:8` |
 | Lambda Role | `arn:aws:iam::648485682362:role/timetable-prod-lambda-role` |
 | Lambda Security Group | `sg-023ec7ce6f103470a` |
 | VPC | `vpc-0f42582a0c0dd1f6e` |

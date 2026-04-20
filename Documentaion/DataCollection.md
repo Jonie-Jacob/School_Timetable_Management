@@ -1,9 +1,11 @@
 # School Timetable Management System
-## Data Collection Guide
+## Data Collection Guide — Don Bosco School (Reference Data)
 
-**Version**: 1.0  
-**Date**: March 11, 2026  
-**Purpose**: Reference checklist for collecting all data required to set up the timetable management tool.
+**Version**: 1.1  
+**Date**: March 11, 2026 (updated April 20, 2026)  
+**Purpose**: Reference checklist for collecting all data required to set up the timetable management tool. This document contains the **Don Bosco school's data** used to seed the development database. Use as a template when collecting data from a new school during onboarding.
+
+> **Note on elective data quality**: Cross-division elective assignments must have **identical teacher sets** across all participating divisions. Ensure `parallel_sections` in `elective_group_subjects` correctly reflects how many simultaneous classes run per subject (e.g., 2 for two parallel Maths teachers, 1 for alternating IP teachers).
 
 ---
 

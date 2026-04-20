@@ -140,6 +140,11 @@ Sorted: Physics XI A (-0.64) → Library XI B (29.33) → Library VI B (36.85)
 │        └── Division has NO HARD prefs?                           │
 │            → Partition = ALL available slots (non-exclusive)    │
 │                                                               │
+│  Weightage calculation for partitioning:                       │
+│    ├── Regular assignments: use assignment weightage            │
+│    └── Elective assignments: use per-member weightage          │
+│        (not the elective group's periodsPerWeek)               │
+│                                                               │
 │  Output:                                                      │
 │    teacher_partitions: {                                       │
 │      teacher_id → { div_id → set of (day_of_week, start_time) }│
@@ -882,9 +887,24 @@ The teacher list page shows `assignedPeriods / maxPeriodsPerWeek`. For cross-div
 
 - **Regular assignments**: `SUM(weightage)` per teacher
 - **Per-division electives**: counted normally per assignment
-- **Cross-division electives**: counted **once** per elective group per teacher (using `electiveGroup.periodsPerWeek`), not once per division
+- **Cross-division electives**: counted **once** per elective group per teacher. For parallel-mode teachers (all slots), uses `periodsPerWeek`. For split-mode teachers (take turns), uses per-member `weightage`.
 
 This prevents false "over limit" warnings for teachers like Gopikadas who appears in 5 divisions but teaches 16pw (not 48pw).
+
+---
+
+## Assistant Teacher Support
+
+**File:** `data_loader.py` (teacher_ids property), `greedy.py` (placement), `output_writer.py` (DB writes)
+
+Assistant teachers are treated **identically** to primary teachers for scheduling:
+
+1. **`teacher_ids` property**: Returns ALL teacher IDs from assignment members — both `teacher_id` and `assistant_teacher_id`. Both sets are checked for availability and marked busy.
+2. **During placement**: `pick_available_teachers` checks assistant teachers separately after checking the `subject_teacher_map`. Assistants must be free (HARD constraint).
+3. **TeacherBusyTracker**: Assistant teachers are added/removed just like primary teachers. No distinction in busy tracking.
+4. **Output writer**: Includes `assistantTeacherId` in timetable_slot rows.
+5. **Frontend display**: Shows "Asst: Name" in timetable cells with grey background. Teacher timetable view includes both primary and assistant roles.
+6. **Teacher period counts**: Both `teacherId` and `assistantTeacherId` are counted when computing timetable period totals.
 
 ---
 

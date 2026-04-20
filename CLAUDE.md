@@ -109,8 +109,10 @@ Run migrations: `npx prisma migrate dev --schema packages/shared/prisma/schema.p
 - **Teacher maxPeriodsPerWeek** is a **soft cap** — engine tries to respect, may exceed, violations shown as warnings.
 - **Subjects** have an optional `abbreviation` field (max 10 chars) — short code shown in timetable grid (e.g., "Phy", "Maths", "CS").
 - **Subject deletion** cascades: timetable slots become empty, affected timetables flagged OUTDATED with conflict notifications.
-- **Elective groups** — co-scheduled subjects. Cross-division electives enforce same teachers across linked divisions of the same class.
+- **Elective groups** — co-scheduled subjects. Cross-division electives enforce same teachers across linked divisions of the same class. Each subject has `parallel_sections` in `elective_group_subjects`: teachers <= ps = parallel mode (all teach every slot), teachers > ps = split mode (teachers take turns).
 - **Scheduling preferences** — per-assignment JSONB field with preferred/excluded days, period ranges, adjacency, min/max per day. Constraint type: HARD or SOFT.
+- **Assistant teachers** — optional co-teacher per assignment. Treated identically to primary for scheduling (HARD constraint, same busy tracking). Shown as "Asst: Name" in timetable views.
+- **Timetable visibility** — both `GENERATED` and `OUTDATED` timetables are viewable, exportable, and included in teacher period counts.
 
 ## Coding Conventions
 
@@ -132,13 +134,12 @@ Run migrations: `npx prisma migrate dev --schema packages/shared/prisma/schema.p
 ## Documentation
 
 All design docs are in `Documentaion/` (note the typo — keep as-is):
-- `SRS.md` — Full software requirements specification
-- `Plan.md` — Business requirements and UI screen specs
+- `SRS.md` — Full software requirements specification (consolidated: includes business requirements, new features, constraints)
 - `Implementation_Plan.md` — Backend implementation plan with progress tracker
 - `Frontend_Implementation_Plan.md` — Frontend implementation plan (22/22 phases complete)
-- `New_Features_Implementation_Plan.md` — Class Teacher, Export, Unassigned Subjects plan
+- `Engine_Algorithm.md` — Timetable generation engine algorithm documentation
 - `User_Flow.md` — Step-by-step user flow + FAB/setup wizard spec
-- `DataCollection.md` — Sample school data for seeding
+- `DataCollection.md` — Reference school data (Don Bosco) for seeding
 - `AWS_Deployment_Guide.md` — Full deployment guide (PowerShell)
 - `Deployment_Operations.md` — How to deploy changes to BE/FE code
 
@@ -191,10 +192,20 @@ cd services\teacher; npx serverless deploy --stage prod
 - Frontend uses `sonner` for toasts, `@dnd-kit` for drag-and-drop, `shadcn/ui` primitives.
 - The guided setup wizard uses a **Floating Action Button (FAB)** — not sidebar-based. The FAB doubles as a conflict notification hub after setup is complete.
 - Vite proxy uses `rewrite` to strip `/api` prefix before forwarding to localhost services.
+- Cross-div elective assignments must have **identical teacher sets** across all participating divisions. Duplicates or missing teachers cause incorrect scheduling.
+- `parallel_sections` in `elective_group_subjects` determines parallel vs split mode. Ensure this matches the actual number of simultaneous classes intended.
 
 ## Recently Fixed Bugs
 
 **API `/api` prefix double-slash issue** (FIXED April 8, 2026): Removed leading `/` from all RTK Query endpoint URLs in all 10 API slices. URLs now use `'academic-years'` instead of `'/academic-years'` so `fetchBaseQuery` joins correctly with `baseUrl: '/api'`.
+
+**Split-mode elective teacher double-bookings** (FIXED April 20, 2026): Engine now marks ALL elective teachers busy during placement (not just `parallel_sections` picked teachers). Prevents regular assignments from landing on elective slots that the output writer later assigns to split-mode teachers.
+
+**Missing `end_time` in `_place_cross_div`** (FIXED April 20, 2026): Added `end_time=slot.end_time` parameter to `pick_available_teachers` call in `_place_cross_div`. Without it, time-range overlap detection was degraded.
+
+**DB duplicate elective assignments** (FIXED April 20, 2026): XII Bio/CS (XII B) and XI Maths/IP/Psy (XI B, XI C) had duplicate teacher entries instead of correct teacher pairs. Fixed data and added rule 4 in Engine_Algorithm.md Critical Rules.
+
+**XII Maths/IP/Psy parallel_sections** (FIXED April 20, 2026): Mathematics `parallel_sections` was 1 (split mode) but should be 2 (parallel mode — both Amrutha and Julie teach simultaneously).
 
 ## Auth Architecture (Production)
 

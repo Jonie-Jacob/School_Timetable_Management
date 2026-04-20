@@ -1,10 +1,11 @@
 # School Timetable Management System
 ## Software Requirements Specification (SRS)
 
-**Version**: 1.0  
-**Date**: March 12, 2026  
-**Status**: Draft  
-**Prepared by**: Zyphr Engineering
+**Version**: 2.0  
+**Date**: April 20, 2026  
+**Status**: Approved  
+**Prepared by**: Zyphr Engineering  
+**Changelog**: v2.0 — Consolidated from SRS, Plan (Business Requirements), and New Features Implementation Plan. Added BR-19 (Guided Setup Wizard), Constraints & Scope Boundaries appendix, and three implemented features (Class Teacher, Export Integration, Unassigned Subjects).
 
 ---
 
@@ -30,6 +31,9 @@
 18. [Authentication & Authorization](#18-authentication--authorization)
 19. [Deployment Architecture](#19-deployment-architecture)
 20. [Export Module](#20-export-module)
+21. [Additional Business Requirements](#21-additional-business-requirements)
+22. [New Features (Implemented April 2026)](#22-new-features-implemented-april-2026)
+23. [Appendix — Constraints & Scope Boundaries](#23-appendix--constraints--scope-boundaries)
 
 ---
 
@@ -7065,6 +7069,247 @@ The teacher timetable export follows the same pipeline but with a different data
 ---
 
 *End of Section 20.*
+
+---
+
+## 21. Additional Business Requirements
+
+The following business requirements extend the core specification (Sections 2 and 9).
+
+---
+
+### BR-17 · Scheduling Preferences (per Assignment)
+
+1. Each subject–teacher–weightage assignment may optionally carry **scheduling preferences** that guide the timetable auto-generation engine on when to place the subject.
+2. The following preferences shall be supported:
+
+   | Preference | Description |
+   |-----------|-------------|
+   | **Preferred days** | A list of days of the week the subject should preferably be scheduled on. |
+   | **Excluded days** | A list of days the subject must/should not be scheduled on. |
+   | **Preferred period range** | A range of period slot numbers the subject should preferably be placed in (e.g., Period 1–3). |
+   | **Excluded period range** | A range of period slot numbers the subject must/should not be placed in (e.g., Period 7–8). |
+   | **Prefer adjacent periods** | When the subject has more than one period on the same day, prefer placing them in consecutive slots with no gap. |
+   | **Max periods per day** | The maximum number of periods of this subject that may appear on a single day. |
+   | **Min periods per day** | When the subject is scheduled on a day, it must appear at least this many times. |
+
+3. Each assignment's preferences shall have a **constraint type**: **Hard** or **Soft**.
+   - **Hard**: The timetable engine must respect the preference. Generation fails if the preference cannot be satisfied.
+   - **Soft**: The engine attempts to honour the preference but may relax it if necessary. Violations appear as warnings in the conflict panel.
+4. The constraint type is set once per assignment and applies to all preferences on that assignment.
+5. Preferences are optional — assignments without preferences are scheduled freely based on weightage alone.
+6. When an assignment belongs to an **elective group** (BR-18), scheduling preferences apply to the **entire elective group** as a unit (all subjects in the group share the same time slots, so the preference governs the group's placement).
+7. When a division is **copied**, all scheduling preferences are copied to the new division's assignments and may be independently edited afterwards.
+
+> **See also**: Section 9A (Scheduling Preferences Model) for JSONB schema, GA constraint mapping, and detailed technical specification.
+
+---
+
+### BR-18 · Elective Groups
+
+1. An **elective group** is a named set of two or more subjects that are scheduled into the **same time slot(s)** for a division. Students in the division are split across the elective subjects, each taught by a different teacher in a parallel concurrent session.
+2. Elective groups are school-level entities scoped to the active academic year. An elective group has a **name** and **two or more member subjects**.
+3. A single subject may belong to **multiple** elective groups (e.g., "Computer Science" can appear in both "Bio/CS" and "Maths/CS" groups).
+4. When an elective group is **assigned to a division**:
+   - One division assignment row is created **per subject** in the group, all sharing the same elective group link and the same weightage.
+   - Each assignment within the group must have a **different teacher** (students split into parallel sessions).
+   - A single weightage value is entered and applied identically to all subjects in the group.
+5. During **timetable generation**, all assignments in an elective group are co-scheduled into the **exact same** `(day, slot)` combinations. The engine shall additionally ensure that none of the group's teachers are double-booked.
+6. In the **timetable grid**, an elective group slot is displayed as a **stacked/split cell** showing all subjects and their respective teachers.
+7. During **drag-and-drop editing**, all subjects in an elective group **move together** as a single unit. Individual subjects cannot be dragged out of the group.
+8. **Editing an elective group definition** (adding/removing subjects) after it has been assigned to divisions triggers a warning. Removing a subject deletes the corresponding assignment rows and flags affected timetables as `OUTDATED`.
+9. **Deleting an elective group** that is assigned to divisions requires confirmation. On deletion, linked assignments become standalone (no longer co-scheduled) and affected timetables are flagged as `OUTDATED`.
+10. Conflict detection shall apply to all teachers within an elective group — none of the group's teachers may be double-booked at the group's scheduled slots.
+
+#### Cross-Division Elective Groups
+
+11. The same elective group may be assigned to **multiple divisions within the same class** (e.g., XII A, XII B, and XII C all share "Bio/Maths"). This enables students from different divisions to **physically regroup** — all Bio students attend one session, all Maths students attend another — regardless of their home division.
+12. Cross-division electives are limited to divisions of the **same class**. They shall not span different classes (e.g., XI and XII cannot share an elective).
+13. When the same elective group is assigned to a second (or subsequent) division of the same class, the system shall **enforce the same teachers** as the first division's assignment. Since students physically regroup across divisions, each subject is taught by **one teacher** serving all combined students.
+14. The timetable generation engine shall co-schedule cross-division elective slots into the **exact same** `(day, slot)` positions across **all linked divisions**. This is a hard constraint — generation fails if the slots cannot be aligned.
+15. In the timetable grid, cross-division elective cells shall display a visual indicator (e.g., "⟐ Shared: XII A, B, C") showing which divisions are linked.
+16. Modifying the teacher for one division's elective assignment shall automatically update all other divisions sharing the same elective group within the same class.
+
+> **See also**: Section 9 (Elective Group Model) and Section 9.3.4 (Cross-Division Elective Assignment) for technical data model and implementation details.
+
+---
+
+### BR-19 · Guided Setup Wizard
+
+1. The system shall provide a **guided setup wizard** that walks first-time users through the complete configuration flow in the correct order: Academic Year → Classes & Divisions → Period Structures → Subjects & Elective Groups → Teachers → Assignments → Timetable Generation.
+2. The wizard shall appear **automatically** on first login after account creation (when no data exists) and be **manually accessible** via a "Setup Guide" button on the Dashboard at any time.
+3. The wizard shall be **resumable** — it tracks progress per school per academic year and picks up where the user left off.
+4. **Floating Action Button (FAB)**: A persistent floating button shall be displayed in the bottom-right corner of every page (except Login/Register). The FAB serves dual purpose:
+   - **During setup**: Displays a progress ring with step count (e.g., "4/7"). Clicking opens a popover panel showing all 7 steps with status, clickable navigation, and a "Dismiss Guide" option.
+   - **After setup**: If outdated timetables or conflicts exist, displays an amber conflict badge with count. Clicking opens a popover panel showing a summary of conflicts with links to edit affected timetables.
+   - **All clear**: When setup is complete and no conflicts exist, the FAB hides or shrinks to a subtle green checkmark.
+   - On mobile, the FAB is a smaller circular button and the panel opens as a bottom sheet.
+   - The FAB auto-opens on first login to introduce the setup flow.
+5. **Dashboard setup cards**: The Dashboard shall display step cards when setup is incomplete. Each card shows the step title, current status summary, and an action button ("Continue" or "Review"). Cards are replaced by normal summary cards after setup completes.
+6. Step completion shall be **auto-detected** from existing data:
+
+   | Step | Complete When |
+   |------|--------------|
+   | 1. Academic Year | At least one active academic year exists |
+   | 2. Classes & Divisions | At least one class with at least one division exists |
+   | 3. Period Structures | All divisions have a period structure assigned |
+   | 4. Subjects & Electives | At least one subject exists |
+   | 5. Teachers | At least one teacher with at least one qualified subject exists |
+   | 6. Assignments | At least one division has at least one assignment |
+   | 7. Generate Timetable | At least one timetable has been generated |
+
+7. Steps with unmet prerequisites shall be **locked** with a tooltip explaining which step must be completed first.
+8. The user may **dismiss** the wizard permanently via "Don't show again". The wizard can be re-enabled from Dashboard settings.
+9. After all 7 steps complete, a **"Setup Complete!"** celebration is shown once, then the wizard auto-hides.
+
+---
+
+## 22. New Features (Implemented April 2026)
+
+The following features were planned in April 2026 and have been fully implemented (backend + frontend).
+
+---
+
+### Feature 1 — Class Teacher Assignment (with Swap Logic)
+
+#### Overview
+Allow schools to designate a **class teacher** for each division. A class teacher can be **any teacher** — if they don't currently teach in the target division, the system offers a **swap** to bring them in by exchanging assignments with the teacher who currently holds that subject slot.
+
+#### Business Rules
+- **One class teacher per division** (optional — can be null)
+- **One teacher can be class teacher of multiple divisions**
+- **Any teacher can be selected** — not limited to teachers already in the division
+- **No scheduling priority** impact — class teacher assignment is administrative only, does not affect timetable generation
+- **Per academic year** — like all other entities
+
+#### Assignment Flow (3 Cases)
+
+**Case A — Teacher already teaches in this division**
+- Trigger: User picks a teacher who already has at least one subject assignment in this division.
+- Action: Set as class teacher directly. No swap needed.
+
+**Case B — Teacher teaches in OTHER divisions only (Swap)**
+- Trigger: User picks a teacher who teaches subjects in other divisions but NOT in this division.
+- Action: Multi-step swap flow:
+  1. Subject picker: Show which subjects the teacher teaches (across all divisions). User picks which subject to swap into this division.
+  2. Swap analysis: Find who currently teaches that subject in the target division.
+  3. Swap confirmation: Show swap details with warnings if the displaced teacher is a class teacher elsewhere.
+  4. Execute: Swap the two division assignments in a transaction + set class teacher.
+  5. Timetable impact: If either division has a generated timetable, flag as OUTDATED.
+
+**Case C — Teacher's subjects don't exist in this division**
+- Trigger: User picks a teacher whose subjects have no matching assignment in this division.
+- Action: Show warning → allow setting as class teacher anyway (administrative only, no swap).
+
+#### Database Changes
+`divisions.class_teacher_id` — nullable FK to `teachers` table.
+
+#### API Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| `PUT` | `/api/classes/:classId/divisions/:divisionId/class-teacher` | Set class teacher |
+| `DELETE` | `/api/classes/:classId/divisions/:divisionId/class-teacher` | Remove class teacher |
+| `PUT` | `/api/classes/bulk-class-teacher` | Bulk assign class teachers |
+| `POST` | `/api/classes/:classId/divisions/:divisionId/class-teacher-analyze` | Analyze swap options |
+| `POST` | `/api/classes/:classId/divisions/:divisionId/class-teacher-swap` | Execute swap + set class teacher |
+
+---
+
+### Feature 2 — Export Integration
+
+#### Overview
+Frontend connection to the existing backend export API (services/export/). Supports PDF and Excel exports for divisions, classes, teachers, and multi-teacher combinations.
+
+#### Export Scopes & Formats
+
+| Scope | PDF | Excel | Notes |
+|-------|-----|-------|-------|
+| Single division | 1 page | 1 sheet | Per division timetable |
+| Single class (all divisions) | Combined PDF, 1 page per division | Multi-sheet workbook | |
+| Multiple classes | Single PDF, page-per-division | Multi-sheet workbook | |
+| Single teacher | 1 page | 1 sheet | Teacher's schedule across divisions |
+| Multiple teachers | Single PDF, page-per-teacher | Multi-sheet workbook | |
+
+#### Export Button Placement
+
+| Location | What it exports | Format options |
+|----------|----------------|----------------|
+| Timetables Overview Page | Selected divisions/classes or all | PDF, Excel |
+| Individual Timetable View | That division's timetable | PDF, Excel |
+| Teacher Timetable View | Selected teacher(s) | PDF, Excel |
+
+#### API Endpoints (existing)
+```
+POST /api/export/division/pdf     — { divisionId }
+POST /api/export/division/excel   — { divisionId }
+POST /api/export/class/pdf        — { classId }
+POST /api/export/class/excel      — { classId }
+POST /api/export/teacher/pdf      — { teacherId }
+POST /api/export/teacher/excel    — { teacherId }
+POST /api/export/teachers/pdf     — { teacherIds: [] }
+POST /api/export/teachers/excel   — { teacherIds: [] }
+```
+
+---
+
+### Feature 3 — Unassigned Teacher Subjects
+
+#### Overview
+A view showing **teacher-subject combinations** (from `teacher_subjects`) that have **no corresponding division assignment** across the entire school. Allows inline assignment directly from this view.
+
+#### Business Rules
+- Show each teacher-subject pair that has **zero** active division assignments
+- User can click "+" to assign that teacher-subject to a division
+- When assigning: show a dropdown of all divisions; if teacher has a scheduling conflict, show a "Conflict" tag; allow assignment with conflict (creates notification)
+- Require `weightage` input when assigning
+
+#### Database Changes
+SQL view (not materialized):
+```sql
+CREATE OR REPLACE VIEW unassigned_teacher_subjects AS
+SELECT ts.id as teacher_subject_id, ts.school_id, ts.teacher_id, ts.subject_id,
+       t.name as teacher_name, t.academic_year_id, s.name as subject_name
+FROM teacher_subjects ts
+JOIN teachers t ON ts.teacher_id = t.id AND t.deleted_at IS NULL
+JOIN subjects s ON ts.subject_id = s.id AND s.deleted_at IS NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM division_assignments da
+  WHERE da.teacher_id = ts.teacher_id AND da.subject_id = ts.subject_id AND da.deleted_at IS NULL
+);
+```
+
+#### API Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/assignments/unassigned` | List unassigned teacher-subject pairs |
+| `POST` | `/api/assignments/quick-assign` | Assign with conflict detection |
+
+---
+
+## 23. Appendix — Constraints & Scope Boundaries
+
+| Topic | Decision |
+|-------|----------|
+| Authentication | JWT session — one school account per login (BR-15) |
+| Class structure | User-defined classes with custom naming and sort order; not limited to a fixed set (BR-1) |
+| Division optionality | Zero or more divisions per class |
+| Timetable scope | Per division (not per class) |
+| Period Structures | Multiple user-defined; each linked to a set of **divisions** (not classes); different divisions in the same class may use different structures; per-day slot sequences; configurable working days. Assignment editable from both Period Structure Editor and Division Detail page. |
+| Break slots | Configurable per Period Structure per working day; drag-and-drop reorder supported |
+| Adjacency constraint | Optional toggle per timetable generation run; off by default. Also available per-assignment via scheduling preferences (BR-17). |
+| Scheduling preferences | Optional per assignment — preferred/excluded days, preferred/excluded period ranges, adjacent preference, min/max per day. Hard or Soft constraint type (BR-17). |
+| Elective groups | Named groups of 2+ subjects co-scheduled in parallel. School-level entities assigned to divisions. Cross-division support for same class (BR-18). |
+| Teacher deletion | Warns if actively assigned; user confirms |
+| Subject deletion | Warns if actively assigned; user confirms. Timetable slots become empty; affected timetables flagged OUTDATED with conflict notifications |
+| Copy Division | Copies assignments and scheduling preferences; no timetable auto-generated |
+| Timing uniformity | Fully configurable per working day within each Period Structure |
+| Timetable invalidation | Passive notification — keep, flag as outdated, user fixes |
+| Timetable editing | Generated timetables are editable via drag-and-drop. No publish/draft workflow. |
+| Export formats | PDF and Excel — per division, per class, per teacher, all teachers, group of teachers |
+| Guided setup | 7-step wizard with FAB + popover panel (dual-purpose: setup progress and conflict notifications), dashboard cards (BR-19) |
+| Multi-tenancy | One school account per login; data is fully isolated between schools |
+| Assistant teacher | Optional co-teacher per division assignment; uses standard teacher record; no extra record type (BR-16) |
+| i18n | English only initially. Frontend uses react-i18next infrastructure for future translation support. |
 
 ---
 
