@@ -605,9 +605,22 @@ export function Component() {
                         <SelectItem value="_none">None</SelectItem>
                         {teachers
                           .filter((t) => t.id !== selectedTeacherId)
-                          .map((t) => (
-                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                          ))}
+                          .map((tch) => {
+                            const load = teacherLoads?.find((l) => l.id === tch.id);
+                            const assigned = load?.assignedPeriods ?? 0;
+                            const max = load?.maxPeriodsPerWeek;
+                            const over = max != null && assigned > max;
+                            return (
+                              <SelectItem key={tch.id} value={tch.id}>
+                                <span className="flex items-center gap-2">
+                                  <span>{tch.name}</span>
+                                  <span className={`text-[10px] ${over ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                    · {assigned}{max != null ? `/${max}` : ''} pds/wk
+                                  </span>
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
                       </SelectContent>
                     </Select>
                   </div>

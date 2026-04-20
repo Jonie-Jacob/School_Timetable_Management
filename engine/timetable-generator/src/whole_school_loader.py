@@ -105,9 +105,6 @@ def load_whole_school_data(
             scores.append((la_idx, score))
         wsd.flexibility_scores[div_id] = scores
 
-    # ── Debug: dump sorted flexibility rankings ─────────────────────────
-    _dump_flexibility_rankings(wsd, div_pressure)
-
     # Compute teacher partitions
     compute_teacher_partitions(wsd)
 
@@ -115,39 +112,6 @@ def load_whole_school_data(
     _detect_cross_div_electives(wsd)
 
     return wsd
-
-
-def _dump_flexibility_rankings(wsd: WholeSchoolData, div_pressure: dict[str, float]) -> None:
-    """Log the sorted flexibility rankings for debugging."""
-    items = []
-    for div_id, scores in wsd.flexibility_scores.items():
-        div_data = wsd.divisions[div_id]
-        pressure = div_pressure.get(div_id, 0)
-        for la_idx, (composite_score, teacher_load) in scores:
-            la = div_data.logical_assignments[la_idx]
-            block_size = 1
-            prefs = la.scheduling_preferences if la.scheduling_preferences and isinstance(la.scheduling_preferences, dict) else None
-            if prefs and prefs.get("constraintType") == "HARD" and prefs.get("preferAdjacentPeriods") and (prefs.get("minPeriodsPerDay") or 0) >= 2:
-                block_size = int(prefs.get("minPeriodsPerDay"))
-            teachers = ", ".join(
-                (wsd.teachers.get(tid) or div_data.teachers.get(tid)).name
-                if (wsd.teachers.get(tid) or div_data.teachers.get(tid)) else tid[:8]
-                for tid in la.teacher_ids[:2]
-            )
-            items.append((
-                composite_score, teacher_load, div_id[:8], la.display_name,
-                la.weightage, teachers, pressure, block_size,
-                la.elective_group_name or "",
-            ))
-
-    items.sort(key=lambda x: (x[0], -x[1]))
-
-    logger.info("=== FLEXIBILITY RANKINGS (sorted, %d items) ===", len(items))
-    logger.info("%-4s %-8s %-22s %-3s %-7s %-5s %-5s %-3s %-20s %s",
-                "Rk", "Div", "Subject", "w", "Score", "TLoad", "Press", "Blk", "Teacher(s)", "Elective")
-    for i, t in enumerate(items):
-        logger.info("%-4d %-8s %-22s %-3d %-7.2f %-5.0f %-5.2f %-3d %-20s %s",
-                     i+1, t[2], t[3][:22], t[4], t[0], t[1], t[6], t[7], t[5][:20], t[8][:20])
 
 
 def _load_global_teacher_unavailability(wsd: WholeSchoolData) -> None:
@@ -431,14 +395,35 @@ def compute_teacher_partitions(wsd: WholeSchoolData) -> None:
     in division X will only include Mon/Tue slots.
     """
     # Build teacher → { division_id → total_weightage }
+    # For split-teacher electives, use each teacher's own weightage (from
+    # division_assignment), not the elective group's periodsPerWeek.
     teacher_div_weights: dict[str, dict[str, int]] = {}
     for div_id, div_data in wsd.divisions.items():
         for la in div_data.logical_assignments:
-            for tid in la.teacher_ids:
-                teacher_div_weights.setdefault(tid, {})
-                teacher_div_weights[tid][div_id] = (
-                    teacher_div_weights[tid].get(div_id, 0) + la.weightage
-                )
+            if la.is_elective and la.subject_teacher_map:
+                # Elective: use per-member weightage for split-mode teachers
+                seen_tids: set[str] = set()
+                for m in la.members:
+                    tid = m.teacher_id
+                    if tid and tid not in seen_tids:
+                        seen_tids.add(tid)
+                        teacher_div_weights.setdefault(tid, {})
+                        teacher_div_weights[tid][div_id] = (
+                            teacher_div_weights[tid].get(div_id, 0) + m.weightage
+                        )
+                    atid = m.assistant_teacher_id
+                    if atid and atid not in seen_tids:
+                        seen_tids.add(atid)
+                        teacher_div_weights.setdefault(atid, {})
+                        teacher_div_weights[atid][div_id] = (
+                            teacher_div_weights[atid].get(div_id, 0) + m.weightage
+                        )
+            else:
+                for tid in la.teacher_ids:
+                    teacher_div_weights.setdefault(tid, {})
+                    teacher_div_weights[tid][div_id] = (
+                        teacher_div_weights[tid].get(div_id, 0) + la.weightage
+                    )
 
     for tid, div_weights in teacher_div_weights.items():
         if len(div_weights) < 2:

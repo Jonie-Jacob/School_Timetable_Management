@@ -92,7 +92,21 @@ export interface TeacherLoad {
   name: string;
   maxPeriodsPerWeek: number | null;
   assignedPeriods: number;
+  /** Distinct time slots in the generated timetable. null if no timetable exists. */
+  timetablePeriods: number | null;
   qualifiedSubjectIds: string[];
+}
+
+export interface TeacherBreakdownRow {
+  className: string;
+  divisionLabel: string;
+  subject: string;
+  weightage: number;
+  electiveGroup: string | null;
+  isCrossDiv: boolean;
+  divisions: string[];
+  role: 'primary' | 'assistant';
+  timetablePeriods: number | null;
 }
 
 export interface TeacherSlotConflict {
@@ -201,6 +215,12 @@ export const teacherApi = createApi({
       providesTags: [{ type: 'Teacher', id: 'LOAD' }],
     }),
 
+    getTeacherBreakdown: builder.query<TeacherBreakdownRow[], string>({
+      query: (teacherId) => `teachers/${teacherId}/breakdown`,
+      transformResponse: (response: { data: TeacherBreakdownRow[] }) => response.data,
+      providesTags: (_r, _e, teacherId) => [{ type: 'Teacher', id: teacherId }],
+    }),
+
     getTeacherSlotConflicts: builder.query<TeacherSlotConflict[], ConflictQuery>({
       query: ({ workingDayId, slotId, excludeDivisionId }) => {
         const p = new URLSearchParams({ workingDayId, slotId });
@@ -221,5 +241,6 @@ export const {
   useSetTeacherSubjectsMutation,
   useSetTeacherAvailabilityMutation,
   useGetTeachersLoadQuery,
+  useGetTeacherBreakdownQuery,
   useGetTeacherSlotConflictsQuery,
 } = teacherApi;

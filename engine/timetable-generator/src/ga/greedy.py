@@ -344,6 +344,124 @@ def _pick_with_lookahead(
     return default_gi  # No safe option found, use best demand
 
 
+def _try_constraint_relaxation(
+    la: LogicalAssignment,
+    la_idx: int,
+    div_id: str,
+    div_data: SchoolData,
+    bsize: int,
+    state: PlacementState,
+    wsd: WholeSchoolData,
+    cross_div_eg_id: Optional[str],
+    div_labels: dict[str, str],
+) -> Optional[int]:
+    """Try progressively relaxing HARD constraints to find a valid slot.
+
+    Relaxation ladder (each step makes one constraint looser):
+      1. maxPeriodsPerDay += 1
+      2. Expand preferredPeriodRange by 1 in each direction
+      3. Disable preferAdjacentPeriods
+      4. Remove preferredDays / excludedDays
+      5. All relaxations failed → return None
+
+    Only the current period is affected — not a permanent change.
+    Returns the best gi if found, else None.
+    """
+    prefs = la.scheduling_preferences
+    if not prefs or not isinstance(prefs, dict):
+        return None
+
+    original_prefs = dict(prefs)
+    div_label = div_labels.get(div_id, div_id[:8])
+
+    relaxation_steps = [
+        "maxPeriodsPerDay",
+        "preferredPeriodRange",       # expand by ±1
+        "preferredPeriodRange_remove", # remove entirely
+        "preferAdjacentPeriods",
+        "dayPreferences",
+        "combined",                    # all relaxations at once
+    ]
+
+    for step in relaxation_steps:
+        # Create a temporary modified copy of preferences
+        relaxed = dict(original_prefs)
+
+        if step == "maxPeriodsPerDay":
+            mpd = relaxed.get("maxPeriodsPerDay")
+            if mpd is None:
+                continue
+            relaxed["maxPeriodsPerDay"] = mpd + 1
+
+        elif step == "preferredPeriodRange":
+            pr = relaxed.get("preferredPeriodRange")
+            if not pr:
+                continue
+            relaxed["preferredPeriodRange"] = {
+                "min": max(1, pr.get("min", 1) - 1),
+                "max": min(div_data.periods_per_day, pr.get("max", 99) + 1),
+            }
+
+        elif step == "preferredPeriodRange_remove":
+            if not relaxed.get("preferredPeriodRange"):
+                continue
+            relaxed.pop("preferredPeriodRange", None)
+
+        elif step == "preferAdjacentPeriods":
+            if not relaxed.get("preferAdjacentPeriods"):
+                continue
+            relaxed["preferAdjacentPeriods"] = False
+
+        elif step == "dayPreferences":
+            if not relaxed.get("preferredDays") and not relaxed.get("excludedDays"):
+                continue
+            relaxed.pop("preferredDays", None)
+            relaxed.pop("excludedDays", None)
+
+        elif step == "combined":
+            # Nuclear option: relax everything at once
+            has_any = (relaxed.get("maxPeriodsPerDay") is not None
+                       or relaxed.get("preferredPeriodRange")
+                       or relaxed.get("preferAdjacentPeriods")
+                       or relaxed.get("preferredDays")
+                       or relaxed.get("excludedDays"))
+            if not has_any:
+                continue
+            mpd = relaxed.get("maxPeriodsPerDay")
+            if mpd is not None:
+                relaxed["maxPeriodsPerDay"] = mpd + 2
+            relaxed.pop("preferredPeriodRange", None)
+            relaxed["preferAdjacentPeriods"] = False
+            relaxed.pop("preferredDays", None)
+            relaxed.pop("excludedDays", None)
+
+        # Temporarily swap preferences and find valid slots
+        la.scheduling_preferences = relaxed
+
+        if cross_div_eg_id:
+            if bsize >= 2:
+                candidates = _find_valid_blocks_cross_div(cross_div_eg_id, bsize, state, wsd)
+            else:
+                candidates = _find_valid_slots_cross_div(cross_div_eg_id, state, wsd)
+        else:
+            if bsize >= 2:
+                candidates = _find_valid_blocks(la, la_idx, div_id, div_data, bsize, state, wsd)
+            else:
+                candidates = _find_valid_slots(la, la_idx, div_id, div_data, state, wsd)
+
+        # Restore original preferences
+        la.scheduling_preferences = original_prefs
+
+        if candidates:
+            candidates.sort(key=lambda x: x[1])
+            gi = candidates[0][0]
+            logger.info("Constraint relaxation: %s in %s -- relaxed %s, found slot gi=%d (%d candidates)",
+                        la.display_name, div_label, step, gi, len(candidates))
+            return gi
+
+    return None
+
+
 def schedule_all(
     wsd: WholeSchoolData,
     on_progress: ProgressCallback = None,
@@ -401,10 +519,16 @@ def schedule_all(
     block_mode_count = sum(bsize * count for (_, _, bsize), count in remaining.items() if bsize >= 2)
     single_mode_count = sum(count for (_, _, bsize), count in remaining.items() if bsize == 1)
 
-    logger.info("Step 3: Demand-driven placement — %d assignment-periods across %d divisions "
-                "(%d cross-division elective groups, %d in block-mode, %d in single-mode)",
+    # Verify remaining matches total_items accounting for cross-div multiplier
+    remaining_periods = sum(
+        bsize * count * (len(wsd.cross_div_electives.get(wsd.cross_div_la_map.get((d, l), ''), [d])))
+        for (d, l, bsize), count in remaining.items()
+    )
+    logger.info("Step 3: Demand-driven placement -- %d assignment-periods across %d divisions "
+                "(%d cross-division elective groups, %d in block-mode, %d in single-mode, "
+                "remaining_periods_with_crossdiv=%d)",
                 total_items, len(wsd.divisions), len(wsd.cross_div_electives),
-                block_mode_count, single_mode_count)
+                block_mode_count, single_mode_count, remaining_periods)
 
     # ── Initialize state ──────────────────────────────────────────────────
     state = PlacementState(
@@ -425,6 +549,19 @@ def schedule_all(
 
     # ── Step 3: Demand-driven placement loop ──────────────────────────────
     placed_total = 0
+    path_counts = defaultdict(int)  # track which code path each iteration takes
+    # Track per-(div,la) what path was taken each iteration
+    per_la_paths: dict[tuple[str, int], list[str]] = defaultdict(list)
+
+    # Dump initial remaining for senior divisions
+    for (d, l, bs), cnt in sorted(remaining.items(), key=lambda x: x[0]):
+        dl = div_labels.get(d, d[:8])
+        if 'XI' in dl or 'XII' in dl:
+            la_name = wsd.divisions[d].logical_assignments[l].display_name
+            eg = wsd.cross_div_la_map.get((d, l))
+            logger.info("INIT_REMAIN %s la[%d] %s blk=%d count=%d%s",
+                        dl, l, la_name, bs, cnt, f" CROSSDIV={eg[:8]}" if eg else "")
+
     while remaining:
         # Find the most constrained unplaced item (fewest valid positions)
         best_item: Optional[tuple[str, int, int]] = None
@@ -481,15 +618,10 @@ def schedule_all(
                         scores_str,
                         " CROSS-DIV" if best_is_cross_div else "")
 
+        iter_path = 'UNKNOWN'
         if best_candidates:
             best_candidates.sort(key=lambda x: x[1])
 
-            # Lookahead: try each candidate slot, but before committing,
-            # verify that all other remaining assignments in the SAME
-            # division still have at least 1 valid slot. If placing here
-            # would strand another assignment, try the next candidate.
-            # Only do lookahead for single-mode non-cross-div placements
-            # (block and cross-div are more complex and less affected).
             gi = best_candidates[0][0]
             if not best_is_cross_div and bsize == 1 and len(best_candidates) > 1:
                 gi = _pick_with_lookahead(
@@ -506,113 +638,144 @@ def schedule_all(
                 n_placed = bsize * n_divs
                 state.placed_ok += n_placed
                 placed_total += n_placed
+                iter_path = 'crossdiv_ok'
+                path_counts['crossdiv_ok'] += 1
             elif bsize >= 2:
                 _place_block(state, div_id, la_idx, gi, bsize, div_data, la, wsd)
                 state.placed_ok += bsize
                 placed_total += bsize
+                iter_path = 'block_ok'
+                path_counts['block_ok'] += 1
             else:
                 _place_assignment(state, div_id, la_idx, gi, div_data, la, wsd)
                 state.placed_ok += 1
                 placed_total += 1
+                iter_path = 'single_ok'
+                path_counts['single_ok'] += 1
         elif _try_backtrack(state, div_id, la_idx, div_data, la, wsd, max_depth=5):
             state.backtracked += 1
             placed_total += 1
+            iter_path = 'backtrack'
+            path_counts['backtrack'] += 1
+            # Backtrack places 1 period. If this was a block entry (bsize >= 2),
+            # the remaining bsize-1 periods need to go back as singles.
+            if bsize >= 2:
+                key_single = (div_id, la_idx, 1)
+                remaining[key_single] = remaining.get(key_single, 0) + (bsize - 1)
+                logger.info("Backtrack partial block: %s in %s -- placed 1 of %d, returning %d as singles",
+                            la.display_name, div_labels.get(div_id, div_id[:8]), bsize, bsize - 1)
         elif not best_is_cross_div and bsize >= 2:
-            # Block failed at runtime — demote to singles and re-enter the loop.
-            # This lets the demand-driven placer handle them with proper constraint
-            # checking instead of force-placing in random empty slots.
             key_block = (div_id, la_idx, bsize)
             key_single = (div_id, la_idx, 1)
             remaining[key_single] = remaining.get(key_single, 0) + bsize
-            # Don't decrement the block entry here — it gets decremented below
-            logger.info("Runtime block demotion: %s in %s — block of %d demoted to %d singles",
+            logger.info("Runtime block demotion: %s in %s -- block of %d demoted to %d singles",
                         la.display_name, div_labels.get(div_id, div_id[:8]), bsize, bsize)
+            iter_path = 'block_demote'
+            path_counts['block_demote'] += 1
         else:
-            analysis = _build_failure_analysis(la, la_idx, div_id, div_data, state, wsd, div_labels)
-            failure_analyses.append(analysis)
-            n_fallback = bsize if not best_is_cross_div else bsize * len(wsd.cross_div_electives.get(best_is_cross_div, [div_id]))
-            logger.warning("Fallback #%d: %s in %s — %s (valid_count=%d, block=%d)",
-                           state.fallback + 1, la.display_name, div_labels.get(div_id, div_id[:8]),
-                           analysis.get("reason", ""),
-                           int(best_valid_count) if best_valid_count != float('inf') else 0,
-                           bsize)
+            # ── Constraint relaxation ladder ─────────────────────────────
+            # Before falling back, try progressively relaxing constraints
+            # one step at a time. Each relaxation creates a temporary copy
+            # of the assignment's preferences with one constraint loosened.
+            relaxed_gi = _try_constraint_relaxation(
+                la, la_idx, div_id, div_data, bsize, state, wsd,
+                best_is_cross_div, div_labels,
+            )
+            if relaxed_gi is not None:
+                # Relaxation found a slot — place it
+                if best_is_cross_div:
+                    if bsize >= 2:
+                        _place_block_cross_div(state, best_is_cross_div, relaxed_gi, bsize, wsd)
+                    else:
+                        _place_cross_div(state, best_is_cross_div, relaxed_gi, wsd)
+                    n_divs = len(wsd.cross_div_electives[best_is_cross_div])
+                    n_placed = bsize * n_divs
+                    state.placed_ok += n_placed
+                    placed_total += n_placed
+                elif bsize >= 2:
+                    _place_block(state, div_id, la_idx, relaxed_gi, bsize, div_data, la, wsd)
+                    state.placed_ok += bsize
+                    placed_total += bsize
+                else:
+                    _place_assignment(state, div_id, la_idx, relaxed_gi, div_data, la, wsd)
+                    state.placed_ok += 1
+                    placed_total += 1
+                iter_path = 'relaxed'
+                path_counts['relaxed'] += 1
+            else:
+                # Relaxation failed too — go to fallback
+                analysis = _build_failure_analysis(la, la_idx, div_id, div_data, state, wsd, div_labels)
+                failure_analyses.append(analysis)
+                logger.warning("Fallback #%d: %s in %s — %s (valid_count=%d, block=%d)",
+                               state.fallback + 1, la.display_name, div_labels.get(div_id, div_id[:8]),
+                               analysis.get("reason", ""),
+                               int(best_valid_count) if best_valid_count != float('inf') else 0,
+                               bsize)
 
-            if best_is_cross_div:
-                placed = False
-                first_div = wsd.cross_div_electives[best_is_cross_div][0]
-                first_data = wsd.divisions[first_div]
-                first_la = next((l for l in first_data.logical_assignments if l.elective_group_id == best_is_cross_div), la)
-                for fgi in range(div_data.total_periods):
-                    all_empty = all(
-                        state.chromosomes[d][fgi] == -1
-                        for d in wsd.cross_div_electives[best_is_cross_div]
-                    )
-                    if not all_empty:
-                        continue
-                    # Check teacher availability before fallback placement
-                    fslot = first_data.period_slots[fgi] if fgi < len(first_data.period_slots) else None
-                    if fslot:
-                        fpicked = first_la.pick_available_teachers(
-                            fslot.day_of_week, fslot.start_time,
-                            state.teacher_busy, wsd.teacher_unavailable_times,
-                            wsd.teacher_partitions, first_div,
-                            end_time=fslot.end_time,
-                        )
-                        if fpicked is None:
-                            continue  # teacher busy — skip this slot
-                    _place_cross_div(state, best_is_cross_div, fgi, wsd)
-                    state.fallback += len(wsd.cross_div_electives[best_is_cross_div])
-                    placed_total += len(wsd.cross_div_electives[best_is_cross_div])
-                    placed = True
-                    break
-                if not placed:
-                    # Last resort: place without teacher check (will create conflict)
+                if best_is_cross_div:
+                    placed = False
+                    first_div = wsd.cross_div_electives[best_is_cross_div][0]
+                    first_data = wsd.divisions[first_div]
+                    first_la = next((l for l in first_data.logical_assignments if l.elective_group_id == best_is_cross_div), la)
                     for fgi in range(div_data.total_periods):
                         all_empty = all(
                             state.chromosomes[d][fgi] == -1
                             for d in wsd.cross_div_electives[best_is_cross_div]
                         )
-                        if all_empty:
-                            _place_cross_div(state, best_is_cross_div, fgi, wsd)
-                            state.fallback += len(wsd.cross_div_electives[best_is_cross_div])
-                            placed_total += len(wsd.cross_div_electives[best_is_cross_div])
-                            placed = True
-                            logger.warning("Force-placed %s cross-div at gi=%d (teacher conflict expected)", la.display_name, fgi)
-                            break
-                if not placed:
-                    logger.warning("Cannot place %s cross-div — no common empty slot", la.display_name)
-                    placed_total += len(wsd.cross_div_electives[best_is_cross_div])
-            else:
-                # Single-mode fallback — prefer slots where teacher is free
-                placed = False
-                for fgi in range(div_data.total_periods):
-                    if state.chromosomes[div_id][fgi] == -1:
-                        fslot = div_data.period_slots[fgi] if fgi < len(div_data.period_slots) else None
+                        if not all_empty:
+                            continue
+                        fslot = first_data.period_slots[fgi] if fgi < len(first_data.period_slots) else None
                         if fslot:
-                            fpicked = la.pick_available_teachers(
+                            fpicked = first_la.pick_available_teachers(
                                 fslot.day_of_week, fslot.start_time,
                                 state.teacher_busy, wsd.teacher_unavailable_times,
-                                wsd.teacher_partitions, div_id,
+                                wsd.teacher_partitions, first_div,
                                 end_time=fslot.end_time,
                             )
-                            if fpicked is not None:
-                                _place_assignment(state, div_id, la_idx, fgi, div_data, la, wsd)
-                                state.fallback += 1
-                                placed = True
-                                break
-                if not placed:
-                    # Last resort: place in any empty slot (will create teacher conflict)
+                            if fpicked is None:
+                                continue
+                        _place_cross_div(state, best_is_cross_div, fgi, wsd)
+                        state.fallback += len(wsd.cross_div_electives[best_is_cross_div])
+                        placed_total += len(wsd.cross_div_electives[best_is_cross_div])
+                        placed = True
+                        break
+                    if not placed:
+                        # Do NOT force-place cross-div with teacher conflicts.
+                        logger.warning("Cannot place %s cross-div -- no teacher-safe slot (skipped to avoid double-booking)", la.display_name)
+                        placed_total += len(wsd.cross_div_electives[best_is_cross_div])
+                else:
+                    # Single-mode fallback — prefer slots where teacher is free
+                    placed = False
                     for fgi in range(div_data.total_periods):
                         if state.chromosomes[div_id][fgi] == -1:
-                            _place_assignment(state, div_id, la_idx, fgi, div_data, la, wsd)
-                            state.fallback += 1
-                            placed = True
-                            logger.warning("Force-placed %s in %s at gi=%d (teacher conflict expected)",
-                                           la.display_name, div_id[:8], fgi)
-                            break
-                if not placed:
-                    logger.warning("Cannot place %s in %s — all slots full", la.display_name, div_id[:8])
-                placed_total += 1
+                            fslot = div_data.period_slots[fgi] if fgi < len(div_data.period_slots) else None
+                            if fslot:
+                                fpicked = la.pick_available_teachers(
+                                    fslot.day_of_week, fslot.start_time,
+                                    state.teacher_busy, wsd.teacher_unavailable_times,
+                                    wsd.teacher_partitions, div_id,
+                                    end_time=fslot.end_time,
+                                )
+                                if fpicked is not None:
+                                    _place_assignment(state, div_id, la_idx, fgi, div_data, la, wsd)
+                                    state.fallback += 1
+                                    placed = True
+                                    break
+                    if not placed:
+                        # Do NOT force-place with teacher conflicts — this creates
+                        # double-bookings visible in the teacher timetable view.
+                        # Leave the slot empty; the failure analysis will report it.
+                        logger.warning("Cannot place %s in %s -- no teacher-safe slot available (skipped to avoid double-booking)",
+                                       la.display_name, div_labels.get(div_id, div_id[:8]))
+                        iter_path = 'unplaceable'
+                        path_counts['unplaceable'] += 1
+                    else:
+                        iter_path = 'fallback'
+                        path_counts['fallback'] += 1
+                    placed_total += 1  # count even unplaceable to avoid infinite loop
+
+        # Track path for senior divisions
+        per_la_paths[(div_id, la_idx)].append(iter_path)
 
         remaining[(div_id, la_idx, bsize)] -= 1
         if remaining[(div_id, la_idx, bsize)] <= 0:
@@ -627,14 +790,61 @@ def schedule_all(
                 desc, int(best_valid_count) if best_valid_count != float('inf') else 0,
             )
 
-    logger.info("Demand-driven placement complete: %d OK, %d backtracked, %d fallback, %d total",
-                state.placed_ok, state.backtracked, state.fallback, total_items)
+    if remaining:
+        logger.warning("REMAINING after loop exit: %s",
+                       {f"{div_labels.get(d,d[:8])}:{wsd.divisions[d].logical_assignments[l].display_name}:blk{b}": c
+                        for (d, l, b), c in remaining.items()})
+    # Verify per-division fill
+    for div_id2, div_data2 in wsd.divisions.items():
+        chrom = state.chromosomes[div_id2]
+        placed_count = sum(1 for g in range(div_data2.total_periods) if chrom[g] != -1)
+        expected = div_data2.total_periods
+        la_counts = defaultdict(int)
+        for g in range(div_data2.total_periods):
+            idx = int(chrom[g])
+            if idx >= 0:
+                la_counts[idx] += 1
+        for la_idx2, la2 in enumerate(div_data2.logical_assignments):
+            actual = la_counts.get(la_idx2, 0)
+            if actual != la2.weightage:
+                pc = state.placement_counts.get((div_id2, la_idx2), 0)
+                paths = per_la_paths.get((div_id2, la_idx2), [])
+                logger.warning("MISMATCH %s la[%d] %s: chrom=%d, pc=%d, w=%d, paths=%s",
+                               div_labels.get(div_id2, div_id2[:8]), la_idx2,
+                               la2.display_name, actual, pc, la2.weightage, paths)
+    logger.info("Demand-driven placement complete: %d OK, %d backtracked, %d fallback, placed_total=%d, total_items=%d, paths=%s",
+                state.placed_ok, state.backtracked, state.fallback, placed_total, total_items, dict(path_counts))
+
+    # ── Post-placement diagnostic: check for unfilled divisions ──────────
+    for div_id, div_data in wsd.divisions.items():
+        chromosome = state.chromosomes[div_id]
+        filled = sum(1 for g in range(div_data.total_periods) if chromosome[g] != -1)
+        if filled < div_data.total_periods:
+            empty_gis = [g for g in range(div_data.total_periods) if chromosome[g] == -1]
+            placed_la = defaultdict(int)
+            for g in range(div_data.total_periods):
+                idx = int(chromosome[g])
+                if idx >= 0:
+                    placed_la[idx] += 1
+            # Find under-placed assignments
+            under_placed = []
+            for la_idx2, la2 in enumerate(div_data.logical_assignments):
+                actual = placed_la.get(la_idx2, 0)
+                if actual < la2.weightage:
+                    under_placed.append(f"{la2.display_name} placed={actual}/{la2.weightage}")
+            div_label = div_labels.get(div_id, div_id[:8])
+            logger.warning("UNFILLED %s: %d/%d slots filled. Empty gene indices: %s. Under-placed: %s",
+                           div_label, filled, div_data.total_periods,
+                           empty_gis, "; ".join(under_placed) if under_placed else "none")
+
+    # ── Step 4b: Post-placement repair — fill empty slots via swaps ──────
+    _post_placement_repair(state, wsd, div_labels)
 
     # ── Step 5: Local optimization ────────────────────────────────────────
     logger.info("Step 5: Local optimization for %d divisions", len(wsd.divisions))
     for div_id, div_data in wsd.divisions.items():
         chromosome = state.chromosomes[div_id]
-        _local_optimize(chromosome, div_data, state.teacher_busy, wsd)
+        _local_optimize(chromosome, div_data, state.teacher_busy, wsd, div_id)
 
     return state.chromosomes, failure_analyses
 
@@ -797,6 +1007,11 @@ def _place_cross_div(
         div_data = wsd.divisions[div_id]
         for la_idx, la in enumerate(div_data.logical_assignments):
             if la.elective_group_id == eg_id:
+                existing = int(state.chromosomes[div_id][gi])
+                if existing >= 0 and existing != la_idx:
+                    existing_name = div_data.logical_assignments[existing].display_name if existing < len(div_data.logical_assignments) else f"la[{existing}]"
+                    logger.warning("CROSS-DIV OVERWRITE in %s gi=%d: %s (la[%d]) overwritten by %s (la[%d]) eg=%s",
+                                   div_id[:8], gi, existing_name, existing, la.display_name, la_idx, eg_id[:8])
                 state.chromosomes[div_id][gi] = la_idx
                 state.placement_counts[(div_id, la_idx)] += 1
                 break
@@ -820,12 +1035,22 @@ def _place_cross_div(
                 slot.day_of_week, slot.start_time,
                 state.teacher_busy, wsd.teacher_unavailable_times,
                 wsd.teacher_partitions, first_div,
+                end_time=slot.end_time,
             )
             if picked is None:
                 picked = first_la.teacher_ids
+            picked_set = set(picked)
             for tid in picked:
                 state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
                 added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
+            # Mark ALL split-mode elective teachers busy — they will be
+            # distributed to specific slots by the output writer, so no
+            # regular assignment should occupy any elective slot for them.
+            if first_la.is_elective:
+                for tid in first_la.teacher_ids:
+                    if tid not in picked_set:
+                        state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
+                        added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
 
     state.history.append((first_div, first_la_idx, gi, added_slots))
 
@@ -1144,9 +1369,16 @@ def _place_block(
             )
             if picked is None:
                 picked = la.teacher_ids
+            picked_set = set(picked)
             for tid in picked:
                 state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
                 all_added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
+            # Mark ALL split-mode elective teachers busy
+            if la.is_elective:
+                for tid in la.teacher_ids:
+                    if tid not in picked_set:
+                        state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
+                        all_added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
 
     # Single history entry for the entire block (atomic backtracking)
     state.history.append((div_id, la_idx, gi_start, all_added_slots))
@@ -1168,7 +1400,13 @@ def _place_block_cross_div(
         for la_idx, la in enumerate(div_data.logical_assignments):
             if la.elective_group_id == eg_id:
                 for offset in range(block_size):
-                    state.chromosomes[div_id][gi_start + offset] = la_idx
+                    gidx = gi_start + offset
+                    existing = int(state.chromosomes[div_id][gidx])
+                    if existing >= 0 and existing != la_idx:
+                        existing_name = div_data.logical_assignments[existing].display_name if existing < len(div_data.logical_assignments) else f"la[{existing}]"
+                        logger.warning("CROSS-DIV-BLK OVERWRITE in %s gi=%d: %s (la[%d]) overwritten by %s (la[%d]) eg=%s",
+                                       div_id[:8], gidx, existing_name, existing, la.display_name, la_idx, eg_id[:8])
+                    state.chromosomes[div_id][gidx] = la_idx
                     state.placement_counts[(div_id, la_idx)] += 1
                 break
 
@@ -1197,9 +1435,16 @@ def _place_block_cross_div(
                 )
                 if picked is None:
                     picked = first_la.teacher_ids
+                picked_set = set(picked)
                 for tid in picked:
                     state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
                     all_added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
+                # Mark ALL split-mode elective teachers busy
+                if first_la.is_elective:
+                    for tid in first_la.teacher_ids:
+                        if tid not in picked_set:
+                            state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
+                            all_added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
 
     state.history.append((first_div, first_la_idx, gi_start, all_added_slots))
 
@@ -1214,11 +1459,18 @@ def _place_assignment(
     wsd: WholeSchoolData = None,
 ) -> None:
     """Place an assignment at a gene index and update state."""
+    existing = int(state.chromosomes[div_id][gi])
+    if existing >= 0 and existing != la_idx:
+        div_data_for_log = wsd.divisions[div_id] if wsd else None
+        existing_name = div_data_for_log.logical_assignments[existing].display_name if div_data_for_log and existing < len(div_data_for_log.logical_assignments) else f"la[{existing}]"
+        logger.warning("OVERWRITE in %s gi=%d: %s (la[%d]) overwritten by %s (la[%d])",
+                       div_id[:8], gi, existing_name, existing, la.display_name, la_idx)
     state.chromosomes[div_id][gi] = la_idx
     state.placement_counts[(div_id, la_idx)] += 1
 
-    # Mark teachers as busy — use pick_available_teachers to respect
-    # parallel_sections for elective groups (only mark the minimum needed).
+    # Mark teachers as busy — for electives, mark ALL teachers (including
+    # split-mode teachers not picked) since the output writer will distribute
+    # them to specific slots and no regular assignment should overlap.
     slot = div_data.period_slots[gi] if gi < len(div_data.period_slots) else None
     added_slots: list[tuple[str, int, str, str]] = []
     if slot:
@@ -1230,9 +1482,16 @@ def _place_assignment(
         )
         if picked is None:
             picked = la.teacher_ids
+        picked_set = set(picked)
         for tid in picked:
             state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
             added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
+        # Mark ALL split-mode elective teachers busy
+        if la.is_elective:
+            for tid in la.teacher_ids:
+                if tid not in picked_set:
+                    state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
+                    added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
 
     state.history.append((div_id, la_idx, gi, added_slots))
 
@@ -1882,21 +2141,256 @@ def _try_backtrack(
     return False
 
 
+def _post_placement_repair(
+    state: PlacementState,
+    wsd: WholeSchoolData,
+    div_labels: dict[str, str],
+) -> None:
+    """Post-placement repair: fill empty slots by swapping assignments within
+    the same division so that unplaced assignments can fit.
+
+    Two passes:
+      Pass 1: respect all HARD constraints
+      Pass 2: progressively relax HARD constraints (minimal breakage)
+
+    For each unplaced assignment-period, try to find a filled slot in the same
+    division where:
+      - The unplaced assignment's teachers are free at the filled slot's time
+      - The filled slot's assignment can move to the empty slot without creating
+        teacher conflicts in OTHER divisions
+    If a direct swap works, do it. Otherwise try a 2-hop chain.
+    """
+    repairs = 0
+    repairs_relaxed = 0
+
+    for div_id, div_data in wsd.divisions.items():
+        chromosome = state.chromosomes[div_id]
+        ppd = div_data.periods_per_day
+        logicals = div_data.logical_assignments
+
+        # Find empty slots and under-placed assignments
+        empty_gis = [g for g in range(div_data.total_periods) if chromosome[g] == -1]
+        if not empty_gis:
+            continue
+
+        placed_counts: dict[int, int] = defaultdict(int)
+        for g in range(div_data.total_periods):
+            idx = int(chromosome[g])
+            if idx >= 0:
+                placed_counts[idx] += 1
+
+        unplaced: list[tuple[int, int]] = []  # (la_idx, remaining_count)
+        for la_idx, la in enumerate(logicals):
+            remaining = la.weightage - placed_counts.get(la_idx, 0)
+            if remaining > 0 and not la.is_elective:
+                unplaced.append((la_idx, remaining))
+
+        if not unplaced:
+            continue
+
+        div_label = div_labels.get(div_id, div_id[:8])
+
+        for la_idx, remaining in unplaced:
+            la = logicals[la_idx]
+
+            for _ in range(remaining):
+                placed = _try_repair_swap(
+                    state, div_id, div_data, la, la_idx, chromosome,
+                    wsd, div_label, respect_hard=True,
+                )
+                if placed:
+                    repairs += 1
+                else:
+                    # Pass 2: relax hard constraints
+                    placed = _try_repair_swap(
+                        state, div_id, div_data, la, la_idx, chromosome,
+                        wsd, div_label, respect_hard=False,
+                    )
+                    if placed:
+                        repairs_relaxed += 1
+
+    if repairs or repairs_relaxed:
+        logger.info("Post-placement repair: %d fixed (strict), %d fixed (relaxed)",
+                    repairs, repairs_relaxed)
+
+
+def _try_repair_swap(
+    state: PlacementState,
+    div_id: str,
+    div_data: SchoolData,
+    la: LogicalAssignment,
+    la_idx: int,
+    chromosome: np.ndarray,
+    wsd: WholeSchoolData,
+    div_label: str,
+    respect_hard: bool,
+) -> bool:
+    """Try to place one period of `la` by swapping an existing assignment
+    in the same division to an empty slot.
+
+    Returns True if a swap was made.
+    """
+    ppd = div_data.periods_per_day
+    logicals = div_data.logical_assignments
+    empty_gis = [g for g in range(div_data.total_periods) if chromosome[g] == -1]
+    if not empty_gis:
+        return False
+
+    # Check hard constraints for the unplaced assignment at a given gi
+    def _is_valid_for_la(gi: int) -> bool:
+        slot = div_data.period_slots[gi] if gi < len(div_data.period_slots) else None
+        if not slot:
+            return False
+
+        prefs = la.scheduling_preferences if la.scheduling_preferences and isinstance(la.scheduling_preferences, dict) else None
+        is_hard = prefs and prefs.get("constraintType") == "HARD"
+
+        if respect_hard and is_hard and prefs:
+            # Day constraints
+            preferred_days = set(prefs.get("preferredDays", []))
+            excluded_days = set(prefs.get("excludedDays", []))
+            if slot.day_of_week in excluded_days:
+                return False
+            if preferred_days and slot.day_of_week not in preferred_days:
+                return False
+
+            # Period range
+            pref_range = prefs.get("preferredPeriodRange")
+            period_num = slot.slot_number
+            if pref_range and period_num is not None:
+                if period_num < pref_range.get("min", 1) or period_num > pref_range.get("max", 99):
+                    return False
+
+            # maxPeriodsPerDay
+            max_pd = prefs.get("maxPeriodsPerDay")
+            if max_pd is not None:
+                day_idx = gi // ppd
+                day_count = sum(1 for g2 in range(day_idx * ppd, min((day_idx + 1) * ppd, div_data.total_periods))
+                                if int(chromosome[g2]) == la_idx)
+                if day_count >= max_pd:
+                    return False
+
+        # Teacher availability
+        picked = la.pick_available_teachers(
+            slot.day_of_week, slot.start_time,
+            state.teacher_busy, wsd.teacher_unavailable_times,
+            wsd.teacher_partitions, div_id,
+            end_time=slot.end_time,
+        )
+        return picked is not None
+
+    # Try direct placement into empty slots first (no swap needed)
+    for gi_empty in empty_gis:
+        if _is_valid_for_la(gi_empty):
+            _place_assignment(state, div_id, la_idx, gi_empty, div_data, la, wsd)
+            logger.info("Repair: placed %s in %s at gi=%d (direct)", la.display_name, div_label, gi_empty)
+            return True
+
+    # Try single swap: move existing assignment to empty, place unplaced in its old slot
+    for gi_empty in empty_gis:
+        empty_slot = div_data.period_slots[gi_empty] if gi_empty < len(div_data.period_slots) else None
+        if not empty_slot:
+            continue
+
+        for gi_filled in range(div_data.total_periods):
+            if chromosome[gi_filled] == -1:
+                continue
+            existing_idx = int(chromosome[gi_filled])
+            existing_la = logicals[existing_idx]
+
+            # Don't move elective assignments
+            if existing_la.is_elective:
+                continue
+
+            filled_slot = div_data.period_slots[gi_filled] if gi_filled < len(div_data.period_slots) else None
+            if not filled_slot:
+                continue
+
+            # Check 1: Can the unplaced assignment go at gi_filled?
+            if not _is_valid_for_la(gi_filled):
+                continue
+
+            # Check 2: Can existing assignment move to gi_empty?
+            # Remove existing from gi_filled temporarily
+            old_teacher_slots = []
+            for tid in existing_la.teacher_ids:
+                state.teacher_busy.remove(tid, filled_slot.day_of_week, filled_slot.start_time, filled_slot.end_time)
+                old_teacher_slots.append((tid, filled_slot.day_of_week, filled_slot.start_time, filled_slot.end_time))
+            chromosome[gi_filled] = -1
+            state.placement_counts[(div_id, existing_idx)] -= 1
+
+            # Check existing's teachers at gi_empty's time (other divisions)
+            existing_can_move = True
+            for tid in existing_la.teacher_ids:
+                if state.teacher_busy.is_busy(tid, empty_slot.day_of_week, empty_slot.start_time, empty_slot.end_time):
+                    existing_can_move = False
+                    break
+                if (tid, empty_slot.day_of_week, empty_slot.start_time) in wsd.teacher_unavailable_times:
+                    existing_can_move = False
+                    break
+
+            # Also re-verify unplaced at gi_filled with existing removed
+            unplaced_can_go = existing_can_move and _is_valid_for_la(gi_filled)
+
+            if existing_can_move and unplaced_can_go:
+                # Execute the swap: place existing at gi_empty, unplaced at gi_filled
+                # existing at gi_empty
+                chromosome[gi_empty] = existing_idx
+                state.placement_counts[(div_id, existing_idx)] += 1
+                for tid in existing_la.teacher_ids:
+                    state.teacher_busy.add(tid, empty_slot.day_of_week, empty_slot.start_time, empty_slot.end_time)
+
+                # unplaced at gi_filled
+                _place_assignment(state, div_id, la_idx, gi_filled, div_data, la, wsd)
+
+                logger.info("Repair: swapped %s(gi=%d) -> gi=%d, placed %s at gi=%d in %s%s",
+                            existing_la.display_name, gi_filled, gi_empty,
+                            la.display_name, gi_filled, div_label,
+                            "" if respect_hard else " (relaxed)")
+                return True
+            else:
+                # Revert: put existing back at gi_filled
+                chromosome[gi_filled] = existing_idx
+                state.placement_counts[(div_id, existing_idx)] += 1
+                for tid, dow, st, et in old_teacher_slots:
+                    state.teacher_busy.add(tid, dow, st, et)
+
+    return False
+
+
 def _local_optimize(
     chromosome: np.ndarray,
     div_data: SchoolData,
     teacher_busy: TeacherBusyTracker,
     wsd: WholeSchoolData,
+    div_id: str = '',
 ) -> None:
     """Step 5: Deterministic local swaps to improve soft constraints.
 
     For each day, try swapping pairs of periods. Accept if:
     1. No new teacher conflicts are created
     2. Soft score improves (adjacency, spread, period preference)
+
+    IMPORTANT: After each accepted swap, teacher_busy is updated to reflect
+    the new teacher positions. This prevents stale tracker state from allowing
+    teacher double-bookings when later divisions are optimized.
+
+    Cross-division elective slots are NEVER swapped — they must stay
+    synchronized across all divisions in the group.
     """
     ppd = div_data.periods_per_day
     logicals = div_data.logical_assignments
     improved = 0
+
+    # Build set of gene indices that hold cross-div elective assignments.
+    # These must not be moved — they are synchronized across divisions.
+    cross_div_gis: set[int] = set()
+    for gi in range(div_data.total_periods):
+        la_idx = int(chromosome[gi])
+        if la_idx >= 0:
+            la = logicals[la_idx]
+            if la.elective_group_id and wsd.cross_div_la_map.get((div_id, la_idx)):
+                cross_div_gis.add(gi)
 
     for day_idx in range(div_data.num_days):
         start = day_idx * ppd
@@ -1904,56 +2398,88 @@ def _local_optimize(
             for j in range(i + 1, ppd):
                 gi_a = start + i
                 gi_b = start + j
+
+                # Never swap cross-div elective slots
+                if gi_a in cross_div_gis or gi_b in cross_div_gis:
+                    continue
+
                 a_idx = int(chromosome[gi_a])
                 b_idx = int(chromosome[gi_b])
 
                 if a_idx == b_idx:
                     continue  # same assignment or both empty
 
-                # Check if swap creates teacher conflicts
                 slot_i = div_data.period_slots[gi_a] if gi_a < len(div_data.period_slots) else None
                 slot_j = div_data.period_slots[gi_b] if gi_b < len(div_data.period_slots) else None
                 if not slot_i or not slot_j:
                     continue
 
-                conflict = False
-                # If a_idx moves to slot_j, check a's teachers at j's time
-                if a_idx >= 0:
-                    la_a = logicals[a_idx]
-                    for tid in la_a.teacher_ids:
-                        if teacher_busy.is_busy(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time):
-                            # Check if the only busy entry is from this same swap partner
-                            if not teacher_busy.is_busy(tid, slot_i.day_of_week, slot_i.start_time, slot_i.end_time):
-                                conflict = True
-                                break
-                            # The teacher is busy at slot_j but also at slot_i (this assignment)
-                            # — swapping would just move the busy entry, which is fine IF
-                            # slot_j's time doesn't overlap with a DIFFERENT busy entry.
-                            # For simplicity in within-day swaps (same day, same structure),
-                            # the start times are always different, so overlap with self is
-                            # not possible. Skip the conflict.
-                if conflict:
-                    continue
+                # Collect teacher IDs for each side of the swap
+                tids_a = logicals[a_idx].teacher_ids if a_idx >= 0 else []
+                tids_b = logicals[b_idx].teacher_ids if b_idx >= 0 else []
 
-                if b_idx >= 0:
-                    la_b = logicals[b_idx]
-                    for tid in la_b.teacher_ids:
+                # To check conflicts accurately, temporarily remove BOTH
+                # sets of teacher entries, then check if the swapped
+                # positions would create new conflicts with OTHER divisions.
+                # This avoids false positives from the swap partners' own entries.
+                for tid in tids_a:
+                    teacher_busy.remove(tid, slot_i.day_of_week, slot_i.start_time, slot_i.end_time)
+                for tid in tids_b:
+                    teacher_busy.remove(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time)
+
+                conflict = False
+                # Check: assignment A at slot_j (new position)
+                for tid in tids_a:
+                    if teacher_busy.is_busy(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time):
+                        conflict = True
+                        break
+                # Check: assignment B at slot_i (new position)
+                if not conflict:
+                    # Also need to temporarily add A at slot_j before checking B,
+                    # in case A and B share a teacher
+                    for tid in tids_a:
+                        teacher_busy.add(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time)
+                    for tid in tids_b:
                         if teacher_busy.is_busy(tid, slot_i.day_of_week, slot_i.start_time, slot_i.end_time):
-                            if not teacher_busy.is_busy(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time):
-                                conflict = True
-                                break
+                            conflict = True
+                            break
+                    # Remove A from slot_j (we'll decide below whether to keep)
+                    for tid in tids_a:
+                        teacher_busy.remove(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time)
+
                 if conflict:
+                    # Revert: put teachers back in original positions
+                    for tid in tids_a:
+                        teacher_busy.add(tid, slot_i.day_of_week, slot_i.start_time, slot_i.end_time)
+                    for tid in tids_b:
+                        teacher_busy.add(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time)
                     continue
 
                 # Compute soft score before and after
+                # Put teachers back in original positions for score_before
+                for tid in tids_a:
+                    teacher_busy.add(tid, slot_i.day_of_week, slot_i.start_time, slot_i.end_time)
+                for tid in tids_b:
+                    teacher_busy.add(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time)
+
                 score_before = _soft_score_pair(chromosome, div_data, gi_a, gi_b, wsd)
                 chromosome[gi_a], chromosome[gi_b] = chromosome[gi_b], chromosome[gi_a]
                 score_after = _soft_score_pair(chromosome, div_data, gi_a, gi_b, wsd)
 
                 if score_after < score_before:
-                    improved += 1  # keep the swap
+                    # Keep the swap — update teacher_busy to reflect new positions
+                    for tid in tids_a:
+                        teacher_busy.remove(tid, slot_i.day_of_week, slot_i.start_time, slot_i.end_time)
+                    for tid in tids_b:
+                        teacher_busy.remove(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time)
+                    for tid in tids_a:
+                        teacher_busy.add(tid, slot_j.day_of_week, slot_j.start_time, slot_j.end_time)
+                    for tid in tids_b:
+                        teacher_busy.add(tid, slot_i.day_of_week, slot_i.start_time, slot_i.end_time)
+                    improved += 1
                 else:
-                    chromosome[gi_a], chromosome[gi_b] = chromosome[gi_b], chromosome[gi_a]  # revert
+                    # Revert the swap — teacher_busy stays as-is (original positions)
+                    chromosome[gi_a], chromosome[gi_b] = chromosome[gi_b], chromosome[gi_a]
 
     if improved > 0:
         logger.debug("Local optimization: %d improving swaps", improved)

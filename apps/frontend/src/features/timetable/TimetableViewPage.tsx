@@ -37,6 +37,7 @@ import {
 import {
   useGetDivisionTimetableQuery,
   useOverrideSlotMutation,
+  useLazyGetValidSwapTargetsQuery,
   useSwapSlotsMutation,
   useCreateEmptySlotMutation,
   useAutoResolveConflictMutation,
@@ -145,6 +146,8 @@ export function Component() {
   const { data: periodStructure } = useGetPeriodStructureQuery(periodStructureId!, { skip: !periodStructureId });
 
   const [activeDrag, setActiveDrag] = useState<{ slotId: string; assignment: TimetableSlotAssignment } | null>(null);
+  const [fetchValidSwaps] = useLazyGetValidSwapTargetsQuery();
+  const [swapTargets, setSwapTargets] = useState<{ valid: Set<string>; invalid: Set<string> } | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -290,11 +293,19 @@ export function Component() {
       <DndContext sensors={sensors} onDragStart={(e) => {
         const allP = grid.days.flatMap((d) => d.periods);
         const p = allP.find((pp) => pp.timetableSlotId === e.active.id);
-        // Don't initiate drag for elective cells — backend rejects override
         if (p?.isElective) return;
         const a = p?.assignments[0];
-        if (a) setActiveDrag({ slotId: p!.timetableSlotId, assignment: a });
-      }} onDragEnd={handleDragEnd} onDragCancel={() => setActiveDrag(null)}>
+        if (a) {
+          setActiveDrag({ slotId: p!.timetableSlotId, assignment: a });
+          // Fetch valid swap targets in background
+          fetchValidSwaps(p!.timetableSlotId).unwrap().then((result) => {
+            setSwapTargets({
+              valid: new Set(result.validSlotIds),
+              invalid: new Set(result.invalidSlotIds),
+            });
+          }).catch(() => setSwapTargets(null));
+        }
+      }} onDragEnd={(e) => { setSwapTargets(null); handleDragEnd(e); }} onDragCancel={() => { setActiveDrag(null); setSwapTargets(null); }}>
         <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-x-auto shadow-sm">
           <table className="w-full text-sm border-collapse">
             <thead>
@@ -419,23 +430,35 @@ export function Component() {
                             <Loader2 className="size-5 animate-spin text-amber-500" />
                           </div>
                         )}
-                        {isDesktop && firstAssignment ? (
-                          <DraggableCell slotId={period.timetableSlotId}>
-                            <DroppableCell slotId={period.timetableSlotId}>
+                        {(() => {
+                          const sid = period.timetableSlotId;
+                          const isSource = activeDrag?.slotId === sid;
+                          const validity = !isSource && swapTargets
+                            ? swapTargets.valid.has(sid) ? 'valid' as const
+                              : swapTargets.invalid.has(sid) ? 'invalid' as const
+                              : undefined
+                            : undefined;
+
+                          if (isDesktop && firstAssignment) return (
+                            <DraggableCell slotId={sid}>
+                              <DroppableCell slotId={sid} swapValidity={validity}>
+                                <CellContent assignment={firstAssignment} />
+                              </DroppableCell>
+                            </DraggableCell>
+                          );
+                          if (firstAssignment) return (
+                            <DroppableCell slotId={sid} swapValidity={validity}>
                               <CellContent assignment={firstAssignment} />
                             </DroppableCell>
-                          </DraggableCell>
-                        ) : firstAssignment ? (
-                          <DroppableCell slotId={period.timetableSlotId}>
-                            <CellContent assignment={firstAssignment} />
-                          </DroppableCell>
-                        ) : (
-                          <DroppableCell slotId={period.timetableSlotId}>
-                            <div className="h-10 flex items-center justify-center">
-                              <span className="text-xs text-muted-foreground/40">—</span>
-                            </div>
-                          </DroppableCell>
-                        )}
+                          );
+                          return (
+                            <DroppableCell slotId={sid} swapValidity={validity}>
+                              <div className="h-10 flex items-center justify-center">
+                                <span className="text-xs text-muted-foreground/40">—</span>
+                              </div>
+                            </DroppableCell>
+                          );
+                        })()}
                       </td>
                     );
                   })}

@@ -34,13 +34,15 @@ function parseTimeToMinutes(time: string): number {
 interface Props {
   teacherId: string;
   teacherName?: string;
+  /** Assigned periods from the teacher load API (assignment-based, not timetable-based). */
+  assignedPeriods?: number;
 }
 
 /**
  * Renders a single teacher's weekly timetable as a grid.
  * Used by the detail subroute and embedded by other surfaces if needed.
  */
-export function TeacherTimetableGrid({ teacherId, teacherName }: Props) {
+export function TeacherTimetableGrid({ teacherId, teacherName, assignedPeriods }: Props) {
   const { data: grid, isLoading } = useGetTeacherTimetableQuery(teacherId, { skip: !teacherId });
 
   const headerSlots = useMemo(() => {
@@ -71,10 +73,13 @@ export function TeacherTimetableGrid({ teacherId, teacherName }: Props) {
     [grid],
   );
 
-  const totalPeriods = sortedDays.reduce(
+  // Prefer the assignment-based count from the load API (consistent with list view).
+  // Fall back to counting occupied grid cells when load data isn't available.
+  const gridPeriods = sortedDays.reduce(
     (sum, day) => sum + day.periods.filter((p) => p.assignments.length > 0).length,
     0,
   );
+  const totalPeriods = assignedPeriods ?? gridPeriods;
 
   if (isLoading) return <Skeleton className="h-64 rounded-xl" />;
 
@@ -152,18 +157,23 @@ export function TeacherTimetableGrid({ teacherId, teacherName }: Props) {
                       </td>
                     );
                   }
-                  // For an elective slot in the teacher view, show the elective
-                  // group name above the subject so it's clear at a glance.
                   const electiveName = period?.isElective ? assignment.electiveGroup?.name : null;
-                  const colorClass = getSubjectColor(electiveName ?? assignment.subject.name);
-                  // For cross-division electives, show all division labels
+                  const isAssistant = assignment.role === 'assistant';
+                  const colorClass = isAssistant
+                    ? 'bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200'
+                    : getSubjectColor(electiveName ?? assignment.subject.name);
                   const allDivisions = period?.assignments.map(a => a.teacher?.name).filter(Boolean);
                   const divisionLabel = allDivisions && allDivisions.length > 1
                     ? allDivisions.join(', ')
                     : assignment.teacher?.name ?? '(Unassigned)';
                   return (
                     <td key={slot.id} className="px-1 py-1 border-r border-border/40">
-                      <div className={`rounded-lg px-1.5 py-1 text-center ${colorClass}`}>
+                      <div className={`rounded-lg px-1.5 py-1 text-center relative ${colorClass}`}>
+                        {isAssistant && (
+                          <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[7px] font-bold px-1 rounded-full leading-tight">
+                            Asst
+                          </span>
+                        )}
                         {electiveName && (
                           <div className="text-[8px] uppercase tracking-wider opacity-80 truncate">{electiveName}</div>
                         )}

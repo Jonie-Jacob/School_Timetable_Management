@@ -55,6 +55,7 @@ export function Component() {
         id: t.id,
         name: t.name,
         assignedPeriods: load?.assignedPeriods ?? 0,
+        timetablePeriods: load?.timetablePeriods ?? null,
         maxPeriodsPerWeek: t.maxPeriodsPerWeek ?? load?.maxPeriodsPerWeek ?? null,
       };
     });
@@ -186,7 +187,8 @@ export function Component() {
             <thead>
               <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white/90">
                 <th className="text-left text-[11px] uppercase tracking-wider font-semibold px-4 py-3">Teacher</th>
-                <th className="text-left text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-44">Periods / Week</th>
+                <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-36">Assigned</th>
+                <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-36">Timetable</th>
                 <th className="text-right text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-72">Actions</th>
               </tr>
             </thead>
@@ -208,10 +210,22 @@ export function Component() {
                         {row.name}
                       </button>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-center">
                       <Badge variant={over ? 'destructive' : 'outline'} className="text-[10px]">
                         {row.assignedPeriods}{max != null ? ` / ${max}` : ''}
                       </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {row.timetablePeriods != null ? (
+                        <Badge
+                          variant={row.timetablePeriods !== row.assignedPeriods ? 'destructive' : 'outline'}
+                          className="text-[10px]"
+                        >
+                          {row.timetablePeriods}
+                        </Badge>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1.5">

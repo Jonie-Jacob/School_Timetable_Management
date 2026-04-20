@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/shared';
 import { ExportButton } from '@/components/shared/ExportButton';
-import { useGetTeachersQuery } from '@/features/teachers/teacherApi';
+import { useGetTeachersQuery, useGetTeachersLoadQuery } from '@/features/teachers/teacherApi';
 import {
   useExportTeacherPdfMutation,
   useExportTeacherExcelMutation,
@@ -12,13 +12,16 @@ import {
   downloadExcel,
 } from '@/features/export/exportApi';
 import { TeacherTimetableGrid } from './TeacherTimetableGrid';
+import { TeacherBreakdown } from './TeacherBreakdown';
 
 export function Component() {
   const { teacherId } = useParams<{ teacherId: string }>();
   const navigate = useNavigate();
 
   const { data: teachersData } = useGetTeachersQuery({ pageSize: 200 });
+  const { data: teacherLoads } = useGetTeachersLoadQuery();
   const teacher = teachersData?.data.find((t) => t.id === teacherId);
+  const teacherLoad = teacherLoads?.find((l) => l.id === teacherId);
 
   const [exportPdf] = useExportTeacherPdfMutation();
   const [exportExcel] = useExportTeacherExcelMutation();
@@ -62,7 +65,9 @@ export function Component() {
         }
       />
 
-      <TeacherTimetableGrid teacherId={teacherId} teacherName={teacher?.name} />
+      <TeacherTimetableGrid teacherId={teacherId} teacherName={teacher?.name} assignedPeriods={teacherLoad?.assignedPeriods} />
+
+      <TeacherBreakdown teacherId={teacherId} />
     </div>
   );
 }

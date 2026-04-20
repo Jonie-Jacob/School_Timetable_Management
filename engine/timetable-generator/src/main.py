@@ -182,6 +182,8 @@ def generate_batch(
                          f"Writing timetables for {total} divisions...", total)
 
     division_results: list[dict] = []
+    # Shared teacher-busy map across all divisions for split-teacher distribution
+    shared_teacher_busy: dict[str, set[tuple[str, str]]] = {}
 
     for i, div_id in enumerate(division_ids):
         job_id = job_ids[i]
@@ -197,6 +199,7 @@ def generate_batch(
         # Write timetable
         timetable_id = write_timetable(
             div_data, chromosome, job_id, adjacency_constraint,
+            shared_teacher_busy=shared_teacher_busy,
         )
 
         # Audit violations

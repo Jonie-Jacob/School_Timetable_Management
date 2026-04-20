@@ -45,6 +45,15 @@ export class TeacherController {
     return success(result);
   }
 
+  async getBreakdown(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const teacherId = event.pathParameters?.id;
+    if (!teacherId) return success([]);
+    const result = await service.getTeacherBreakdown(ctx.schoolId, ctx.academicYearId, teacherId);
+    return success(result);
+  }
+
   async getSlotConflicts(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
     const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);

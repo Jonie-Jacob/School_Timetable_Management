@@ -530,10 +530,47 @@ Triggered when Step 3 finds 0 valid positions for an assignment.
 │     └──────────────────────────────────────────┘               │
 │                                                                │
 │  4. All candidates exhausted?                                   │
-│     → FALLBACK: Place in any empty slot (accepts conflict)      │
+│     → CONSTRAINT RELAXATION LADDER (Step 4b)                    │
+│     → If that fails: FALLBACK with teacher-safe placement       │
 │     → Failure analysis generated (actionable suggestion)        │
-│     → Violation reported in audit_violations()                  │
 │                                                                │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Step 4b: Constraint Relaxation Ladder
+
+**File:** `greedy.py` → `_try_constraint_relaxation()`
+
+When both normal placement AND backtracking fail, the engine tries progressively relaxing HARD constraints before falling back. Each step loosens one constraint temporarily (for the current period only) and retries slot finding:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│            CONSTRAINT RELAXATION LADDER                        │
+│                                                                │
+│  Step 1: maxPeriodsPerDay += 1                                 │
+│    e.g., maxPD=2 → try with maxPD=3                            │
+│    Allows one extra period on a day that's at the cap          │
+│                                                                │
+│  Step 2: Expand preferredPeriodRange by ±1                     │
+│    e.g., P2-P8 → try with P1-P8 (or P2-P9 capped to max)     │
+│    Opens slots that were just outside the preferred range      │
+│                                                                │
+│  Step 3: Disable preferAdjacentPeriods                         │
+│    Allows placing as a single instead of requiring a neighbor  │
+│                                                                │
+│  Step 4: Remove preferredDays / excludedDays                   │
+│    Opens all days for scheduling                               │
+│                                                                │
+│  Each step:                                                    │
+│    1. Temporarily modify preferences                           │
+│    2. Call _find_valid_slots() or _find_valid_blocks()          │
+│    3. Restore original preferences                             │
+│    4. Found candidates? → Place at best slot, done             │
+│    5. No candidates? → Try next relaxation step                │
+│                                                                │
+│  All steps exhausted? → Fall back to teacher-safe placement    │
+│                        (prefer empty slots where teacher free) │
+│                        → Last resort: force-place (conflict)   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -569,19 +606,25 @@ After all assignments are placed, improve soft constraints via deterministic swa
 │    For each day:                                               │
 │      For each pair of periods (i, j) in that day:              │
 │                                                                │
-│        Check: Would the swap create a teacher conflict?        │
-│        YES → Skip                                              │
+│        Conflict check (swap-safe):                             │
+│          1. Remove BOTH assignments' teachers from tracker     │
+│          2. Check A's teachers at slot_j (other-div conflicts) │
+│          3. Temporarily add A at slot_j, check B at slot_i     │
+│          4. If conflict → restore original entries, skip       │
 │                                                                │
-│        NO → Compute soft score before and after swap:          │
+│        NO conflict → Compute soft score before and after:      │
 │          - Adjacency (break-aware: same subject adjacent       │
 │            with no interval between? lower = better)           │
 │          - Spread (>2 of same subject per day? penalty)        │
 │          - Period preference (high-weightage in early periods) │
 │                                                                │
-│        Score improved? → KEEP swap                             │
-│        Score same/worse? → REVERT swap                         │
+│        Score improved? → KEEP swap + UPDATE teacher_busy       │
+│          (remove teachers from old slots, add at new slots)    │
+│        Score same/worse? → REVERT swap (tracker unchanged)     │
 │                                                                │
-│  Result: Same hard constraints, better soft optimization       │
+│  CRITICAL: teacher_busy tracker is updated after every         │
+│  accepted swap. Without this, later division optimizations     │
+│  see stale teacher positions and allow double-bookings.        │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -628,9 +671,32 @@ After all assignments are placed, improve soft constraints via deterministic swa
 
 Elective groups come in two flavours. The engine handles them differently during scheduling.
 
-### Differentiator
+### How to Identify from DB
 
-Query `division_assignments` grouped by `elective_group_id`: if an elective group has assignments in **more than one division**, it is **cross-division**. Otherwise it is **per-division**.
+```sql
+-- Per-division vs Cross-division:
+SELECT eg.id, eg.name, eg.periods_per_week,
+       COUNT(DISTINCT da.division_id) as num_divisions
+FROM elective_groups eg
+JOIN division_assignments da ON da.elective_group_id = eg.id AND da.deleted_at IS NULL
+GROUP BY eg.id, eg.name, eg.periods_per_week;
+
+-- num_divisions = 1  → Per-Division
+-- num_divisions > 1  → Cross-Division
+
+-- Parallel vs Split teacher mode per subject:
+SELECT eg.name, s.name as subject, egs.parallel_sections,
+       COUNT(DISTINCT da.teacher_id) as num_teachers
+FROM elective_group_subjects egs
+JOIN elective_groups eg ON egs.elective_group_id = eg.id
+JOIN subjects s ON egs.subject_id = s.id
+JOIN division_assignments da ON da.elective_group_id = eg.id
+  AND da.subject_id = s.id AND da.deleted_at IS NULL
+GROUP BY eg.name, s.name, egs.parallel_sections;
+
+-- num_teachers <= parallel_sections  → Parallel mode (ALL teach every slot)
+-- num_teachers >  parallel_sections  → Split mode (teachers take turns)
+```
 
 ### Per-Division Electives (`num_divisions = 1`)
 
@@ -644,7 +710,7 @@ Class I A Dance/Music → only Class I A → placed independently
 
 ### Cross-Division Electives (`num_divisions > 1`)
 
-All divisions in the group get the **same time slot**. The engine places the elective **once** and stamps all participating divisions' chromosomes simultaneously. Teachers teach students from all divisions in parallel at that slot, so teacher-busy is marked **once** (not per-division).
+All divisions in the group get the **same time slot**. The engine places the elective **once** and stamps all participating divisions' chromosomes simultaneously. Teachers teach students from all divisions in parallel at that slot.
 
 **Examples:**
 - XII Maths/IP/Psy → XII A, XII B, XII C (3 divisions)
@@ -654,30 +720,120 @@ All divisions in the group get the **same time slot**. The engine places the ele
 - IX Mal/Hin → IX A, IX B, IX C (3 divisions)
 
 ```
-XII Maths/IP/Psy placed at Mon P2:
-  → XII A chromosome[Mon P2] = Maths/IP/Psy
-  → XII B chromosome[Mon P2] = Maths/IP/Psy
-  → XII C chromosome[Mon P2] = Maths/IP/Psy
-  → Gopikadas (Psy) marked busy Mon P2 ONCE (not 3 times)
+XII Maths/IP/Psy placed at Mon P3:
+  → XII A chromosome[Mon P3] = Maths/IP/Psy
+  → XII B chromosome[Mon P3] = Maths/IP/Psy
+  → XII C chromosome[Mon P3] = Maths/IP/Psy
+  → Teachers marked busy Mon P3 ONCE (not per division)
 ```
 
 ### parallel_sections and Teacher Scheduling
 
-Within an elective group, each subject has a `parallel_sections` count (from `elective_group_subjects`). This determines how many teachers teach simultaneously:
+Within an elective group, each subject has a `parallel_sections` count (from `elective_group_subjects`). This determines how teachers are scheduled:
 
-- **parallel_sections >= num_unique_teachers**: ALL teachers teach simultaneously (e.g., Mal/Hin with 2 Malayalam + 1 Hindi teacher — all 3 in class at once).
-- **parallel_sections < num_unique_teachers**: Teachers **split** the load. Only `parallel_sections` teachers need to be free per slot. The output writer distributes which teacher teaches which slot.
+#### Parallel Mode: `num_teachers <= parallel_sections`
 
-**Example: Maths/IP/Psy (parallel_sections=1 for each subject)**
-- Maths: Julie + Amrutha, only 1 needed per slot → Julie teaches some slots, Amrutha others
-- IP: Shijo + Anitha, only 1 needed per slot
-- Psy: Gopikadas, only 1 (always him)
-- **3 teachers needed simultaneously** (1 Maths + 1 IP + 1 Psy), not all 5
+ALL teachers for this subject teach **simultaneously in every slot**. All must be free. All are marked busy.
 
-**Example: Mal/Hin (parallel_sections=2 for Malayalam)**
-- Malayalam: Ambily + Neethu, parallel_sections=2 → both teach at once
-- Hindi: Sujatha, parallel_sections=1 → she teaches at once
-- **3 teachers needed simultaneously** (both Mal + Hindi)
+#### Split Mode: `num_teachers > parallel_sections`
+
+Teachers **take turns**. Only `parallel_sections` teachers teach in any given slot. The output writer distributes teachers across slots by weightage, preferring slots where the teacher is free in other divisions.
+
+During scheduling: only `parallel_sections` teachers need to be free per slot.
+After scheduling: the output writer assigns specific teachers to specific slots.
+
+### Don Bosco Examples
+
+#### XII Maths/IP/Psy — 4 parallel classes per slot
+
+```
+Subjects and teachers:
+  Mathematics:  Amrutha Saji w=8, Julie Scaria w=8     parallel_sections=2
+  IP:           Anitha w=4, Shijo w=4                   parallel_sections=1
+  Psychology:   Gopikadas w=8                           parallel_sections=1
+
+At any given slot, 4 classes run simultaneously:
+  ┌──────────────┬──────────────┬──────────────┬──────────────┐
+  │  Maths       │  Maths       │  IP          │  Psychology  │
+  │  Amrutha     │  Julie       │  Anitha OR   │  Gopikadas   │
+  │  (always)    │  (always)    │  Shijo       │  (always)    │
+  └──────────────┴──────────────┴──────────────┴──────────────┘
+
+Teacher busy per slot:
+  Amrutha:    busy ALL 8 slots  (parallel, ps=2, 2 teachers = 2 sections)
+  Julie:      busy ALL 8 slots  (parallel, ps=2, 2 teachers = 2 sections)
+  Gopikadas:  busy ALL 8 slots  (parallel, ps=1, 1 teacher = 1 section)
+  Anitha:     busy 4 of 8 slots (split, ps=1 but 2 teachers, w=4)
+  Shijo:      busy 4 of 8 slots (split, ps=1 but 2 teachers, w=4)
+
+How to identify from DB:
+  Maths:  num_teachers(2) <= parallel_sections(2) → Parallel mode
+  IP:     num_teachers(2) >  parallel_sections(1) → Split mode
+  Psy:    num_teachers(1) <= parallel_sections(1) → Parallel mode
+```
+
+#### XI Maths/IP/Psy — 3 parallel classes per slot
+
+```
+Subjects and teachers:
+  Mathematics:  Amrutha Saji w=4, Julie Scaria w=4     parallel_sections=1
+  IP:           Anitha w=4, Shijo w=4                   parallel_sections=1
+  Psychology:   Gopikadas w=8                           parallel_sections=1
+
+At any given slot, 3 classes run simultaneously:
+  ┌──────────────┬──────────────┬──────────────┐
+  │  Maths       │  IP          │  Psychology  │
+  │  Amrutha OR  │  Anitha OR   │  Gopikadas   │
+  │  Julie       │  Shijo       │  (always)    │
+  └──────────────┴──────────────┴──────────────┘
+
+Teacher busy per slot:
+  Gopikadas:  busy ALL 8 slots  (parallel, ps=1, 1 teacher)
+  Amrutha:    busy 4 of 8 slots (split, w=4)
+  Julie:      busy 4 of 8 slots (split, w=4)
+  Anitha:     busy 4 of 8 slots (split, w=4)
+  Shijo:      busy 4 of 8 slots (split, w=4)
+
+How to identify from DB:
+  Maths:  num_teachers(2) > parallel_sections(1) → Split mode
+  IP:     num_teachers(2) > parallel_sections(1) → Split mode
+  Psy:    num_teachers(1) <= parallel_sections(1) → Parallel mode
+```
+
+#### X Mal/Hin — 3 parallel classes per slot
+
+```
+Subjects and teachers:
+  Malayalam:  Ambily w=5, Neethu w=5    parallel_sections=2
+  Hindi:     Sujatha w=5               parallel_sections=1
+
+At any given slot, 3 classes run simultaneously:
+  ┌──────────────┬──────────────┬──────────────┐
+  │  Malayalam   │  Malayalam   │  Hindi       │
+  │  Ambily      │  Neethu      │  Sujatha     │
+  │  (always)    │  (always)    │  (always)    │
+  └──────────────┴──────────────┴──────────────┘
+
+All parallel mode — every teacher busy every slot.
+
+How to identify from DB:
+  Malayalam: num_teachers(2) <= parallel_sections(2) → Parallel mode
+  Hindi:     num_teachers(1) <= parallel_sections(1) → Parallel mode
+```
+
+### Engine Behavior Summary
+
+| Mode | Condition | During Placement | Output Writer | Teacher Busy |
+|------|-----------|-----------------|---------------|-------------|
+| Parallel | teachers <= ps | All must be free | All in every slot | All slots |
+| Split | teachers > ps | `ps` must be free | Distributed by weightage, preferring free slots | **All slots** (all teachers marked busy) |
+
+### Critical Rules
+
+1. **Cross-div slots are synchronized** — `_local_optimize` and `_post_placement_repair` must NEVER move cross-div elective slots within one division (breaks sync with other divisions)
+2. **Split-mode teachers**: engine checks `parallel_sections` teachers during placement, but marks **ALL** teachers busy. This prevents regular assignments from being placed on elective slots that the output writer will later assign to split-mode teachers. The output writer distributes which specific teacher teaches which slot.
+3. **Teacher workload**: for split-mode, each teacher's load = their `weightage` (not `periodsPerWeek`). Amrutha w=8 in XII = 8 periods. Anitha w=4 in XII = 4 periods
+4. **Cross-div data consistency**: all divisions in a cross-div elective must have the same set of teachers per subject. Duplicates or missing teachers cause incorrect scheduling.
 
 ---
 

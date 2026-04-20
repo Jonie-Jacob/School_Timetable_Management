@@ -379,6 +379,7 @@ export class TimetableService {
           include: {
             subject: { select: { id: true, name: true } },
             teacher: { select: { id: true, name: true } },
+            assistantTeacher: { select: { id: true, name: true } },
             electiveGroup: { select: { id: true, name: true } },
           },
         },
@@ -393,6 +394,7 @@ export class TimetableService {
       id: string;
       subject: { id: string; name: string };
       teacher: { id: string; name: string } | null;
+      assistantTeacher: { id: string; name: string } | null;
       electiveGroup: { id: string; name: string } | null;
     };
 
@@ -456,6 +458,7 @@ export class TimetableService {
           id: s.divisionAssignment.id,
           subject: s.divisionAssignment.subject,
           teacher: s.divisionAssignment.teacher,
+          assistantTeacher: s.divisionAssignment.assistantTeacher ?? null,
           electiveGroup: s.divisionAssignment.electiveGroup,
         });
         if (s.divisionAssignment.electiveGroupId) {
@@ -522,6 +525,104 @@ export class TimetableService {
         slot: true,
       },
     });
+  }
+
+  /**
+   * Returns which slots in the same timetable can be swapped with the source
+   * slot without creating teacher conflicts. Used by the frontend to highlight
+   * valid drop targets during drag.
+   */
+  async getValidSwapTargets(schoolId: string, sourceSlotId: string) {
+    const source = await prisma.timetableSlot.findFirst({
+      where: { id: sourceSlotId, schoolId },
+      include: {
+        timetable: true,
+        workingDay: true,
+        slot: true,
+        divisionAssignment: {
+          include: {
+            teacher: { select: { id: true } },
+            assistantTeacher: { select: { id: true } },
+          },
+        },
+      },
+    });
+    if (!source) throw new NotFoundError('TimetableSlot', sourceSlotId);
+
+    // All slots in the same timetable
+    const allSlots = await prisma.timetableSlot.findMany({
+      where: {
+        timetableId: source.timetableId,
+        id: { not: sourceSlotId },
+        slot: { slotType: 'PERIOD' },
+      },
+      include: {
+        workingDay: true,
+        slot: true,
+        divisionAssignment: {
+          include: {
+            teacher: { select: { id: true } },
+            assistantTeacher: { select: { id: true } },
+            electiveGroup: { select: { id: true } },
+          },
+        },
+      },
+    });
+
+    // Source teachers (primary + assistant)
+    const sourceTeacherIds: string[] = [];
+    if (source.divisionAssignment?.teacher?.id) sourceTeacherIds.push(source.divisionAssignment.teacher.id);
+    if (source.divisionAssignment?.assistantTeacher?.id) sourceTeacherIds.push(source.divisionAssignment.assistantTeacher.id);
+
+    // For each candidate target, check bidirectional teacher conflicts
+    const validIds: string[] = [];
+    const invalidIds: string[] = [];
+
+    for (const target of allSlots) {
+      // Skip elective cells
+      if (target.divisionAssignment?.electiveGroup) {
+        invalidIds.push(target.id);
+        continue;
+      }
+
+      const targetTeacherIds: string[] = [];
+      if (target.divisionAssignment?.teacher?.id) targetTeacherIds.push(target.divisionAssignment.teacher.id);
+      if (target.divisionAssignment?.assistantTeacher?.id) targetTeacherIds.push(target.divisionAssignment.assistantTeacher.id);
+
+      let hasConflict = false;
+
+      // Check: source teachers at target's time (in other divisions)
+      for (const tid of sourceTeacherIds) {
+        const conflict = await this.findTeacherTimeConflict(
+          schoolId, [sourceSlotId, target.id],
+          target.workingDay.dayOfWeek,
+          target.slot.startTime, target.slot.endTime,
+          tid,
+        );
+        if (conflict) { hasConflict = true; break; }
+      }
+
+      // Check: target teachers at source's time (in other divisions)
+      if (!hasConflict) {
+        for (const tid of targetTeacherIds) {
+          const conflict = await this.findTeacherTimeConflict(
+            schoolId, [sourceSlotId, target.id],
+            source.workingDay.dayOfWeek,
+            source.slot.startTime, source.slot.endTime,
+            tid,
+          );
+          if (conflict) { hasConflict = true; break; }
+        }
+      }
+
+      if (hasConflict) {
+        invalidIds.push(target.id);
+      } else {
+        validIds.push(target.id);
+      }
+    }
+
+    return { validSlotIds: validIds, invalidSlotIds: invalidIds };
   }
 
   // ── Override Slot ──
@@ -997,12 +1098,14 @@ export class TimetableService {
     });
     if (!teacher) throw new NotFoundError('Teacher', teacherId);
 
-    // Find all timetable slots where this teacher is assigned
+    // Find all timetable slots where this teacher is primary OR assistant
     const slots = await prisma.timetableSlot.findMany({
       where: {
         schoolId,
         timetable: { academicYearId },
-        divisionAssignment: { teacherId },
+        divisionAssignment: {
+          OR: [{ teacherId }, { assistantTeacherId: teacherId }],
+        },
       },
       include: {
         workingDay: true,
@@ -1037,7 +1140,10 @@ export class TimetableService {
 
     if (assignmentPeriodStructureIds.size === 0) {
       const assigned = await prisma.divisionAssignment.findMany({
-        where: { schoolId, academicYearId, teacherId, deletedAt: null },
+        where: {
+          schoolId, academicYearId, deletedAt: null,
+          OR: [{ teacherId }, { assistantTeacherId: teacherId }],
+        },
         select: { division: { select: { periodStructureId: true } } },
       });
       for (const a of assigned) {
@@ -1144,6 +1250,7 @@ export class TimetableService {
       // Replace the empty placeholder with the real slot id
       period.timetableSlotId = s.id;
       period.slotIds = [s.id];
+      const role = da.assistantTeacherId === teacherId ? 'assistant' as const : 'primary' as const;
       period.assignments.push({
         id: da.id,
         subject: da.subject,
@@ -1151,6 +1258,7 @@ export class TimetableService {
         // the UI cell — the cell renders `assignment.teacher?.name`.
         teacher: { id: s.timetable.division.id, name: divLabel },
         electiveGroup: da.electiveGroup,
+        role,
       });
       if (da.electiveGroupId) period.isElective = true;
     }

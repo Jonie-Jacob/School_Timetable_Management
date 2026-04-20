@@ -101,10 +101,11 @@ export class TeacherService {
         schoolId,
         academicYearId,
         deletedAt: null,
-        teacherId: { not: null },
+        OR: [{ teacherId: { not: null } }, { assistantTeacherId: { not: null } }],
       },
       select: {
         teacherId: true,
+        assistantTeacherId: true,
         weightage: true,
         electiveGroupId: true,
         divisionId: true,
@@ -127,29 +128,64 @@ export class TeacherService {
       if (divs.size > 1) crossDivGroups.add(egId);
     }
 
-    // Compute load per teacher, deduplicating cross-div elective groups
+    // Compute load per teacher, deduplicating cross-div elective groups.
+    // Both primary (teacherId) and assistant (assistantTeacherId) are counted
+    // — assistant teachers are busy for the same slots as primary.
     const loadByTeacher = new Map<string, number>();
-    // Track which cross-div groups we've already counted per teacher
     const countedCrossDivPerTeacher = new Map<string, Set<string>>();
 
-    for (const a of assignments) {
-      const tid = a.teacherId!;
+    function addLoad(tid: string, weightage: number, electiveGroupId: string | null) {
       const current = loadByTeacher.get(tid) ?? 0;
-
-      if (a.electiveGroupId && crossDivGroups.has(a.electiveGroupId)) {
-        // Cross-division elective: count only once per teacher per group
+      if (electiveGroupId && crossDivGroups.has(electiveGroupId)) {
         if (!countedCrossDivPerTeacher.has(tid)) countedCrossDivPerTeacher.set(tid, new Set());
         const seen = countedCrossDivPerTeacher.get(tid)!;
-        if (!seen.has(a.electiveGroupId)) {
-          seen.add(a.electiveGroupId);
-          // Use the elective group's periods_per_week (shared across divisions)
-          const pw = a.electiveGroup?.periodsPerWeek ?? a.weightage;
-          loadByTeacher.set(tid, current + pw);
+        if (!seen.has(electiveGroupId)) {
+          seen.add(electiveGroupId);
+          loadByTeacher.set(tid, current + weightage);
         }
-        // Skip duplicate divisions for the same cross-div group
       } else {
-        // Regular assignment or per-division elective: count normally
-        loadByTeacher.set(tid, current + a.weightage);
+        loadByTeacher.set(tid, current + weightage);
+      }
+    }
+
+    for (const a of assignments) {
+      if (a.teacherId) addLoad(a.teacherId, a.weightage, a.electiveGroupId);
+      if (a.assistantTeacherId) addLoad(a.assistantTeacherId, a.weightage, a.electiveGroupId);
+    }
+
+    // Count timetable-based periods: distinct (working_day, slot) pairs per teacher.
+    // For cross-div electives the teacher appears in multiple timetable_slots at the
+    // Count timetable periods per teacher using distinct time slots.
+    // This detects double-bookings: if assigned=27 but timetable=26, one slot
+    // has two assignments at the same time (teacher conflict).
+    const timetableSlots = await prisma.timetableSlot.findMany({
+      where: {
+        schoolId,
+        timetable: { academicYearId, status: { in: ['GENERATED', 'OUTDATED'] } },
+        divisionAssignment: {
+          deletedAt: null,
+          OR: [{ teacherId: { not: null } }, { assistantTeacherId: { not: null } }],
+        },
+      },
+      select: {
+        workingDayId: true,
+        slotId: true,
+        divisionAssignment: { select: { teacherId: true, assistantTeacherId: true } },
+      },
+    });
+
+    const timetableByTeacher = new Map<string, Set<string>>();
+    for (const ts of timetableSlots) {
+      const slotKey = `${ts.workingDayId}:${ts.slotId}`;
+      const tid = ts.divisionAssignment?.teacherId;
+      const atid = ts.divisionAssignment?.assistantTeacherId;
+      if (tid) {
+        if (!timetableByTeacher.has(tid)) timetableByTeacher.set(tid, new Set());
+        timetableByTeacher.get(tid)!.add(slotKey);
+      }
+      if (atid) {
+        if (!timetableByTeacher.has(atid)) timetableByTeacher.set(atid, new Set());
+        timetableByTeacher.get(atid)!.add(slotKey);
       }
     }
 
@@ -158,8 +194,197 @@ export class TeacherService {
       name: t.name,
       maxPeriodsPerWeek: t.maxPeriodsPerWeek,
       assignedPeriods: loadByTeacher.get(t.id) ?? 0,
+      timetablePeriods: timetableByTeacher.has(t.id) ? timetableByTeacher.get(t.id)!.size : null,
       qualifiedSubjectIds: t.teacherSubjects.map((ts) => ts.subjectId),
     }));
+  }
+
+  /**
+   * Returns per-class assignment breakdown for a single teacher.
+   * Each row represents one assignment: class+division, subject, weightage,
+   * and whether it's an elective. Used by the teacher timetable detail view.
+   */
+  async getTeacherBreakdown(schoolId: string, academicYearId: string, teacherId: string) {
+    const assignments = await prisma.divisionAssignment.findMany({
+      where: {
+        schoolId, academicYearId, deletedAt: null,
+        OR: [{ teacherId }, { assistantTeacherId: teacherId }],
+      },
+      select: {
+        id: true,
+        teacherId: true,
+        assistantTeacherId: true,
+        weightage: true,
+        electiveGroupId: true,
+        divisionId: true,
+        subject: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
+        division: {
+          select: {
+            id: true,
+            label: true,
+            class: { select: { id: true, name: true, sortOrder: true } },
+          },
+        },
+      },
+      orderBy: [
+        { division: { class: { sortOrder: 'asc' } } },
+        { division: { label: 'asc' } },
+      ],
+    });
+
+    // Identify cross-division elective groups
+    const egDivs = new Map<string, Set<string>>();
+    for (const a of assignments) {
+      if (a.electiveGroupId) {
+        if (!egDivs.has(a.electiveGroupId)) egDivs.set(a.electiveGroupId, new Set());
+        egDivs.get(a.electiveGroupId)!.add(a.divisionId);
+      }
+    }
+    const crossDivGroups = new Set<string>();
+    for (const [egId, divs] of egDivs) {
+      if (divs.size > 1) crossDivGroups.add(egId);
+    }
+
+    // Query timetable slots for this teacher to get per-assignment timetable counts.
+    // Count distinct (workingDayId, slotId) per division_assignment_id.
+    const timetableSlots = await prisma.timetableSlot.findMany({
+      where: {
+        schoolId,
+        timetable: { academicYearId, status: { in: ['GENERATED', 'OUTDATED'] } },
+        divisionAssignment: {
+          OR: [{ teacherId }, { assistantTeacherId: teacherId }],
+        },
+      },
+      select: {
+        workingDayId: true,
+        slotId: true,
+        divisionAssignmentId: true,
+        divisionAssignment: {
+          select: {
+            id: true,
+            teacherId: true,
+            assistantTeacherId: true,
+            subjectId: true,
+            electiveGroupId: true,
+            divisionId: true,
+            deletedAt: true,
+            subject: { select: { name: true } },
+            electiveGroup: { select: { name: true } },
+            division: { select: { label: true, class: { select: { name: true, sortOrder: true } } } },
+          },
+        },
+      },
+    });
+
+    // Count distinct time slots per assignment_id
+    const ttCountByAssignment = new Map<string, Set<string>>();
+    for (const ts of timetableSlots) {
+      const aid = ts.divisionAssignmentId;
+      if (!aid) continue;
+      if (!ttCountByAssignment.has(aid)) ttCountByAssignment.set(aid, new Set());
+      ttCountByAssignment.get(aid)!.add(`${ts.workingDayId}:${ts.slotId}`);
+    }
+
+    // Build breakdown rows, deduplicating cross-div electives
+    const seenCrossDivGroups = new Set<string>();
+    type BreakdownRow = {
+      className: string;
+      divisionLabel: string;
+      subject: string;
+      weightage: number;
+      electiveGroup: string | null;
+      isCrossDiv: boolean;
+      divisions: string[];
+      role: 'primary' | 'assistant';
+      timetablePeriods: number | null;
+    };
+    const rows: BreakdownRow[] = [];
+    const assignmentIdsUsed = new Set<string>();
+
+    for (const a of assignments) {
+      const role = a.assistantTeacherId === teacherId ? 'assistant' as const : 'primary' as const;
+      const isCrossDiv = !!(a.electiveGroupId && crossDivGroups.has(a.electiveGroupId));
+
+      if (isCrossDiv) {
+        const key = `${a.electiveGroupId}:${a.subject.id}:${role}`;
+        if (seenCrossDivGroups.has(key)) continue;
+        seenCrossDivGroups.add(key);
+        // Collect all assignment IDs and division labels for this cross-div subject
+        const relatedAssignments = assignments.filter(
+          (x) => x.electiveGroupId === a.electiveGroupId && x.subject.id === a.subject.id,
+        );
+        const divLabels = relatedAssignments
+          .map((x) => `${x.division.class.name} ${x.division.label}`)
+          .filter((v, i, arr) => arr.indexOf(v) === i)
+          .sort();
+        // For cross-div, count distinct time slots across any one division's assignment
+        // (they all share the same slots)
+        let ttCount: number | null = null;
+        for (const ra of relatedAssignments) {
+          assignmentIdsUsed.add(ra.id);
+          const c = ttCountByAssignment.get(ra.id);
+          if (c) { ttCount = c.size; break; }
+        }
+        rows.push({
+          className: a.division.class.name,
+          divisionLabel: divLabels.join(', '),
+          subject: a.subject.name,
+          weightage: a.weightage,
+          electiveGroup: a.electiveGroup?.name ?? null,
+          isCrossDiv: true,
+          divisions: divLabels,
+          role,
+          timetablePeriods: ttCount,
+        });
+      } else {
+        assignmentIdsUsed.add(a.id);
+        const ttCount = ttCountByAssignment.get(a.id)?.size ?? null;
+        rows.push({
+          className: a.division.class.name,
+          divisionLabel: `${a.division.class.name} ${a.division.label}`,
+          subject: a.subject.name,
+          weightage: a.weightage,
+          electiveGroup: a.electiveGroup?.name ?? null,
+          isCrossDiv: false,
+          divisions: [`${a.division.class.name} ${a.division.label}`],
+          role,
+          timetablePeriods: ttCount,
+        });
+      }
+    }
+
+    // Add orphan rows: timetable slots with no matching active assignment
+    // (e.g., assignment deleted after generation)
+    const orphanAssignments = new Map<string, { da: typeof timetableSlots[0]['divisionAssignment']; count: number }>();
+    for (const ts of timetableSlots) {
+      const aid = ts.divisionAssignmentId;
+      if (!aid || assignmentIdsUsed.has(aid)) continue;
+      const da = ts.divisionAssignment;
+      if (!da) continue;
+      if (!orphanAssignments.has(aid)) {
+        orphanAssignments.set(aid, { da, count: 0 });
+      }
+      const entry = orphanAssignments.get(aid)!;
+      entry.count = (ttCountByAssignment.get(aid)?.size ?? 0);
+    }
+    for (const [, { da, count }] of orphanAssignments) {
+      if (!da) continue;
+      const role = da.assistantTeacherId === teacherId ? 'assistant' as const : 'primary' as const;
+      rows.push({
+        className: da.division?.class?.name ?? '?',
+        divisionLabel: `${da.division?.class?.name ?? '?'} ${da.division?.label ?? '?'}`,
+        subject: da.subject?.name ?? '?',
+        weightage: 0,
+        electiveGroup: da.electiveGroup?.name ?? null,
+        isCrossDiv: false,
+        divisions: [],
+        role,
+        timetablePeriods: count,
+      });
+    }
+
+    return rows;
   }
 
   /**

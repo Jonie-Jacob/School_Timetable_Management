@@ -33,6 +33,12 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.setAvailability(event, availabilityMatch[1]);
   }
 
+  const breakdownMatch = path.match(/^\/api\/teachers\/([^/]+)\/breakdown$/);
+  if (method === 'GET' && breakdownMatch) {
+    event.pathParameters = { ...event.pathParameters, id: breakdownMatch[1] };
+    return controller.getBreakdown(event);
+  }
+
   // Base routes: /teachers, /teachers/:id
   const idMatch = path.match(/^\/api\/teachers\/([^/]+)$/);
 

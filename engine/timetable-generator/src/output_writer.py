@@ -5,8 +5,11 @@ and updates generation_jobs status.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger("timetable-engine")
 
 import psycopg2
 import psycopg2.extras
@@ -20,6 +23,7 @@ def write_timetable(
     chromosome: 'numpy.ndarray',
     job_id: str,
     adjacency_constraint_enabled: bool = False,
+    shared_teacher_busy: dict[str, set[tuple[str, str]]] | None = None,
 ) -> str:
     """
     Write the GA result to the database.
@@ -50,7 +54,8 @@ def write_timetable(
             )
 
             # ── Insert new slots ───────────────────────────────────────────
-            _insert_slots(cur, data, chromosome, timetable_id, now)
+            _insert_slots(cur, data, chromosome, timetable_id, now,
+                          shared_teacher_busy=shared_teacher_busy)
 
             # ── Mark job COMPLETED ─────────────────────────────────────────
             cur.execute("""
@@ -185,6 +190,7 @@ def _insert_slots(
     chromosome: 'numpy.ndarray',
     timetable_id: str,
     now: datetime,
+    shared_teacher_busy: dict[str, set[tuple[str, str]]] | None = None,
 ) -> None:
     """Insert timetable_slot rows from the chromosome.
 
@@ -215,11 +221,38 @@ def _insert_slots(
             la_slot_positions.setdefault(a_idx, []).append((wd_id, slot_id))
 
     # ── Empty slots ──
-    for wd_id, slot_id in empty_positions:
-        rows.append((
-            str(uuid.uuid4()), data.school_id, timetable_id,
-            wd_id, slot_id, None, now, now,
-        ))
+    # Skip creating rows for empty positions — the UI should show these
+    # as genuinely empty. Previously this created rows with NULL assignment
+    # which showed as blank entries instead of truly empty.
+    if empty_positions:
+        logger.warning("Timetable has %d empty slot(s) out of %d total",
+                        len(empty_positions), data.total_periods)
+
+    # ── Build teacher-busy lookup for split-teacher distribution ──
+    # Use shared map (persists across divisions in batch mode) so that
+    # split-teacher electives in XII-B know about XII-A's assignments.
+    # Also seed from DB for any timetable_slots not yet in the shared map.
+    if shared_teacher_busy is not None:
+        teacher_slot_busy = shared_teacher_busy
+    else:
+        teacher_slot_busy = {}
+    cur.execute("""
+        SELECT da.teacher_id, ts.working_day_id, ts.slot_id
+        FROM timetable_slots ts
+        JOIN division_assignments da ON ts.division_assignment_id = da.id
+        WHERE ts.school_id = %s AND da.teacher_id IS NOT NULL
+          AND ts.timetable_id != %s
+    """, (data.school_id, timetable_id))
+    for tid, wd_id, s_id in cur.fetchall():
+        teacher_slot_busy.setdefault(tid, set()).add((wd_id, s_id))
+
+    # Also build a DA-id → teacher_id lookup for tracking busy from rows
+    # we append during this function call.
+    da_teacher_map: dict[str, str] = {}
+    for la in logicals:
+        for m in la.members:
+            if m.teacher_id:
+                da_teacher_map[m.id] = m.teacher_id
 
     # ── Filled slots ──
     for a_idx, positions in la_slot_positions.items():
@@ -233,13 +266,21 @@ def _insert_slots(
                         str(uuid.uuid4()), data.school_id, timetable_id,
                         wd_id, slot_id, member.id, now, now,
                     ))
+                    # Track this teacher as busy at this slot for split-teacher distribution
+                    if member.teacher_id:
+                        teacher_slot_busy.setdefault(member.teacher_id, set()).add((wd_id, slot_id))
         else:
             # Elective: distribute split-teacher assignments
             members_per_slot = _distribute_elective_members(
                 data, la, len(positions),
+                positions=positions,
+                teacher_slot_busy=teacher_slot_busy,
             )
             for (wd_id, slot_id), members in zip(positions, members_per_slot):
                 for member in members:
+                    # Track teacher as busy for subsequent distributions
+                    if member.teacher_id:
+                        teacher_slot_busy.setdefault(member.teacher_id, set()).add((wd_id, slot_id))
                     rows.append((
                         str(uuid.uuid4()), data.school_id, timetable_id,
                         wd_id, slot_id, member.id, now, now,
@@ -260,6 +301,8 @@ def _distribute_elective_members(
     data: SchoolData,
     la,
     num_slots: int,
+    positions: list[tuple[str, str]] | None = None,
+    teacher_slot_busy: dict[str, set[tuple[str, str]]] | None = None,
 ) -> list[list]:
     """Determine which member assignments appear in each slot.
 
@@ -267,42 +310,71 @@ def _distribute_elective_members(
     - If num_teachers ≤ parallelSections → all teachers in every slot
       (they teach different student groups simultaneously, e.g. Mal×2 in
       Mal/Hindi where both Mal teachers are in class at once).
-    - If num_teachers > parallelSections → teachers split the load. Each
-      teacher is assigned to `teacher.weightage` consecutive slots
-      (e.g. Maths in Maths/IP/Psy: Julie gets 4 slots, Amrutha gets 4).
+    - If num_teachers > parallelSections → teachers split the load.
+      Each teacher is assigned to slots where they are free (checked via
+      teacher_slot_busy). Falls back to consecutive assignment if no
+      availability info is provided.
     """
     eg = data.elective_groups.get(la.elective_group_id or '')
     if not eg:
-        # Fallback: all members in every slot
         return [list(la.members)] * num_slots
 
-    # Group members by subject_id
     by_subject: dict[str, list] = {}
     for m in la.members:
         by_subject.setdefault(m.subject_id, []).append(m)
 
-    # Build per-slot member lists
     slot_members: list[list] = [[] for _ in range(num_slots)]
 
     for subject_id, teachers in by_subject.items():
         parallel = eg.subject_parallel_sections.get(subject_id, 1)
 
         if len(teachers) <= parallel:
-            # Parallel sections: all teachers appear in every slot
             for i in range(num_slots):
                 slot_members[i].extend(teachers)
         else:
-            # Split-teacher: distribute across slots by weightage.
-            # Sort deterministically by name so the distribution is stable.
+            # Split-teacher: assign teachers to slots where they're free.
             teachers_sorted = sorted(
                 teachers,
                 key=lambda t: (t.teacher_name or '', t.id),
             )
-            slot_cursor = 0
-            for teacher in teachers_sorted:
-                count = min(teacher.weightage, num_slots - slot_cursor)
-                for i in range(slot_cursor, slot_cursor + count):
-                    slot_members[i].append(teacher)
-                slot_cursor += count
+
+            if positions and teacher_slot_busy:
+                # Availability-aware distribution: assign each teacher to
+                # slots where they are NOT busy in other divisions.
+                assigned_slots: set[int] = set()
+                for teacher in teachers_sorted:
+                    tid = teacher.teacher_id
+                    busy = teacher_slot_busy.get(tid, set())
+                    count = 0
+                    for i in range(num_slots):
+                        if i in assigned_slots:
+                            continue
+                        if count >= teacher.weightage:
+                            break
+                        wd_id, slot_id = positions[i]
+                        if (wd_id, slot_id) not in busy:
+                            slot_members[i].append(teacher)
+                            assigned_slots.add(i)
+                            count += 1
+                    # If couldn't fill all from free slots, take remaining
+                    if count < teacher.weightage:
+                        for i in range(num_slots):
+                            if i in assigned_slots:
+                                continue
+                            if count >= teacher.weightage:
+                                break
+                            slot_members[i].append(teacher)
+                            assigned_slots.add(i)
+                            count += 1
+                            logger.warning("Split-teacher %s assigned to busy slot %d (no free slot available)",
+                                           teacher.teacher_name, i)
+            else:
+                # Fallback: consecutive assignment by weightage
+                slot_cursor = 0
+                for teacher in teachers_sorted:
+                    count = min(teacher.weightage, num_slots - slot_cursor)
+                    for i in range(slot_cursor, slot_cursor + count):
+                        slot_members[i].append(teacher)
+                    slot_cursor += count
 
     return slot_members

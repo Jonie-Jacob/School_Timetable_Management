@@ -42,6 +42,13 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.getTeacherTimetable(event, teacherMatch[1]);
   }
 
+  // Valid swap targets: GET /timetables/slots/:slotId/valid-swaps
+  const validSwapsMatch = path.match(/^\/api\/timetables\/slots\/([^/]+)\/valid-swaps$/);
+  if (method === 'GET' && validSwapsMatch) {
+    event.pathParameters = { ...event.pathParameters, slotId: validSwapsMatch[1] };
+    return controller.getValidSwapTargets(event);
+  }
+
   // Swap slots: POST /timetables/slots/swap
   if (method === 'POST' && path === '/api/timetables/slots/swap') {
     return controller.swapSlots(event);

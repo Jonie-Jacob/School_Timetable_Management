@@ -101,8 +101,16 @@ class LogicalAssignment:
 
     @property
     def teacher_ids(self) -> list[str]:
-        """Every non-null teacher_id from the underlying members."""
-        return [m.teacher_id for m in self.members if m.teacher_id is not None]
+        """Every non-null teacher_id AND assistant_teacher_id from the underlying members.
+        Assistant teachers are treated identically to primary teachers for scheduling
+        — they must be free and are marked busy when the slot is placed."""
+        ids: list[str] = []
+        for m in self.members:
+            if m.teacher_id is not None and m.teacher_id not in ids:
+                ids.append(m.teacher_id)
+            if m.assistant_teacher_id is not None and m.assistant_teacher_id not in ids:
+                ids.append(m.assistant_teacher_id)
+        return ids
 
     @property
     def display_name(self) -> str:
@@ -164,7 +172,26 @@ class LogicalAssignment:
                     free.append(tid)
             if len(free) < need:
                 return None
-            picked.extend(free[:need])
+            if len(tids) <= parallel:
+                # All teachers teach simultaneously — all must be free
+                picked.extend(free)
+            else:
+                # Split-teacher mode: only parallel_sections teach per slot.
+                # Pick the ones that are free. Mark them busy so they're
+                # reserved. The output writer handles distribution.
+                picked.extend(free[:need])
+
+        # Also check assistant teachers — they must be free too.
+        # Assistants are in teacher_ids but NOT in subject_teacher_map.
+        stm_tids = set()
+        for tids, _ in self.subject_teacher_map.values():
+            stm_tids.update(tids)
+        for tid in self.teacher_ids:
+            if tid not in stm_tids and tid not in picked:
+                if _is_teacher_busy(tid):
+                    return None
+                picked.append(tid)
+
         return picked
 
 
@@ -706,6 +733,8 @@ def _build_logical_assignments(data: SchoolData) -> None:
         # Build subject → (teacher_ids, parallel_sections) map for scheduling.
         # This tells the scheduler how many teachers per subject need to be
         # free simultaneously (parallel_sections), rather than requiring ALL.
+        # Only PRIMARY teachers go in the map — assistant teachers are checked
+        # separately via teacher_ids (which includes both primary + assistant).
         stm: dict[str, tuple[list[str], int]] = {}
         for m in members_sorted:
             if m.teacher_id is None:

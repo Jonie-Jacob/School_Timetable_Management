@@ -456,7 +456,7 @@ export function Component() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
-                        {status === 'GENERATED' && (
+                        {(status === 'GENERATED' || status === 'OUTDATED') && (
                           <>
                             <Button
                               variant="outline"

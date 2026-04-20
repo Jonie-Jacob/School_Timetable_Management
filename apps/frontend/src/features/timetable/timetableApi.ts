@@ -15,7 +15,10 @@ export interface TimetableSlotAssignment {
   id: string;
   subject: { id: string; name: string };
   teacher: { id: string; name: string } | null;
+  assistantTeacher?: { id: string; name: string } | null;
   electiveGroup: { id: string; name: string } | null;
+  /** Only present in teacher timetable view. Indicates primary or assistant role. */
+  role?: 'primary' | 'assistant';
 }
 
 export interface TimetablePeriod {
@@ -151,6 +154,11 @@ export const timetableApi = createApi({
       invalidatesTags: ['Timetable'],
     }),
 
+    getValidSwapTargets: builder.query<{ validSlotIds: string[]; invalidSlotIds: string[] }, string>({
+      query: (slotId) => `timetables/slots/${slotId}/valid-swaps`,
+      transformResponse: (response: { data: { validSlotIds: string[]; invalidSlotIds: string[] } }) => response.data,
+    }),
+
     swapSlots: builder.mutation<SwapSlotsResponse, SwapSlotsRequest>({
       query: (body) => ({
         url: 'timetables/slots/swap',
@@ -190,6 +198,7 @@ export const {
   useGetTeacherTimetableQuery,
   useGetActiveGenerationQuery,
   useOverrideSlotMutation,
+  useLazyGetValidSwapTargetsQuery,
   useSwapSlotsMutation,
   useCreateEmptySlotMutation,
   useAutoResolveConflictMutation,

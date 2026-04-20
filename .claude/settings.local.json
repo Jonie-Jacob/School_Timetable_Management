@@ -145,7 +145,11 @@
       "Bash(docker run --rm --entrypoint python timetable-engine:latest -c ':*)",
       "Bash(docker run:*)",
       "Bash(python -c \"import py_compile; py_compile.compile\\('src/ga/greedy.py', doraise=True\\); py_compile.compile\\('src/whole_school_loader.py', doraise=True\\); print\\('OK'\\)\")",
-      "Bash(MSYS_NO_PATHCONV=1 aws logs describe-log-streams --log-group-name \"/ecs/timetable-prod-timetable-engine\" --order-by LastEventTime --descending --limit 1 --query 'logStreams[0].[logStreamName,lastEventTimestamp]' --output text)"
+      "Bash(MSYS_NO_PATHCONV=1 aws logs describe-log-streams --log-group-name \"/ecs/timetable-prod-timetable-engine\" --order-by LastEventTime --descending --limit 1 --query 'logStreams[0].[logStreamName,lastEventTimestamp]' --output text)",
+      "Bash(find Documentaion -type f -name \"*.md\" -exec ls -lh {} \\\\;)",
+      "Read(//d/Zyphr/School_Timetable_Management/**)",
+      "Bash(ls -lh d:/Zyphr/School_Timetable_Management/Documentaion/*.md)",
+      "Bash(wc -l d:/Zyphr/School_Timetable_Management/Documentaion/*.md d:/Zyphr/School_Timetable_Management/CLAUDE.md)"
     ]
   }
 }

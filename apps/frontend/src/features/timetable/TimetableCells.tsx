@@ -40,6 +40,9 @@ export function CellContent({ assignment, isDragging }: CellContentProps) {
     >
       <div className="text-[11px] font-bold truncate">{assignment.subject.name}</div>
       <div className="text-[9px] opacity-75 truncate">{assignment.teacher?.name ?? '(Unassigned)'}</div>
+      {assignment.assistantTeacher && (
+        <div className="text-[8px] opacity-60 truncate">Asst: {assignment.assistantTeacher.name}</div>
+      )}
     </div>
   );
 }
@@ -90,6 +93,7 @@ export function ElectiveCellContent({ assignments }: ElectiveCellContentProps) {
           <div key={a.id} className="text-[9px] leading-tight truncate">
             <span className="font-semibold">{a.subject.name}</span>
             <span className="opacity-70"> — {a.teacher?.name ?? '(Unassigned)'}</span>
+            {a.assistantTeacher && <span className="opacity-50"> (Asst: {a.assistantTeacher.name})</span>}
           </div>
         ))}
       </div>
@@ -120,17 +124,23 @@ export function DraggableCell({ slotId, children }: DraggableCellProps) {
 interface DroppableCellProps {
   slotId: string;
   children: ReactNode;
+  /** During drag: 'valid' = safe swap, 'invalid' = conflict, undefined = not dragging */
+  swapValidity?: 'valid' | 'invalid';
 }
 
-export function DroppableCell({ slotId, children }: DroppableCellProps) {
+export function DroppableCell({ slotId, children, swapValidity }: DroppableCellProps) {
   const { isOver, setNodeRef } = useDroppable({ id: slotId });
 
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        'min-h-[40px] rounded-lg transition-colors',
-        isOver && 'bg-amber-500/20 ring-2 ring-amber-500/40 ring-dashed',
+        'min-h-[40px] rounded-lg transition-all duration-150',
+        isOver && swapValidity === 'valid' && 'bg-emerald-400/30 ring-2 ring-emerald-500 scale-[1.03]',
+        isOver && swapValidity === 'invalid' && 'bg-red-400/30 ring-2 ring-red-500 scale-[0.97]',
+        isOver && !swapValidity && 'bg-amber-500/20 ring-2 ring-amber-500/40 ring-dashed',
+        !isOver && swapValidity === 'valid' && 'ring-2 ring-emerald-400 bg-emerald-400/15 shadow-[0_0_8px_rgba(52,211,153,0.3)]',
+        !isOver && swapValidity === 'invalid' && 'opacity-40',
       )}
     >
       {children}

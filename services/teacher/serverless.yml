@@ -80,4 +80,9 @@ functions:
             name: cognitoAuthorizer
       - httpApi:
           method: GET
+          path: /api/teachers/{id}/breakdown
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
           path: /api/teachers/health
