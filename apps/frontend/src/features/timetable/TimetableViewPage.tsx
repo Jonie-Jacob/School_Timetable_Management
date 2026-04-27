@@ -41,11 +41,15 @@ import {
   useSwapSlotsMutation,
   useCreateEmptySlotMutation,
   useAutoResolveConflictMutation,
+  usePreviewElectiveSwapMutation,
+  useSwapElectiveSlotsMutation,
   type TimetablePeriod,
   type TimetableSlotAssignment,
   type SwapConflict,
+  type PreviewElectiveSwapResponse,
 } from './timetableApi';
 import { DraggableCell, DroppableCell, CellContent, ElectiveCellContent } from './TimetableCells';
+import { ElectiveSwapConfirmDialog } from './ElectiveSwapConfirmDialog';
 
 import { DAY_LABELS_FULL as DAY_LABELS } from '@/lib/days';
 
@@ -82,6 +86,8 @@ export function Component() {
   const { data: electiveGroups } = useGetElectiveGroupsQuery();
   const [overrideSlot] = useOverrideSlotMutation();
   const [swapSlots, { isLoading: isSwapping }] = useSwapSlotsMutation();
+  const [swapElectiveSlots, { isLoading: isElectiveSwapping }] = useSwapElectiveSlotsMutation();
+  const [previewElectiveSwap] = usePreviewElectiveSwapMutation();
   const [autoResolve] = useAutoResolveConflictMutation();
   const [createEmptySlot] = useCreateEmptySlotMutation();
   const [updateAssignment] = useUpdateAssignmentMutation();
@@ -98,6 +104,14 @@ export function Component() {
   const [swapResultDialog, setSwapResultDialog] = useState<{
     conflicts: SwapConflict[];
     resolving: Set<string>; // conflictedSlotIds currently being auto-resolved
+  } | null>(null);
+
+  // Elective swap confirmation dialog state
+  const [electiveSwapDialog, setElectiveSwapDialog] = useState<{
+    preview: PreviewElectiveSwapResponse;
+    sourceSlotId: string;
+    targetDayOfWeek: number;
+    targetSlotSortOrder: number;
   } | null>(null);
 
   // Read-only info sheet for elective cells.
@@ -222,6 +236,7 @@ export function Component() {
   }, [swapSlots]);
 
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const wasElective = activeDrag?.isElective ?? false;
     setActiveDrag(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -229,10 +244,62 @@ export function Component() {
     const sourceSlotId = active.id as string;
     const targetSlotId = over.id as string;
 
-    // Backend swapSlots() auto-detects elective involvement and delegates
-    // to swapElectiveSlots() when needed. No frontend guard required.
-    await executeSwap(sourceSlotId, targetSlotId);
-  }, [executeSwap]);
+    const allPeriods = grid?.days?.flatMap((d) => d.periods) ?? [];
+    const sourcePeriod = allPeriods.find((p) => p.timetableSlotId === sourceSlotId);
+    const targetPeriod = allPeriods.find((p) => p.timetableSlotId === targetSlotId);
+
+    const eitherIsElective = wasElective || sourcePeriod?.isElective || targetPeriod?.isElective;
+
+    if (eitherIsElective) {
+      // For elective swaps: call preview to show confirmation dialog
+      const electivePeriod = (sourcePeriod?.isElective ? sourcePeriod : targetPeriod)!;
+      const otherPeriod = electivePeriod === sourcePeriod ? targetPeriod : sourcePeriod;
+      const targetDay = grid!.days.find((d) =>
+        d.periods.some((p) => p.timetableSlotId === (sourcePeriod?.isElective ? targetSlotId : sourceSlotId)),
+      );
+      if (!targetDay) return;
+
+      const electiveSlotId = electivePeriod.timetableSlotId;
+      const tgtDayOfWeek = targetDay.workingDay.dayOfWeek;
+      const tgtSortOrder = otherPeriod?.slot.sortOrder ?? electivePeriod.slot.sortOrder;
+
+      try {
+        const preview = await previewElectiveSwap({
+          sourceSlotId: electiveSlotId,
+          targetDayOfWeek: tgtDayOfWeek,
+          targetSlotSortOrder: tgtSortOrder,
+        }).unwrap();
+
+        // Show dialog if cross-division or has conflicts
+        if (preview.affectedDivisions.length > 1 || preview.conflicts.length > 0) {
+          setElectiveSwapDialog({
+            preview,
+            sourceSlotId: electiveSlotId,
+            targetDayOfWeek: tgtDayOfWeek,
+            targetSlotSortOrder: tgtSortOrder,
+          });
+          return;
+        }
+
+        // Per-division, no conflicts -- swap directly
+        setSwappingSlotIds(new Set([sourceSlotId, targetSlotId]));
+        await swapElectiveSlots({
+          sourceSlotId: electiveSlotId,
+          targetDayOfWeek: tgtDayOfWeek,
+          targetSlotSortOrder: tgtSortOrder,
+        }).unwrap();
+        toast.success('Elective swapped.');
+        setSwappingSlotIds(new Set());
+      } catch (err: unknown) {
+        const error = err as { data?: { error?: { message?: string } } };
+        toast.error(error?.data?.error?.message ?? 'Elective swap failed.');
+        setSwappingSlotIds(new Set());
+      }
+    } else {
+      // Regular (non-elective) swap
+      await executeSwap(sourceSlotId, targetSlotId);
+    }
+  }, [grid, activeDrag, executeSwap, previewElectiveSwap, swapElectiveSlots]);
 
   if (isLoading) {
     return (
@@ -1057,6 +1124,41 @@ export function Component() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Elective swap confirmation dialog ── */}
+      <ElectiveSwapConfirmDialog
+        open={!!electiveSwapDialog}
+        preview={electiveSwapDialog?.preview ?? null}
+        isSwapping={isElectiveSwapping}
+        onCancel={() => {
+          setElectiveSwapDialog(null);
+          setSwappingSlotIds(new Set());
+        }}
+        onConfirm={async (force) => {
+          if (!electiveSwapDialog) return;
+          const { sourceSlotId, targetDayOfWeek, targetSlotSortOrder } = electiveSwapDialog;
+          setElectiveSwapDialog(null);
+          setSwappingSlotIds(new Set([sourceSlotId]));
+          try {
+            const result = await swapElectiveSlots({
+              sourceSlotId,
+              targetDayOfWeek,
+              targetSlotSortOrder,
+              force,
+            }).unwrap();
+            if (force && result.conflicts?.length > 0) {
+              toast.success(`Elective swapped -- ${result.conflicts.length} conflict(s) created.`);
+            } else {
+              toast.success(`Elective swapped across ${result.divisionsAffected} division(s).`);
+            }
+          } catch (err: unknown) {
+            const error = err as { data?: { error?: { message?: string } } };
+            toast.error(error?.data?.error?.message ?? 'Elective swap failed.');
+          } finally {
+            setSwappingSlotIds(new Set());
+          }
+        }}
+      />
 
       {/* ── Post-swap result dialog -- shows conflicts with auto-resolve ── */}
       <Dialog
