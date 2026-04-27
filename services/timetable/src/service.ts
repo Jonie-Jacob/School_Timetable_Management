@@ -1,6 +1,7 @@
 import {
   prisma, AppError, NotFoundError,
   TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto, CreateEmptySlotDto,
+  SwapElectiveSlotsDto, PreviewElectiveSwapDto,
 } from '@timetable/shared';
 import { JobStatus, TimetableStatus, SlotType } from '@prisma/client';
 import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs';
@@ -543,13 +544,35 @@ export class TimetableService {
           include: {
             teacher: { select: { id: true } },
             assistantTeacher: { select: { id: true } },
+            electiveGroup: { select: { id: true } },
           },
         },
       },
     });
     if (!source) throw new NotFoundError('TimetableSlot', sourceSlotId);
 
-    // All slots in the same timetable
+    // If source is elective, delegate to elective-aware method
+    if (source.divisionAssignment?.electiveGroup) {
+      return this.getValidElectiveSwapTargets(schoolId, sourceSlotId);
+    }
+
+    // Also check if the source cell has elective siblings
+    const sourceHasElectiveSiblings = await prisma.timetableSlot.findFirst({
+      where: {
+        timetableId: source.timetableId,
+        workingDayId: source.workingDayId,
+        slotId: source.slotId,
+        id: { not: sourceSlotId },
+        divisionAssignment: { electiveGroupId: { not: null } },
+      },
+      select: { id: true },
+    });
+    if (sourceHasElectiveSiblings) {
+      return this.getValidElectiveSwapTargets(schoolId, sourceHasElectiveSiblings.id);
+    }
+
+    // ── Regular (non-elective) source -- check all targets in same timetable ──
+
     const allSlots = await prisma.timetableSlot.findMany({
       where: {
         timetableId: source.timetableId,
@@ -574,27 +597,67 @@ export class TimetableService {
     if (source.divisionAssignment?.teacher?.id) sourceTeacherIds.push(source.divisionAssignment.teacher.id);
     if (source.divisionAssignment?.assistantTeacher?.id) sourceTeacherIds.push(source.divisionAssignment.assistantTeacher.id);
 
-    // For each candidate target, check bidirectional teacher conflicts
+    // Deduplicate slots by (workingDayId, slotId) so elective cells with
+    // multiple rows only appear once. Pick the first row as representative.
+    const seenCells = new Set<string>();
+    const uniqueTargets: typeof allSlots = [];
+    for (const target of allSlots) {
+      const cellKey = `${target.workingDayId}:${target.slotId}`;
+      if (seenCells.has(cellKey)) continue;
+      seenCells.add(cellKey);
+      uniqueTargets.push(target);
+    }
+
     const validIds: string[] = [];
     const invalidIds: string[] = [];
 
-    for (const target of allSlots) {
-      // Skip elective cells
-      if (target.divisionAssignment?.electiveGroup) {
-        invalidIds.push(target.id);
-        continue;
+    for (const target of uniqueTargets) {
+      // For elective target cells, we need to check ALL elective teachers
+      // across ALL divisions (not just this one row's teacher)
+      const isTargetElective = !!target.divisionAssignment?.electiveGroup;
+
+      let targetTeacherIds: string[] = [];
+      let allTargetSlotIds: string[] = [target.id];
+
+      if (isTargetElective) {
+        // Collect all teachers from the full elective block at target time
+        const electiveGroupId = target.divisionAssignment!.electiveGroup!.id;
+        const electiveRows = await prisma.timetableSlot.findMany({
+          where: {
+            schoolId,
+            divisionAssignment: { electiveGroupId },
+            workingDay: { dayOfWeek: target.workingDay.dayOfWeek },
+            slot: { sortOrder: target.slot.sortOrder },
+          },
+          select: {
+            id: true,
+            divisionAssignment: {
+              select: {
+                teacherId: true,
+                assistantTeacherId: true,
+              },
+            },
+          },
+        });
+        allTargetSlotIds = electiveRows.map(r => r.id);
+        const tids = new Set<string>();
+        for (const r of electiveRows) {
+          if (r.divisionAssignment?.teacherId) tids.add(r.divisionAssignment.teacherId);
+          if (r.divisionAssignment?.assistantTeacherId) tids.add(r.divisionAssignment.assistantTeacherId);
+        }
+        targetTeacherIds = [...tids];
+      } else {
+        if (target.divisionAssignment?.teacher?.id) targetTeacherIds.push(target.divisionAssignment.teacher.id);
+        if (target.divisionAssignment?.assistantTeacher?.id) targetTeacherIds.push(target.divisionAssignment.assistantTeacher.id);
       }
 
-      const targetTeacherIds: string[] = [];
-      if (target.divisionAssignment?.teacher?.id) targetTeacherIds.push(target.divisionAssignment.teacher.id);
-      if (target.divisionAssignment?.assistantTeacher?.id) targetTeacherIds.push(target.divisionAssignment.assistantTeacher.id);
-
+      const excludeIds = [sourceSlotId, ...allTargetSlotIds];
       let hasConflict = false;
 
       // Check: source teachers at target's time (in other divisions)
       for (const tid of sourceTeacherIds) {
         const conflict = await this.findTeacherTimeConflict(
-          schoolId, [sourceSlotId, target.id],
+          schoolId, excludeIds,
           target.workingDay.dayOfWeek,
           target.slot.startTime, target.slot.endTime,
           tid,
@@ -606,7 +669,7 @@ export class TimetableService {
       if (!hasConflict) {
         for (const tid of targetTeacherIds) {
           const conflict = await this.findTeacherTimeConflict(
-            schoolId, [sourceSlotId, target.id],
+            schoolId, excludeIds,
             source.workingDay.dayOfWeek,
             source.slot.startTime, source.slot.endTime,
             tid,
@@ -768,32 +831,66 @@ export class TimetableService {
     if (!sourceSlot) throw new NotFoundError('TimetableSlot', sourceSlotId);
     if (!targetSlot) throw new NotFoundError('TimetableSlot', targetSlotId);
 
-    // ── Elective guards ──
-    for (const slot of [sourceSlot, targetSlot]) {
-      if (slot.divisionAssignment?.electiveGroup) {
-        throw new AppError(
-          'Elective cells cannot be swapped from the timetable view. Use the Elective Groups page or regenerate the timetable.',
-          400,
-          'ELECTIVE_CELL_LOCKED',
-        );
-      }
-      // Check for elective siblings at same (day, slot)
-      const electiveSiblings = await prisma.timetableSlot.findFirst({
+    // ── Elective detection: delegate to swapElectiveSlots if either slot is elective ──
+    const sourceIsElective = !!sourceSlot.divisionAssignment?.electiveGroup;
+    const targetIsElective = !!targetSlot.divisionAssignment?.electiveGroup;
+
+    // Also check for elective siblings at the same (day, slot) coordinates
+    // (a regular assignment row may share a cell with elective rows)
+    let sourceHasElectiveSiblings = false;
+    let targetHasElectiveSiblings = false;
+    if (!sourceIsElective) {
+      const sibling = await prisma.timetableSlot.findFirst({
         where: {
-          timetableId: slot.timetableId,
-          workingDayId: slot.workingDayId,
-          slotId: slot.slotId,
+          timetableId: sourceSlot.timetableId,
+          workingDayId: sourceSlot.workingDayId,
+          slotId: sourceSlot.slotId,
           divisionAssignment: { electiveGroupId: { not: null } },
         },
         select: { id: true },
       });
-      if (electiveSiblings) {
-        throw new AppError(
-          'This cell belongs to an elective group and cannot be edited from the timetable view.',
-          400,
-          'ELECTIVE_CELL_LOCKED',
-        );
+      sourceHasElectiveSiblings = !!sibling;
+    }
+    if (!targetIsElective) {
+      const sibling = await prisma.timetableSlot.findFirst({
+        where: {
+          timetableId: targetSlot.timetableId,
+          workingDayId: targetSlot.workingDayId,
+          slotId: targetSlot.slotId,
+          divisionAssignment: { electiveGroupId: { not: null } },
+        },
+        select: { id: true },
+      });
+      targetHasElectiveSiblings = !!sibling;
+    }
+
+    if (sourceIsElective || sourceHasElectiveSiblings || targetIsElective || targetHasElectiveSiblings) {
+      // Determine which is the elective side and which provides the target coordinates
+      const electiveSlot = (sourceIsElective || sourceHasElectiveSiblings) ? sourceSlot : targetSlot;
+      const otherSlot = electiveSlot === sourceSlot ? targetSlot : sourceSlot;
+
+      // Find the actual elective slot ID (may be a sibling, not the row we loaded)
+      let electiveSlotId = electiveSlot.id;
+      if (!electiveSlot.divisionAssignment?.electiveGroup) {
+        // The row itself is not elective, but it has elective siblings -- find one
+        const electiveSibling = await prisma.timetableSlot.findFirst({
+          where: {
+            timetableId: electiveSlot.timetableId,
+            workingDayId: electiveSlot.workingDayId,
+            slotId: electiveSlot.slotId,
+            divisionAssignment: { electiveGroupId: { not: null } },
+          },
+          select: { id: true },
+        });
+        if (electiveSibling) electiveSlotId = electiveSibling.id;
       }
+
+      return this.swapElectiveSlots(schoolId, {
+        sourceSlotId: electiveSlotId,
+        targetDayOfWeek: otherSlot.workingDay.dayOfWeek,
+        targetSlotSortOrder: otherSlot.slot.sortOrder,
+        force,
+      });
     }
 
     // ── Conflict detection ──
@@ -1279,5 +1376,731 @@ export class TimetableService {
       teacher: { id: teacher.id, name: teacher.name },
       days: Object.values(grid).sort((a, b) => a.workingDay.sortOrder - b.workingDay.sortOrder),
     };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── Elective Slot Swap ──
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Resolve the full elective block: all timetable_slot rows for the given
+   * elective group at the source time coordinates, across ALL participating
+   * divisions. Returns rows grouped by timetableId (one group per division).
+   */
+  private async resolveElectiveBlock(schoolId: string, sourceSlotId: string) {
+    const sourceRow = await prisma.timetableSlot.findFirst({
+      where: { id: sourceSlotId, schoolId },
+      include: {
+        workingDay: true,
+        slot: true,
+        divisionAssignment: {
+          select: { electiveGroupId: true },
+        },
+      },
+    });
+    if (!sourceRow) throw new NotFoundError('TimetableSlot', sourceSlotId);
+    if (!sourceRow.divisionAssignment?.electiveGroupId) {
+      throw new AppError('Source slot is not an elective. Use the regular swap endpoint.', 400, 'NOT_ELECTIVE');
+    }
+
+    const electiveGroupId = sourceRow.divisionAssignment.electiveGroupId;
+    const sourceDayOfWeek = sourceRow.workingDay.dayOfWeek;
+    const sourceSlotSortOrder = sourceRow.slot.sortOrder;
+
+    // Find ALL timetable_slot rows for this elective group at the same time
+    const allRows = await prisma.timetableSlot.findMany({
+      where: {
+        schoolId,
+        divisionAssignment: { electiveGroupId },
+        workingDay: { dayOfWeek: sourceDayOfWeek },
+        slot: { sortOrder: sourceSlotSortOrder },
+      },
+      include: {
+        timetable: {
+          include: { division: { include: { class: true } } },
+        },
+        workingDay: true,
+        slot: true,
+        divisionAssignment: {
+          include: {
+            teacher: { select: { id: true, name: true } },
+            assistantTeacher: { select: { id: true, name: true } },
+            subject: { select: { id: true, name: true } },
+            electiveGroup: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    if (allRows.length === 0) {
+      throw new AppError('No elective slots found at the source coordinates', 404, 'NO_ELECTIVE_SLOTS');
+    }
+
+    // Group by timetableId (one group per division)
+    const byTimetable = new Map<string, typeof allRows>();
+    for (const row of allRows) {
+      const key = row.timetableId;
+      if (!byTimetable.has(key)) byTimetable.set(key, []);
+      byTimetable.get(key)!.push(row);
+    }
+
+    return {
+      electiveGroupId,
+      electiveGroupName: allRows[0].divisionAssignment?.electiveGroup?.name ?? '',
+      sourceDayOfWeek,
+      sourceSlotSortOrder,
+      byTimetable,
+      allRows,
+    };
+  }
+
+  /**
+   * For each timetable (division) in the elective block, resolve the
+   * target coordinates (workingDayId + slotId) and the displaced rows.
+   */
+  private async resolveTargetCells(
+    schoolId: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    byTimetable: Map<string, any[]>,
+    targetDayOfWeek: number,
+    targetSlotSortOrder: number,
+  ) {
+    type DivisionSwapGroup = {
+      timetableId: string;
+      className: string;
+      divisionLabel: string;
+      divisionId: string;
+      sourceWorkingDayId: string;
+      sourceSlotId: string;
+      targetWorkingDayId: string;
+      targetSlotId: string;
+      sourceRows: { id: string; divisionAssignmentId: string | null }[];
+      targetRows: {
+        id: string;
+        divisionAssignmentId: string | null;
+        divisionAssignment: {
+          teacherId: string | null;
+          assistantTeacherId: string | null;
+          teacher: { id: string; name: string } | null;
+          assistantTeacher: { id: string; name: string } | null;
+          subject: { id: string; name: string } | null;
+          electiveGroupId: string | null;
+          electiveGroup: { id: string; name: string } | null;
+        } | null;
+      }[];
+      targetElectiveGroupId: string | null;
+    };
+
+    const groups: DivisionSwapGroup[] = [];
+
+    for (const [timetableId, sourceRows] of byTimetable) {
+      // Each row has the full Prisma include shape from resolveElectiveBlock
+      const sampleRow = sourceRows[0];
+
+      // Find target workingDay for this timetable's period structure
+      const targetWorkingDay = await prisma.workingDay.findFirst({
+        where: {
+          dayOfWeek: targetDayOfWeek,
+          periodStructure: {
+            divisions: {
+              some: { id: sampleRow.timetable.division.id },
+            },
+          },
+        },
+        select: { id: true },
+      });
+      if (!targetWorkingDay) {
+        throw new AppError(
+          `Target day (dayOfWeek=${targetDayOfWeek}) not available for ${sampleRow.timetable.division.class.name} ${sampleRow.timetable.division.label}`,
+          400, 'TARGET_DAY_UNAVAILABLE',
+        );
+      }
+
+      // Find target slot
+      const targetSlot = await prisma.slot.findFirst({
+        where: {
+          workingDayId: targetWorkingDay.id,
+          sortOrder: targetSlotSortOrder,
+          slotType: SlotType.PERIOD,
+        },
+        select: { id: true },
+      });
+      if (!targetSlot) {
+        throw new AppError(
+          `Target period (sortOrder=${targetSlotSortOrder}) not available for ${sampleRow.timetable.division.class.name} ${sampleRow.timetable.division.label}`,
+          400, 'TARGET_SLOT_UNAVAILABLE',
+        );
+      }
+
+      // Load displaced rows at target coordinates
+      const targetRows = await prisma.timetableSlot.findMany({
+        where: {
+          timetableId,
+          workingDayId: targetWorkingDay.id,
+          slotId: targetSlot.id,
+          schoolId,
+        },
+        include: {
+          divisionAssignment: {
+            include: {
+              teacher: { select: { id: true, name: true } },
+              assistantTeacher: { select: { id: true, name: true } },
+              subject: { select: { id: true, name: true } },
+              electiveGroup: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+
+      const targetElectiveGroupId = targetRows.find(r => r.divisionAssignment?.electiveGroupId)?.divisionAssignment?.electiveGroupId ?? null;
+
+      groups.push({
+        timetableId,
+        className: sampleRow.timetable.division.class.name,
+        divisionLabel: sampleRow.timetable.division.label,
+        divisionId: sampleRow.timetable.division.id,
+        sourceWorkingDayId: sampleRow.workingDay.id,
+        sourceSlotId: sampleRow.slot.id,
+        targetWorkingDayId: targetWorkingDay.id,
+        targetSlotId: targetSlot.id,
+        sourceRows: sourceRows.map(r => ({ id: r.id, divisionAssignmentId: (r as { divisionAssignmentId: string | null }).divisionAssignmentId ?? null })),
+        targetRows: targetRows as DivisionSwapGroup['targetRows'],
+        targetElectiveGroupId,
+      });
+    }
+
+    return groups;
+  }
+
+  /**
+   * Collect all teacher IDs from a set of timetable slot rows.
+   */
+  private collectTeacherIds(rows: { divisionAssignment?: { teacherId?: string | null; assistantTeacherId?: string | null; teacher?: { id: string } | null; assistantTeacher?: { id: string } | null } | null }[]): string[] {
+    const ids = new Set<string>();
+    for (const row of rows) {
+      const da = row.divisionAssignment;
+      if (!da) continue;
+      if (da.teacher?.id) ids.add(da.teacher.id);
+      if (da.assistantTeacher?.id) ids.add(da.assistantTeacher.id);
+    }
+    return Array.from(ids);
+  }
+
+  /**
+   * Check all teacher conflicts for an elective swap. Returns conflict details.
+   */
+  /**
+   * Compute the widest time envelope from an array of time ranges.
+   * When elective divisions use different period structures, their P3
+   * might be 10:50-11:30 in one structure and 10:30-11:10 in another.
+   * We use min(startTime) to max(endTime) so the conflict check catches
+   * any overlap across ALL structures.
+   */
+  private widenTimeEnvelope(times: { startTime: Date; endTime: Date }[]): { startTime: Date; endTime: Date } {
+    let minStart = times[0].startTime;
+    let maxEnd = times[0].endTime;
+    for (let i = 1; i < times.length; i++) {
+      if (times[i].startTime < minStart) minStart = times[i].startTime;
+      if (times[i].endTime > maxEnd) maxEnd = times[i].endTime;
+    }
+    return { startTime: minStart, endTime: maxEnd };
+  }
+
+  private async checkElectiveSwapConflicts(
+    schoolId: string,
+    sourceRows: { id: string }[],
+    targetRows: { id: string }[],
+    sourceTeacherIds: string[],
+    targetTeacherIds: string[],
+    sourceDayOfWeek: number,
+    sourceSlotTimes: { startTime: Date; endTime: Date }[],
+    targetDayOfWeek: number,
+    targetSlotTimes: { startTime: Date; endTime: Date }[],
+  ) {
+    // Use widest time envelope across all divisions' period structures
+    const sourceEnvelope = this.widenTimeEnvelope(sourceSlotTimes);
+    const targetEnvelope = this.widenTimeEnvelope(targetSlotTimes);
+    type ElectiveConflictInfo = {
+      teacherName: string;
+      teacherId: string;
+      className: string;
+      divisionLabel: string;
+      divisionId: string;
+      conflictedSlotId: string;
+      direction: 'elective_to_target' | 'displaced_to_source';
+    };
+    const conflicts: ElectiveConflictInfo[] = [];
+    const allExcludeIds = [...sourceRows.map(r => r.id), ...targetRows.map(r => r.id)];
+
+    // Check source elective teachers at target time
+    for (const teacherId of sourceTeacherIds) {
+      const conflict = await this.findTeacherTimeConflict(
+        schoolId, allExcludeIds, targetDayOfWeek,
+        targetEnvelope.startTime, targetEnvelope.endTime, teacherId,
+      );
+      if (conflict) {
+        const teacher = await prisma.teacher.findFirst({ where: { id: teacherId }, select: { name: true } });
+        conflicts.push({
+          teacherName: teacher?.name ?? 'Unknown',
+          teacherId,
+          className: conflict.timetable.division?.class?.name ?? '',
+          divisionLabel: conflict.timetable.division?.label ?? '',
+          divisionId: conflict.timetable.divisionId,
+          conflictedSlotId: conflict.id,
+          direction: 'elective_to_target',
+        });
+      }
+    }
+
+    // Check displaced target teachers at source time
+    for (const teacherId of targetTeacherIds) {
+      const conflict = await this.findTeacherTimeConflict(
+        schoolId, allExcludeIds, sourceDayOfWeek,
+        sourceEnvelope.startTime, sourceEnvelope.endTime, teacherId,
+      );
+      if (conflict) {
+        const teacher = await prisma.teacher.findFirst({ where: { id: teacherId }, select: { name: true } });
+        conflicts.push({
+          teacherName: teacher?.name ?? 'Unknown',
+          teacherId,
+          className: conflict.timetable.division?.class?.name ?? '',
+          divisionLabel: conflict.timetable.division?.label ?? '',
+          divisionId: conflict.timetable.divisionId,
+          conflictedSlotId: conflict.id,
+          direction: 'displaced_to_source',
+        });
+      }
+    }
+
+    return conflicts;
+  }
+
+  // ── Swap Elective Slots (public endpoint) ──
+
+  async swapElectiveSlots(schoolId: string, dto: SwapElectiveSlotsDto) {
+    const { sourceSlotId, targetDayOfWeek, targetSlotSortOrder, force } = dto;
+
+    // Step A: Resolve the source elective block
+    const block = await this.resolveElectiveBlock(schoolId, sourceSlotId);
+
+    // Check: source and target are not the same coordinates
+    if (block.sourceDayOfWeek === targetDayOfWeek && block.sourceSlotSortOrder === targetSlotSortOrder) {
+      throw new AppError('Source and target are the same slot', 400, 'SAME_SLOT');
+    }
+
+    // Step B: Resolve target cells in each division
+    const groups = await this.resolveTargetCells(schoolId, block.byTimetable, targetDayOfWeek, targetSlotSortOrder);
+
+    // Check if the target is a different elective group -- if so, we need to
+    // resolve that elective's FULL block too (it may span divisions not in the
+    // source elective, but we only handle the overlapping divisions here).
+    const targetElectiveGroupId = groups.find(g => g.targetElectiveGroupId)?.targetElectiveGroupId ?? null;
+    if (targetElectiveGroupId && targetElectiveGroupId === block.electiveGroupId) {
+      throw new AppError('Source and target belong to the same elective group', 400, 'SAME_ELECTIVE');
+    }
+
+    // If target is a different elective group, load its full block to check
+    // if it also has divisions NOT in the source elective that need moving
+    let targetElectiveExtraGroups: Awaited<ReturnType<typeof this.resolveTargetCells>> = [];
+    if (targetElectiveGroupId) {
+      // Find all rows of the target elective at target coordinates
+      const targetElectiveRows = await prisma.timetableSlot.findMany({
+        where: {
+          schoolId,
+          divisionAssignment: { electiveGroupId: targetElectiveGroupId },
+          workingDay: { dayOfWeek: targetDayOfWeek },
+          slot: { sortOrder: targetSlotSortOrder },
+        },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+          workingDay: true,
+          slot: true,
+          divisionAssignment: {
+            include: {
+              teacher: { select: { id: true, name: true } },
+              assistantTeacher: { select: { id: true, name: true } },
+              subject: { select: { id: true, name: true } },
+              electiveGroup: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+
+      // Find divisions in the target elective that are NOT in the source elective
+      const sourceTimetableIds = new Set(groups.map(g => g.timetableId));
+      const extraByTimetable = new Map<string, typeof targetElectiveRows>();
+      for (const row of targetElectiveRows) {
+        if (!sourceTimetableIds.has(row.timetableId)) {
+          if (!extraByTimetable.has(row.timetableId)) extraByTimetable.set(row.timetableId, []);
+          extraByTimetable.get(row.timetableId)!.push(row);
+        }
+      }
+
+      if (extraByTimetable.size > 0) {
+        // These extra divisions also need to move the target elective to source coordinates
+        targetElectiveExtraGroups = await this.resolveTargetCells(
+          schoolId, extraByTimetable, block.sourceDayOfWeek, block.sourceSlotSortOrder,
+        );
+      }
+    }
+
+    // Step C: Collect all teacher IDs
+    const sourceTeacherIds = this.collectTeacherIds(block.allRows);
+    const allTargetRows = groups.flatMap(g => g.targetRows);
+    const extraTargetRows = targetElectiveExtraGroups.flatMap(g => g.sourceRows);
+    const targetTeacherIds = this.collectTeacherIds([...allTargetRows]);
+    // Also collect teachers from extra target elective divisions
+    if (targetElectiveExtraGroups.length > 0) {
+      const extraTeacherIds = this.collectTeacherIds(
+        targetElectiveExtraGroups.flatMap(g =>
+          g.sourceRows.map(r => ({ divisionAssignment: null }))
+        ),
+      );
+      // Actually we need the teacher data from the target elective extra rows
+      for (const eg of targetElectiveExtraGroups) {
+        for (const r of eg.targetRows) {
+          if (r.divisionAssignment?.teacher?.id) targetTeacherIds.push(r.divisionAssignment.teacher.id);
+          if (r.divisionAssignment?.assistantTeacher?.id) targetTeacherIds.push(r.divisionAssignment.assistantTeacher.id);
+        }
+      }
+    }
+
+    // Step D: Check conflicts
+    // Collect slot times from ALL divisions (different period structures may
+    // have different clock times for the same sortOrder). We pass all times
+    // so checkElectiveSwapConflicts uses the widest envelope for overlap detection.
+    const sourceSlotTimes = [...new Map(
+      block.allRows.map(r => [r.slot.id, { startTime: r.slot.startTime, endTime: r.slot.endTime }])
+    ).values()];
+
+    const targetSlotIds = [...new Set(groups.map(g => g.targetSlotId))];
+    const targetSlotRecords = await prisma.slot.findMany({
+      where: { id: { in: targetSlotIds } },
+      select: { id: true, startTime: true, endTime: true },
+    });
+    const targetSlotTimes = targetSlotRecords.map(s => ({ startTime: s.startTime, endTime: s.endTime }));
+    if (targetSlotTimes.length === 0) throw new AppError('Target slot not found', 404, 'SLOT_NOT_FOUND');
+
+    const allSourceRowsFlat = block.allRows.map(r => ({ id: r.id }));
+    const allTargetRowsFlat = [
+      ...groups.flatMap(g => g.targetRows.map(r => ({ id: r.id }))),
+      ...targetElectiveExtraGroups.flatMap(g => [...g.sourceRows.map(r => ({ id: r.id })), ...g.targetRows.map(r => ({ id: r.id }))]),
+    ];
+
+    const conflicts = await this.checkElectiveSwapConflicts(
+      schoolId,
+      allSourceRowsFlat,
+      allTargetRowsFlat,
+      [...new Set(sourceTeacherIds)],
+      [...new Set(targetTeacherIds)],
+      block.sourceDayOfWeek,
+      sourceSlotTimes,
+      targetDayOfWeek,
+      targetSlotTimes,
+    );
+
+    // Step E: If conflicts and not forced, return 409
+    if (conflicts.length > 0 && !force) {
+      throw new AppError(
+        JSON.stringify({ conflicts }),
+        409,
+        'TEACHER_CONFLICT',
+      );
+    }
+
+    // Step F: Execute atomic swap
+    await prisma.$transaction(async (tx) => {
+      // Swap source elective and target in each division
+      for (const group of groups) {
+        // Move source elective rows to target coordinates
+        for (const row of group.sourceRows) {
+          await tx.timetableSlot.update({
+            where: { id: row.id },
+            data: { workingDayId: group.targetWorkingDayId, slotId: group.targetSlotId },
+          });
+        }
+        // Move displaced target rows to source coordinates
+        for (const row of group.targetRows) {
+          await tx.timetableSlot.update({
+            where: { id: row.id },
+            data: { workingDayId: group.sourceWorkingDayId, slotId: group.sourceSlotId },
+          });
+        }
+      }
+
+      // Handle extra target elective divisions (not in source elective)
+      for (const group of targetElectiveExtraGroups) {
+        // These rows belong to the target elective in divisions that are NOT
+        // part of the source elective. Move them to the source coordinates.
+        for (const row of group.sourceRows) {
+          await tx.timetableSlot.update({
+            where: { id: row.id },
+            data: { workingDayId: group.targetWorkingDayId, slotId: group.targetSlotId },
+          });
+        }
+        // Move whatever was at the source coordinates in these divisions to target
+        for (const row of group.targetRows) {
+          await tx.timetableSlot.update({
+            where: { id: row.id },
+            data: { workingDayId: group.sourceWorkingDayId, slotId: group.sourceSlotId },
+          });
+        }
+      }
+    });
+
+    // Step G: Create conflict notifications for force-swaps
+    if (force && conflicts.length > 0) {
+      const notificationData = conflicts.map((c) => ({
+        schoolId,
+        timetableId: groups.find(g => g.divisionId === c.divisionId)?.timetableId
+          ?? targetElectiveExtraGroups.find(g => g.divisionId === c.divisionId)?.timetableId
+          ?? groups[0].timetableId,
+        divisionId: c.divisionId,
+        conflictType: 'SWAP_CONFLICT' as const,
+        changeDescription: `Teacher "${c.teacherName}" is double-booked -- also teaching ${c.className} Division ${c.divisionLabel} at the same time slot`,
+      }));
+      await prisma.timetableNotification.createMany({ data: notificationData }).catch(() => {});
+    }
+
+    return {
+      electiveGroupId: block.electiveGroupId,
+      electiveGroupName: block.electiveGroupName,
+      divisionsAffected: groups.length + targetElectiveExtraGroups.length,
+      conflicts: force ? conflicts : [],
+    };
+  }
+
+  // ── Preview Elective Swap ──
+
+  async previewElectiveSwap(schoolId: string, dto: PreviewElectiveSwapDto) {
+    const { sourceSlotId, targetDayOfWeek, targetSlotSortOrder } = dto;
+
+    const block = await this.resolveElectiveBlock(schoolId, sourceSlotId);
+
+    if (block.sourceDayOfWeek === targetDayOfWeek && block.sourceSlotSortOrder === targetSlotSortOrder) {
+      throw new AppError('Source and target are the same slot', 400, 'SAME_SLOT');
+    }
+
+    const groups = await this.resolveTargetCells(schoolId, block.byTimetable, targetDayOfWeek, targetSlotSortOrder);
+
+    // Collect teachers for conflict check
+    const sourceTeacherIds = this.collectTeacherIds(block.allRows);
+    const allTargetRows = groups.flatMap(g => g.targetRows);
+    const targetTeacherIds = this.collectTeacherIds(allTargetRows);
+
+    // Collect slot times from ALL divisions for widest envelope
+    const sourceSlotTimes = [...new Map(
+      block.allRows.map(r => [r.slot.id, { startTime: r.slot.startTime, endTime: r.slot.endTime }])
+    ).values()];
+    const targetSlotIds = [...new Set(groups.map(g => g.targetSlotId))];
+    const targetSlotRecords = await prisma.slot.findMany({
+      where: { id: { in: targetSlotIds } },
+      select: { id: true, startTime: true, endTime: true },
+    });
+    const targetSlotTimes = targetSlotRecords.map(s => ({ startTime: s.startTime, endTime: s.endTime }));
+    if (targetSlotTimes.length === 0) throw new AppError('Target slot not found', 404, 'SLOT_NOT_FOUND');
+
+    const allSourceRowsFlat = block.allRows.map(r => ({ id: r.id }));
+    const allTargetRowsFlat = groups.flatMap(g => g.targetRows.map(r => ({ id: r.id })));
+
+    const conflicts = await this.checkElectiveSwapConflicts(
+      schoolId,
+      allSourceRowsFlat,
+      allTargetRowsFlat,
+      [...new Set(sourceTeacherIds)],
+      [...new Set(targetTeacherIds)],
+      block.sourceDayOfWeek,
+      sourceSlotTimes,
+      targetDayOfWeek,
+      targetSlotTimes,
+    );
+
+    // Build affected divisions preview
+    const affectedDivisions = groups.map(g => {
+      const targetContent = g.targetRows
+        .filter(r => r.divisionAssignment)
+        .map(r => ({
+          subject: r.divisionAssignment!.subject?.name ?? 'Unknown',
+          teacher: r.divisionAssignment!.teacher?.name ?? 'Unassigned',
+          isElective: !!r.divisionAssignment!.electiveGroupId,
+          electiveGroupName: r.divisionAssignment!.electiveGroup?.name ?? null,
+        }));
+
+      return {
+        className: g.className,
+        divisionLabel: g.divisionLabel,
+        divisionId: g.divisionId,
+        currentTargetContent: targetContent.length > 0 ? targetContent : null,
+        action: targetContent.length > 0 ? 'displaced_to_source' as const : 'empty_freed' as const,
+      };
+    });
+
+    // Resolve day labels for display
+    const sourceDayLabel = block.allRows[0].workingDay.label;
+    const targetDayRecord = await prisma.workingDay.findFirst({
+      where: { id: groups[0].targetWorkingDayId },
+      select: { label: true },
+    });
+
+    return {
+      sourceElectiveGroup: { id: block.electiveGroupId, name: block.electiveGroupName },
+      sourceCoordinates: { dayLabel: sourceDayLabel, slotSortOrder: block.sourceSlotSortOrder },
+      targetCoordinates: { dayLabel: targetDayRecord?.label ?? '', slotSortOrder: targetSlotSortOrder },
+      affectedDivisions,
+      targetElectiveGroupId: groups.find(g => g.targetElectiveGroupId)?.targetElectiveGroupId ?? null,
+      conflicts,
+    };
+  }
+
+  // ── Valid Elective Swap Targets ──
+
+  async getValidElectiveSwapTargets(schoolId: string, sourceSlotId: string) {
+    const block = await this.resolveElectiveBlock(schoolId, sourceSlotId);
+    const sourceTeacherIds = [...new Set(this.collectTeacherIds(block.allRows))];
+
+    // Get all unique (dayOfWeek, slotSortOrder) coordinates from the period
+    // structures used by the elective's divisions
+    const divisionIds = [...new Set(block.allRows.map(r => r.timetable.division.id))];
+    const divisions = await prisma.division.findMany({
+      where: { id: { in: divisionIds }, deletedAt: null },
+      select: { id: true, periodStructureId: true },
+    });
+    const structureIds = [...new Set(divisions.filter(d => d.periodStructureId).map(d => d.periodStructureId!))];
+
+    // Collect all PERIOD slots across all structures used by the elective's divisions
+    const allPeriodSlots = await prisma.slot.findMany({
+      where: {
+        slotType: SlotType.PERIOD,
+        workingDay: { periodStructureId: { in: structureIds } },
+      },
+      include: { workingDay: true },
+    });
+
+    // Build set of unique (dayOfWeek, sortOrder) coordinates that exist in ALL structures
+    const coordsByStructure = new Map<string, Set<string>>();
+    for (const slot of allPeriodSlots) {
+      const structId = slot.workingDay.periodStructureId;
+      if (!coordsByStructure.has(structId)) coordsByStructure.set(structId, new Set());
+      coordsByStructure.get(structId)!.add(`${slot.workingDay.dayOfWeek}:${slot.sortOrder}`);
+    }
+    // Intersect: only coordinates present in ALL structures
+    let commonCoords: Set<string> | null = null;
+    for (const coords of coordsByStructure.values()) {
+      if (!commonCoords) { commonCoords = new Set(coords); continue; }
+      for (const c of commonCoords) {
+        if (!coords.has(c)) commonCoords.delete(c);
+      }
+    }
+    if (!commonCoords) commonCoords = new Set();
+
+    // Remove the source's own coordinates
+    commonCoords.delete(`${block.sourceDayOfWeek}:${block.sourceSlotSortOrder}`);
+
+    // For each candidate, check teacher availability
+    type CoordinateResult = {
+      dayOfWeek: number;
+      slotSortOrder: number;
+      valid: boolean;
+      reason?: string;
+    };
+    const validCoordinates: CoordinateResult[] = [];
+    const invalidCoordinates: CoordinateResult[] = [];
+
+    // Build a lookup of ALL slot times per coordinate (multiple structures may
+    // have different clock times for the same sortOrder). We collect all so we
+    // can compute the widest time envelope for conflict detection.
+    const slotTimesByCoord = new Map<string, { startTime: Date; endTime: Date }[]>();
+    for (const slot of allPeriodSlots) {
+      const key = `${slot.workingDay.dayOfWeek}:${slot.sortOrder}`;
+      if (!slotTimesByCoord.has(key)) slotTimesByCoord.set(key, []);
+      slotTimesByCoord.get(key)!.push({ startTime: slot.startTime, endTime: slot.endTime });
+    }
+
+    // Source slot times across all divisions (widest envelope)
+    const sourceSlotTimes = [...new Map(
+      block.allRows.map(r => [r.slot.id, { startTime: r.slot.startTime, endTime: r.slot.endTime }])
+    ).values()];
+    const sourceEnvelope = this.widenTimeEnvelope(sourceSlotTimes);
+
+    // All slot IDs in the source elective block (to exclude from conflict checks)
+    const sourceSlotIds = block.allRows.map(r => r.id);
+
+    for (const coord of commonCoords) {
+      const [dayStr, sortStr] = coord.split(':');
+      const dayOfWeek = parseInt(dayStr, 10);
+      const slotSortOrder = parseInt(sortStr, 10);
+      const coordTimes = slotTimesByCoord.get(coord);
+      if (!coordTimes || coordTimes.length === 0) continue;
+      const targetEnvelope = this.widenTimeEnvelope(coordTimes);
+
+      // Also need to collect target cell slot IDs to exclude from conflict check
+      // We do a lightweight query: find all slots at target coordinates in the elective's timetables
+      const timetableIds = [...block.byTimetable.keys()];
+      const targetCellSlots = await prisma.timetableSlot.findMany({
+        where: {
+          timetableId: { in: timetableIds },
+          workingDay: { dayOfWeek },
+          slot: { sortOrder: slotSortOrder },
+          schoolId,
+        },
+        select: {
+          id: true,
+          divisionAssignment: {
+            select: {
+              teacherId: true,
+              assistantTeacherId: true,
+            },
+          },
+        },
+      });
+      const excludeIds = [...sourceSlotIds, ...targetCellSlots.map(s => s.id)];
+
+      // Collect target (displaced) teacher IDs
+      const displacedTeacherIds = new Set<string>();
+      for (const ts of targetCellSlots) {
+        if (ts.divisionAssignment?.teacherId) displacedTeacherIds.add(ts.divisionAssignment.teacherId);
+        if (ts.divisionAssignment?.assistantTeacherId) displacedTeacherIds.add(ts.divisionAssignment.assistantTeacherId);
+      }
+
+      let hasConflict = false;
+      let reason = '';
+
+      // Check source elective teachers at target time (using widest envelope)
+      for (const tid of sourceTeacherIds) {
+        const conflict = await this.findTeacherTimeConflict(
+          schoolId, excludeIds, dayOfWeek,
+          targetEnvelope.startTime, targetEnvelope.endTime, tid,
+        );
+        if (conflict) {
+          hasConflict = true;
+          const teacher = await prisma.teacher.findFirst({ where: { id: tid }, select: { name: true } });
+          reason = `${teacher?.name ?? 'Teacher'} busy at target time`;
+          break;
+        }
+      }
+
+      // Check displaced teachers at source time (using widest envelope)
+      if (!hasConflict) {
+        for (const tid of displacedTeacherIds) {
+          const conflict = await this.findTeacherTimeConflict(
+            schoolId, excludeIds, block.sourceDayOfWeek,
+            sourceEnvelope.startTime, sourceEnvelope.endTime, tid,
+          );
+          if (conflict) {
+            hasConflict = true;
+            const teacher = await prisma.teacher.findFirst({ where: { id: tid }, select: { name: true } });
+            reason = `${teacher?.name ?? 'Teacher'} (displaced) busy at source time`;
+            break;
+          }
+        }
+      }
+
+      const result: CoordinateResult = { dayOfWeek, slotSortOrder, valid: !hasConflict };
+      if (reason) result.reason = reason;
+      if (hasConflict) invalidCoordinates.push(result);
+      else validCoordinates.push(result);
+    }
+
+    return { validCoordinates, invalidCoordinates };
   }
 }

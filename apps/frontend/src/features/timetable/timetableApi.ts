@@ -107,6 +107,72 @@ interface AutoResolveResponse {
   toSlotId: string;
 }
 
+// ── Elective swap types ──
+
+export interface ElectiveSwapConflict {
+  teacherName: string;
+  teacherId: string;
+  className: string;
+  divisionLabel: string;
+  divisionId: string;
+  conflictedSlotId: string;
+  direction: 'elective_to_target' | 'displaced_to_source';
+}
+
+interface SwapElectiveSlotsRequest {
+  sourceSlotId: string;
+  targetDayOfWeek: number;
+  targetSlotSortOrder: number;
+  force?: boolean;
+}
+
+interface SwapElectiveSlotsResponse {
+  electiveGroupId: string;
+  electiveGroupName: string;
+  divisionsAffected: number;
+  conflicts: ElectiveSwapConflict[];
+}
+
+interface ElectiveSwapCoordinate {
+  dayOfWeek: number;
+  slotSortOrder: number;
+  valid: boolean;
+  reason?: string;
+}
+
+interface ValidElectiveSwapTargetsResponse {
+  validCoordinates: ElectiveSwapCoordinate[];
+  invalidCoordinates: ElectiveSwapCoordinate[];
+}
+
+interface PreviewElectiveSwapRequest {
+  sourceSlotId: string;
+  targetDayOfWeek: number;
+  targetSlotSortOrder: number;
+}
+
+interface PreviewAffectedDivision {
+  className: string;
+  divisionLabel: string;
+  divisionId: string;
+  currentTargetContent: {
+    subject: string;
+    teacher: string;
+    isElective: boolean;
+    electiveGroupName: string | null;
+  }[] | null;
+  action: 'displaced_to_source' | 'empty_freed';
+}
+
+export interface PreviewElectiveSwapResponse {
+  sourceElectiveGroup: { id: string; name: string };
+  sourceCoordinates: { dayLabel: string; slotSortOrder: number };
+  targetCoordinates: { dayLabel: string; slotSortOrder: number };
+  affectedDivisions: PreviewAffectedDivision[];
+  targetElectiveGroupId: string | null;
+  conflicts: ElectiveSwapConflict[];
+}
+
 export const timetableApi = createApi({
   reducerPath: 'timetableApi',
   baseQuery,
@@ -188,6 +254,32 @@ export const timetableApi = createApi({
       transformResponse: (response: { data: AutoResolveResponse }) => response.data,
       invalidatesTags: ['Timetable'],
     }),
+
+    // ── Elective swap endpoints ──
+
+    getValidElectiveSwapTargets: builder.query<ValidElectiveSwapTargetsResponse, string>({
+      query: (slotId) => `timetables/slots/${slotId}/valid-elective-swaps`,
+      transformResponse: (response: { data: ValidElectiveSwapTargetsResponse }) => response.data,
+    }),
+
+    swapElectiveSlots: builder.mutation<SwapElectiveSlotsResponse, SwapElectiveSlotsRequest>({
+      query: (body) => ({
+        url: 'timetables/slots/swap-elective',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: SwapElectiveSlotsResponse }) => response.data,
+      invalidatesTags: ['Timetable'],
+    }),
+
+    previewElectiveSwap: builder.mutation<PreviewElectiveSwapResponse, PreviewElectiveSwapRequest>({
+      query: (body) => ({
+        url: 'timetables/slots/preview-elective-swap',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: PreviewElectiveSwapResponse }) => response.data,
+    }),
   }),
 });
 
@@ -202,4 +294,7 @@ export const {
   useSwapSlotsMutation,
   useCreateEmptySlotMutation,
   useAutoResolveConflictMutation,
+  useLazyGetValidElectiveSwapTargetsQuery,
+  useSwapElectiveSlotsMutation,
+  usePreviewElectiveSwapMutation,
 } = timetableApi;

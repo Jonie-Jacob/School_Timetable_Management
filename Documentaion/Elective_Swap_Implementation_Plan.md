@@ -1,7 +1,7 @@
 # Elective Slot Swap -- Implementation Plan
 
 > Created: April 27, 2026
-> Status: REVIEW -- pending approval before implementation
+> Status: IN PROGRESS -- Phase 1 complete
 
 ## Overview
 
@@ -10,6 +10,25 @@ Enable drag-and-drop swapping for elective cells in the timetable view. Currentl
 ## Key Principle
 
 **An elective group is an atomic block.** When any slot belonging to an elective group moves, ALL slots belonging to that same group across ALL participating divisions must move to the same new time coordinate. Teacher-to-slot distribution within the block does NOT change -- only the time coordinates (workingDayId, slotId) change.
+
+## Cross-Structure Time Envelope (Design Pattern)
+
+**Applies to:** Phase 1 (swapElectiveSlots), Phase 2 (getValidElectiveSwapTargets), Phase 3 (regular swap delegation), Phase 5 (preview)
+
+Elective divisions may use different period structures with different clock times for the same `sortOrder`. For example:
+- XII A (Normal structure): P3 = 10:50-11:30
+- XII B (Extended structure): P3 = 10:30-11:10
+
+A teacher busy at 10:30-10:50 in another class would conflict with XII B's P3 but NOT with XII A's P3. If we only checked against one division's times, we'd miss the conflict.
+
+**Solution:** Wherever teacher conflicts are checked for an elective swap, we:
+1. Collect slot `startTime`/`endTime` from ALL divisions in the elective
+2. Compute the **widest time envelope**: `min(startTime)` to `max(endTime)`
+3. Use this envelope for `findTeacherTimeConflict()` calls
+
+This is implemented via the `widenTimeEnvelope()` helper in `service.ts`. Any new phase that adds conflict checking for elective swaps **must** use this pattern -- never use a single division's times.
+
+---
 
 ## Current State
 
@@ -110,14 +129,18 @@ From the source elective block (all divisions):
 From the displaced target cells (all divisions):
 - Collect UNION of all `teacherId` and `assistantTeacherId` from all target rows
 
-**Step D -- Check teacher conflicts:**
+**Step D -- Check teacher conflicts (with cross-structure time envelope):**
+
+**Critical:** Elective divisions may use different period structures with different clock times for the same `sortOrder`. For example, XII A's P3 = 10:50-11:30 but XII B's P3 = 10:30-11:10. Using a single division's times for conflict detection would miss overlaps in other structures.
+
+**Solution:** Collect slot times from ALL divisions and compute the **widest time envelope** (`min(startTime)` to `max(endTime)`) before checking conflicts. This ensures any teacher booking that overlaps with ANY division's time range is caught.
 
 For each source teacher:
-1. Check if teacher is busy at the TARGET time in any OTHER division (not the ones being swapped)
+1. Check if teacher is busy at the TARGET time envelope in any OTHER division (not the ones being swapped)
 2. Exclude all slot IDs involved in this swap from the conflict check
 
 For each displaced target teacher:
-1. Check if teacher is busy at the SOURCE time in any OTHER division
+1. Check if teacher is busy at the SOURCE time envelope in any OTHER division
 2. Same exclusion logic
 
 Build a `conflicts[]` array with:
@@ -193,12 +216,13 @@ For each conflict in the array, create a `timetableNotification` record on the a
 **Logic:**
 
 1. Resolve the full elective block (same as Phase 1, Step A)
-2. Get the set of all unique `(dayOfWeek, slotSortOrder)` time coordinates across the school's period structures
+2. Get the set of all unique `(dayOfWeek, slotSortOrder)` time coordinates across the school's period structures. Only include coordinates that exist in ALL structures used by the elective's divisions (intersection, not union).
 3. For each candidate time coordinate, check:
    a. Does every participating division have a PERIOD slot at this coordinate? If not, skip (invalid)
    b. Collect ALL teachers from the source elective block
-   c. For each teacher, check if they have any commitment at this time in a NON-participating division
-   d. If the candidate coordinate is occupied in any division, also check the displaced teachers at the source time
+   c. Compute the **widest time envelope** across all structures for both the source and candidate coordinates (same cross-structure approach as Phase 1 Step D)
+   d. For each teacher, check if they have any commitment at the candidate's time envelope in a NON-participating division
+   e. If the candidate coordinate is occupied in any division, also check the displaced teachers at the source time envelope
 4. Return `{ validCoordinates: [{dayOfWeek, slotSortOrder}], invalidCoordinates: [{dayOfWeek, slotSortOrder, reason}] }`
 
 **Note:** The return format changes from `slotIds` to `coordinates` because elective swaps operate on (dayOfWeek, slotSortOrder) across all divisions. The frontend will need to map these coordinates to visual cell positions.
@@ -577,6 +601,9 @@ Currently, clicking an elective cell opens a read-only info sheet. Options:
 | 7.5.3 | Source elective was partially deleted (orphaned rows) | Handle gracefully |
 | 7.5.4 | Concurrent swap by two users | Transaction isolation prevents corruption |
 | 7.5.5 | Elective spans 2 divisions but one timetable is OUTDATED | Still allowed (both GENERATED and OUTDATED are swappable) |
+| 7.5.6 | Cross-div elective where divisions use different period structures (different P3 times) | Widest time envelope used for conflict detection -- min(startTime) to max(endTime) |
+| 7.5.7 | Teacher busy in a slot that overlaps one division's time but not another's | Detected by envelope -- even partial overlap with any division triggers conflict |
+| 7.5.8 | Valid target coordinate exists in all structures but with very different times | Intersection check passes (sortOrder exists in all), envelope covers the full range |
 
 ---
 

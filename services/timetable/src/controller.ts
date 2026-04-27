@@ -3,6 +3,7 @@ import {
   success, accepted,
   parseBody, authMiddleware, academicYearMiddleware,
   triggerGenerationSchema, overrideSlotSchema, swapSlotsSchema, autoResolveSchema, createEmptySlotSchema,
+  swapElectiveSlotsSchema, previewElectiveSwapSchema,
 } from '@timetable/shared';
 import { TimetableService } from './service';
 
@@ -87,6 +88,28 @@ export class TimetableController {
     const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const result = await service.getTeacherTimetable(ctx.schoolId, ctx.academicYearId, teacherId);
+    return success(result);
+  }
+
+  async swapElectiveSlots(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const body = parseBody(event, swapElectiveSlotsSchema);
+    const result = await service.swapElectiveSlots(auth.schoolId!, body);
+    return success(result);
+  }
+
+  async previewElectiveSwap(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const body = parseBody(event, previewElectiveSwapSchema);
+    const result = await service.previewElectiveSwap(auth.schoolId!, body);
+    return success(result);
+  }
+
+  async getValidElectiveSwapTargets(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const slotId = event.pathParameters?.slotId;
+    if (!slotId) return success({ validCoordinates: [], invalidCoordinates: [] });
+    const result = await service.getValidElectiveSwapTargets(auth.schoolId!, slotId);
     return success(result);
   }
 }

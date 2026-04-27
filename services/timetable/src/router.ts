@@ -54,6 +54,23 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.swapSlots(event);
   }
 
+  // Swap elective slots: POST /timetables/slots/swap-elective
+  if (method === 'POST' && path === '/api/timetables/slots/swap-elective') {
+    return controller.swapElectiveSlots(event);
+  }
+
+  // Preview elective swap: POST /timetables/slots/preview-elective-swap
+  if (method === 'POST' && path === '/api/timetables/slots/preview-elective-swap') {
+    return controller.previewElectiveSwap(event);
+  }
+
+  // Valid elective swap targets: GET /timetables/slots/:slotId/valid-elective-swaps
+  const validElectiveSwapsMatch = path.match(/^\/api\/timetables\/slots\/([^/]+)\/valid-elective-swaps$/);
+  if (method === 'GET' && validElectiveSwapsMatch) {
+    event.pathParameters = { ...event.pathParameters, slotId: validElectiveSwapsMatch[1] };
+    return controller.getValidElectiveSwapTargets(event);
+  }
+
   // Auto-resolve conflict: POST /timetables/slots/auto-resolve
   if (method === 'POST' && path === '/api/timetables/slots/auto-resolve') {
     return controller.autoResolve(event);
