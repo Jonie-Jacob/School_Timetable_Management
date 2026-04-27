@@ -115,9 +115,9 @@ export function Component() {
   } | null>(null);
 
   // Read-only info sheet for elective cells.
-  // The override endpoint refuses elective rows, so click-to-edit can't
-  // mutate them. Instead we show a sheet with the full elective group
-  // details and a deep-link to /elective-groups for actual editing.
+  // Click opens info view; drag-and-drop is the primary way to move
+  // elective cells. The override endpoint still refuses elective rows
+  // since single-cell assignment changes don't apply to elective blocks.
   const [electiveInfoGroupId, setElectiveInfoGroupId] = useState<string | null>(null);
 
   // Click-to-edit sheet state

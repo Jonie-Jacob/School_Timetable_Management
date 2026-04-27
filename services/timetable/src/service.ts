@@ -716,14 +716,14 @@ export class TimetableService {
     });
     if (electiveSiblings.length > 0) {
       throw new AppError(
-        'This cell belongs to an elective group and cannot be edited from the timetable view. Use the Assignments page or the Elective Groups page to change which subjects/teachers run during this elective slot.',
+        'This cell belongs to an elective group. Drag-and-drop the elective cell to move it, or use the Elective Groups page to change subjects/teachers.',
         400,
         'ELECTIVE_CELL_LOCKED',
       );
     }
 
-    // Refuse to PLACE an elective assignment via override either -- electives
-    // must come from a regenerated timetable, not manual single-cell edits.
+    // Refuse to PLACE an elective assignment via override -- electives
+    // must be moved via drag-drop (swapElectiveSlots) or regeneration.
     if (dto.divisionAssignmentId) {
       const target = await prisma.divisionAssignment.findFirst({
         where: { id: dto.divisionAssignmentId, schoolId, deletedAt: null },
@@ -731,7 +731,7 @@ export class TimetableService {
       });
       if (target?.electiveGroupId) {
         throw new AppError(
-          'Cannot place an elective-group assignment via single-cell override. Regenerate the timetable instead.',
+          'Cannot place an elective-group assignment via single-cell edit. Drag-and-drop or regenerate the timetable instead.',
           400,
           'ELECTIVE_OVERRIDE_FORBIDDEN',
         );

@@ -67,9 +67,9 @@ function stripClassPrefix(name: string): string {
  *
  * Shows the elective group name (with "Class XX " prefix stripped) as the
  * header and lists every member assignment underneath as "Subject -- Teacher"
- * rows. Drag-drop is disabled because the override endpoint won't accept
- * elective rows; click is wired by the parent to open a read-only info sheet
- * that links to /elective-groups for actual editing.
+ * rows. Drag-drop is supported -- dropping moves the entire elective block
+ * (all parallel teachers, all cross-division divisions) atomically. Click
+ * opens a read-only info sheet.
  */
 export function ElectiveCellContent({ assignments, isDragging }: ElectiveCellContentProps) {
   const fullName = assignments.find((a) => a.electiveGroup)?.electiveGroup?.name ?? 'Elective';
