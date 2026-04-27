@@ -38,8 +38,21 @@
 ### Recent Backend Additions (April 2026)
 - `GET /api/teachers/{id}/breakdown` — per-class assignment breakdown with timetable period counts
 - `GET /api/timetables/{id}/valid-swap-targets` — valid swap target slots for drag-and-drop editing
+- `GET /api/elective-groups/grouped` — grouped elective groups for unified modal (per-div groups with same signature merged)
+- `POST /api/elective-groups/bulk-save` — batch create/update elective groups, subjects, division assignments in one transaction
+- `POST /api/export/free-periods` — export free periods grid (day-by-day teacher availability with time-range overlap detection)
 - Assistant teacher support in timetable and teacher services (`assistantTeacherId`, role field)
+- Assistant teacher shown in teacher timetable view (primary/assistant name) and exports
 - OUTDATED timetable visibility in view/export and teacher period counts
+- Teacher timetable period count uses distinct keys (elective group dedup, double-booking detection)
+- Export: teacher summary table (class-wise period counts), elective compact format, A4 landscape layout
+
+### Recent Frontend Additions (April 2026)
+- Unified Elective Group Editor modal (create/edit from Elective Groups page and Assignment Editor)
+- Elective Groups page rewritten as DataTable with columns: Name, Type, Subjects, Teachers, P/W, Classes & Divisions
+- Assignment Editor: elective group dropdown removed, replaced with "Create Elective" button
+- Free Periods export button on Teacher Timetables page
+- Teacher timetable shows assistant/primary teacher name in cells
 
 ---
 

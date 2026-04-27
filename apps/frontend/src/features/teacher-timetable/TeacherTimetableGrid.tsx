@@ -153,7 +153,7 @@ export function TeacherTimetableGrid({ teacherId, teacherName, assignedPeriods }
                   if (!assignment) {
                     return (
                       <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40">
-                        <span className="text-[10px] text-muted-foreground/40">—</span>
+                        <span className="text-[10px] text-muted-foreground/40">--</span>
                       </td>
                     );
                   }
@@ -179,6 +179,11 @@ export function TeacherTimetableGrid({ teacherId, teacherName, assignedPeriods }
                         )}
                         <div className="text-[10px] font-bold truncate">{assignment.subject.name}</div>
                         <div className="text-[8px] opacity-75 truncate">{divisionLabel}</div>
+                        {assignment.assistantTeacher && (
+                          <div className="text-[7px] opacity-60 truncate italic">
+                            {isAssistant ? `Primary: ${assignment.assistantTeacher.name}` : `Asst: ${assignment.assistantTeacher.name}`}
+                          </div>
+                        )}
                       </div>
                     </td>
                   );

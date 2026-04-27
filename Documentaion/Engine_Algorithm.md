@@ -717,12 +717,54 @@ Class I A Dance/Music → only Class I A → placed independently
 
 All divisions in the group get the **same time slot**. The engine places the elective **once** and stamps all participating divisions' chromosomes simultaneously. Teachers teach students from all divisions in parallel at that slot.
 
+Cross-div electives come in two sub-types:
+
+#### Symmetric: all divisions have the same subjects
+
+Every division has assignments for ALL subjects in the group with identical teacher sets.
+
 **Examples:**
-- XII Maths/IP/Psy → XII A, XII B, XII C (3 divisions)
-- XI Maths/IP/Psy → XI B, XI C, XI D (3 divisions)
-- XII Bio/Cs → XII A, XII B (2 divisions)
-- X Mal/Hin → X A, X B, X C (3 divisions)
-- IX Mal/Hin → IX A, IX B, IX C (3 divisions)
+- XII Maths/IP/Psy → XII A, XII B, XII C — all 3 have Maths + IP + Psy
+- XII Bio/Cs → XII A, XII B — both have Bio + CS
+- X Mal/Hin → X A, X B, X C — all 3 have Malayalam + Hindi
+- IX Mal/Hin → IX A, IX B, IX C — all 3 have Malayalam + Hindi
+
+#### Asymmetric: divisions have different subject subsets
+
+Different divisions offer different subjects from the group. Divisions represent different streams — students from one stream may only take certain subjects. The divisions are co-scheduled so teachers can serve students across divisions simultaneously.
+
+**Example — XI Maths/IP/Psy (XI B, XI C, XI D):**
+```
+  XI B: only Mathematics        (Science stream — students only take Maths)
+  XI C: IP + Psychology          (students choose between IP and Psy)
+  XI D: Maths + IP + Psychology  (mixed stream — students choose any)
+
+At any given slot:
+  ┌──────────────┬──────────────┬──────────────┐
+  │  Maths       │  IP          │  Psychology  │
+  │  Amrutha OR  │  Anitha OR   │  Gopikadas   │
+  │  Julie       │  Shijo       │  (always)    │
+  │              │              │              │
+  │  Students:   │  Students:   │  Students:   │
+  │  XI B + XI D │  XI C + XI D │  XI C + XI D │
+  └──────────────┴──────────────┴──────────────┘
+```
+
+**How to identify from DB:**
+```sql
+-- Asymmetric if divisions have different subject counts:
+SELECT eg.name, c.name || ' ' || d.label as division,
+       COUNT(DISTINCT da.subject_id) as num_subjects
+FROM division_assignments da
+JOIN divisions d ON da.division_id = d.id
+JOIN classes c ON d.class_id = c.id
+JOIN elective_groups eg ON da.elective_group_id = eg.id
+WHERE da.deleted_at IS NULL
+GROUP BY eg.name, c.name, d.label;
+-- If num_subjects varies across divisions → asymmetric
+```
+
+**Engine handling:** All divisions still get the same time slot. During placement, the engine uses the UNION of all divisions' teachers for busy-marking. The output writer must write timetable_slots using ONLY the current division's assignments — NOT the full elective group's member list.
 
 ```
 XII Maths/IP/Psy placed at Mon P3:
@@ -777,19 +819,26 @@ How to identify from DB:
   Psy:    num_teachers(1) <= parallel_sections(1) → Parallel mode
 ```
 
-#### XI Maths/IP/Psy — 3 parallel classes per slot
+#### XI Maths/IP/Psy — 3 parallel classes per slot (ASYMMETRIC)
 
 ```
-Subjects and teachers:
+Subjects and teachers (vary by division):
   Mathematics:  Amrutha Saji w=4, Julie Scaria w=4     parallel_sections=1
   IP:           Anitha w=4, Shijo w=4                   parallel_sections=1
   Psychology:   Gopikadas w=8                           parallel_sections=1
+
+Per-division subject assignments:
+  XI B: Mathematics only
+  XI C: IP + Psychology
+  XI D: Mathematics + IP + Psychology (all three)
 
 At any given slot, 3 classes run simultaneously:
   ┌──────────────┬──────────────┬──────────────┐
   │  Maths       │  IP          │  Psychology  │
   │  Amrutha OR  │  Anitha OR   │  Gopikadas   │
   │  Julie       │  Shijo       │  (always)    │
+  │              │              │              │
+  │  XI B + XI D │  XI C + XI D │  XI C + XI D │
   └──────────────┴──────────────┴──────────────┘
 
 Teacher busy per slot:
@@ -798,6 +847,11 @@ Teacher busy per slot:
   Julie:      busy 4 of 8 slots (split, w=4)
   Anitha:     busy 4 of 8 slots (split, w=4)
   Shijo:      busy 4 of 8 slots (split, w=4)
+
+Output writer per division:
+  XI B timetable_slots: ONLY Mathematics (Amrutha or Julie)
+  XI C timetable_slots: ONLY IP (Anitha or Shijo) + Psychology (Gopikadas)
+  XI D timetable_slots: all three subjects
 
 How to identify from DB:
   Maths:  num_teachers(2) > parallel_sections(1) → Split mode
@@ -838,7 +892,8 @@ How to identify from DB:
 1. **Cross-div slots are synchronized** — `_local_optimize` and `_post_placement_repair` must NEVER move cross-div elective slots within one division (breaks sync with other divisions)
 2. **Split-mode teachers**: engine checks `parallel_sections` teachers during placement, but marks **ALL** teachers busy. This prevents regular assignments from being placed on elective slots that the output writer will later assign to split-mode teachers. The output writer distributes which specific teacher teaches which slot.
 3. **Teacher workload**: for split-mode, each teacher's load = their `weightage` (not `periodsPerWeek`). Amrutha w=8 in XII = 8 periods. Anitha w=4 in XII = 4 periods
-4. **Cross-div data consistency**: all divisions in a cross-div elective must have the same set of teachers per subject. Duplicates or missing teachers cause incorrect scheduling.
+4. **Cross-div data consistency**: for subjects that appear in multiple divisions, those divisions must have identical teacher sets. Divisions may have different subject subsets (asymmetric electives) — the output writer must use only the current division's assignments, not the full group's member list.
+5. **Asymmetric cross-div electives**: different divisions may offer different subjects from the same elective group. The engine co-schedules all divisions at the same slot. The output writer writes timetable_slots using ONLY that division's `division_assignments` for the elective group.
 
 ---
 

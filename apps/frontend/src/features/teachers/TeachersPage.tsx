@@ -163,7 +163,7 @@ export function Component() {
         header: t('table.subjects'),
         cell: ({ row }) => {
           const subjects = row.original.teacherSubjects ?? [];
-          if (subjects.length === 0) return <span className="text-muted-foreground">—</span>;
+          if (subjects.length === 0) return <span className="text-muted-foreground">--</span>;
           return (
             <div className="flex flex-wrap gap-1">
               {subjects.map((ts) => (

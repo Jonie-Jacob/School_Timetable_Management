@@ -29,9 +29,10 @@ import { useGetSubjectsQuery } from '@/features/subjects/subjectApi';
 import { useGetTeachersQuery, useGetTeachersLoadQuery } from '@/features/teachers/teacherApi';
 import {
   useGetElectiveGroupsQuery,
-  useUpdateElectiveGroupMutation,
-  useUpdateElectiveSubjectMutation,
+  useGetGroupedElectiveGroupsQuery,
+  type GroupedElectiveGroup,
 } from '@/features/elective-groups/electiveGroupApi';
+import { ElectiveGroupEditorModal } from '@/features/elective-groups/editor';
 import {
   useGetAssignmentsQuery,
   useCreateAssignmentMutation,
@@ -127,13 +128,11 @@ export function Component() {
   const [createElectiveAssignment, { isLoading: isCreatingElective }] = useCreateElectiveAssignmentMutation();
   const [updateAssignment] = useUpdateAssignmentMutation();
   const [deleteAssignment, { isLoading: isDeleting }] = useDeleteAssignmentMutation();
-  const [updateElectiveGroupMutation, { isLoading: isUpdatingGroup }] = useUpdateElectiveGroupMutation();
-  const [updateElectiveSubjectMutation, { isLoading: isUpdatingSubject }] = useUpdateElectiveSubjectMutation();
 
-  // Inline elective group edit state
-  const [electiveEditOpen, setElectiveEditOpen] = useState(false);
-  const [electiveEditPeriods, setElectiveEditPeriods] = useState(0);
-  const [electiveEditSections, setElectiveEditSections] = useState(1);
+  // Unified elective editor modal
+  const { data: groupedElectives } = useGetGroupedElectiveGroupsQuery();
+  const [electiveModalTarget, setElectiveModalTarget] = useState<GroupedElectiveGroup | null>(null);
+  const [electiveModalCreateOpen, setElectiveModalCreateOpen] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Assignment | null>(null);
@@ -296,48 +295,11 @@ export function Component() {
         excludedPeriodRange: savedPrefs?.excludedPeriodRange,
       },
     });
-    setElectiveEditOpen(false);
     setEditTarget(assignment);
   };
 
-  const openElectiveEditor = () => {
-    if (!activeElectiveGroup || !activeGroupSubject) return;
-    setElectiveEditPeriods(activeElectiveGroup.periodsPerWeek);
-    setElectiveEditSections(activeGroupSubject.parallelSections);
-    setElectiveEditOpen(true);
-  };
-
-  const handleSaveElectiveSettings = async () => {
-    if (!activeElectiveGroup || !activeGroupSubject) return;
-    const periodsChanged = electiveEditPeriods !== activeElectiveGroup.periodsPerWeek;
-    const sectionsChanged = electiveEditSections !== activeGroupSubject.parallelSections;
-    if (!periodsChanged && !sectionsChanged) {
-      setElectiveEditOpen(false);
-      return;
-    }
-    try {
-      if (periodsChanged) {
-        await updateElectiveGroupMutation({
-          id: activeElectiveGroup.id,
-          periodsPerWeek: electiveEditPeriods,
-        }).unwrap();
-      }
-      if (sectionsChanged) {
-        await updateElectiveSubjectMutation({
-          groupId: activeElectiveGroup.id,
-          subjectId: activeGroupSubject.subjectId,
-          parallelSections: electiveEditSections,
-        }).unwrap();
-      }
-      toast.success('Elective group updated.');
-      setElectiveEditOpen(false);
-    } catch (err: any) {
-      toast.error(err?.data?.error?.message || 'Failed to update elective group.');
-    }
-  };
-
   const divisionLabel = division
-    ? `${classItem?.name ?? ''} — Division ${division.label}${division.streamName ? ` (${division.streamName})` : ''}`
+    ? `${classItem?.name ?? ''} -- Division ${division.label}${division.streamName ? ` (${division.streamName})` : ''}`
     : '';
 
   if (isLoading) {
@@ -376,7 +338,7 @@ export function Component() {
           {t('totalBar.total')}: <span className="text-lg font-bold tabular-nums">{totalWeightage}</span> {t('totalBar.periods')}
         </span>
         <Badge variant={totalWeightage > 0 ? 'success' : 'outline'} className="text-xs">
-          {totalWeightage > 0 ? t('totalBar.balanced') : '—'}
+          {totalWeightage > 0 ? t('totalBar.balanced') : '--'}
         </Badge>
       </div>
 
@@ -419,13 +381,25 @@ export function Component() {
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="text-xs">{assignment.subject.name}</Badge>
                       {assignment.electiveGroup && (
-                        <Badge variant="outline" className="text-[10px]">Elective: {assignment.electiveGroup.name}</Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] cursor-pointer hover:bg-amber-100 transition-colors"
+                          onClick={() => {
+                            const match = groupedElectives?.find(g =>
+                              g.underlyingGroupIds.includes(assignment.electiveGroupId!)
+                            );
+                            if (match) setElectiveModalTarget(match);
+                          }}
+                        >
+                          <Pencil className="size-2.5 mr-1" />
+                          Elective: {assignment.electiveGroup.name}
+                        </Badge>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm">{assignment.teacher?.name ?? <span className="italic text-muted-foreground">(Unassigned)</span>}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {assignment.assistantTeacher?.name ?? '—'}
+                    {assignment.assistantTeacher?.name ?? '--'}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className="inline-flex items-center justify-center size-8 rounded-lg bg-amber-500/10 text-amber-700 font-bold text-sm">
@@ -436,7 +410,21 @@ export function Component() {
                     <div className="flex items-center justify-center gap-1">
                       {!isReadOnly && (
                         <>
-                          <Button variant="ghost" size="icon-xs" onClick={() => openEditForm(assignment)} title="Edit">
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => {
+                              if (assignment.electiveGroupId) {
+                                const match = groupedElectives?.find(g =>
+                                  g.underlyingGroupIds.includes(assignment.electiveGroupId!)
+                                );
+                                if (match) setElectiveModalTarget(match);
+                              } else {
+                                openEditForm(assignment);
+                              }
+                            }}
+                            title="Edit"
+                          >
                             <Pencil className="size-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon-xs" onClick={() => setDeleteTarget(assignment)} title="Delete">
@@ -476,71 +464,47 @@ export function Component() {
             onSubmit={form.handleSubmit(editTarget ? handleEdit : handleCreate)}
             className="space-y-4"
           >
-            {/* Elective Group — only on create, optional */}
-            {!editTarget && electiveGroups && electiveGroups.length > 0 && (
-              <div className="space-y-2">
-                <Label>Elective Group <span className="text-xs text-muted-foreground font-normal">(Optional)</span></Label>
-                <Select
-                  value={form.watch('electiveGroupId') || '_none'}
-                  onValueChange={(v) => {
-                    const next = v === '_none' ? '' : v;
-                    form.setValue('electiveGroupId', next);
-                    // Reset subject and teacher when changing group
-                    form.setValue('subjectId', '');
-                    form.setValue('teacherId', '');
+            {/* Elective shortcut -- only on create */}
+            {!editTarget && (
+              <div className="rounded-lg border border-dashed border-amber-400 bg-amber-50/50 p-2.5 flex items-center justify-between">
+                <span className="text-xs text-amber-800">For elective subjects, use the Elective Groups editor.</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7 border-amber-400 text-amber-800 hover:bg-amber-100"
+                  onClick={() => {
+                    setFormOpen(false);
+                    setElectiveModalCreateOpen(true);
                   }}
                 >
-                  <SelectTrigger><SelectValue placeholder="Not part of an elective" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">Not part of an elective</SelectItem>
-                    {electiveGroups.map((g) => (
-                      <SelectItem key={g.id} value={g.id}>
-                        {g.name} ({g.periodsPerWeek} periods/week)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Select an elective group to filter subjects to those in the group, or leave empty for a regular subject.
-                </p>
+                  <Plus className="size-3 mr-1" /> Create Elective
+                </Button>
               </div>
             )}
 
-            {/* Subject — only on create */}
-            {!editTarget && (() => {
-              // If an elective group is selected, restrict subjects to those in the group
-              const selectedGroupId = form.watch('electiveGroupId');
-              const selectedGroup = selectedGroupId
-                ? electiveGroups?.find((g) => g.id === selectedGroupId)
-                : null;
-              const subjectOptions = selectedGroup
-                ? subjects.filter((s) => selectedGroup.subjects.some((es) => es.subjectId === s.id))
-                : subjects;
-              return (
-                <div className="space-y-2">
-                  <Label>{t('form.subject')}</Label>
-                  <Select
-                    value={form.watch('subjectId')}
-                    onValueChange={(v) => { form.setValue('subjectId', v); form.setValue('teacherId', ''); }}
-                  >
-                    <SelectTrigger><SelectValue placeholder={selectedGroup ? `Select subject from ${selectedGroup.name}` : t('form.subjectPlaceholder')} /></SelectTrigger>
-                    <SelectContent>
-                      {subjectOptions.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                      {subjectOptions.length === 0 && selectedGroup && (
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground">No subjects in this elective group yet.</div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {form.formState.errors.subjectId && (
-                    <p className="text-sm text-destructive">{form.formState.errors.subjectId.message}</p>
-                  )}
-                </div>
-              );
-            })()}
+            {/* Subject -- only on create */}
+            {!editTarget && (
+              <div className="space-y-2">
+                <Label>{t('form.subject')}</Label>
+                <Select
+                  value={form.watch('subjectId')}
+                  onValueChange={(v) => { form.setValue('subjectId', v); form.setValue('teacherId', ''); }}
+                >
+                  <SelectTrigger><SelectValue placeholder={t('form.subjectPlaceholder')} /></SelectTrigger>
+                  <SelectContent>
+                    {subjects.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.subjectId && (
+                  <p className="text-sm text-destructive">{form.formState.errors.subjectId.message}</p>
+                )}
+              </div>
+            )}
 
-            {/* Teacher — filtered by selected subject's qualified teachers */}
+            {/* Teacher -- filtered by selected subject's qualified teachers */}
             {(() => {
               const selectedSubjectId = form.watch('subjectId');
               const qualifiedTeachers = selectedSubjectId
@@ -566,7 +530,7 @@ export function Component() {
                       <SelectTrigger><SelectValue placeholder={t('form.teacherPlaceholder')} /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="_unassigned">
-                          <span className="italic text-muted-foreground">(Unassigned — assign later)</span>
+                          <span className="italic text-muted-foreground">(Unassigned -- assign later)</span>
                         </SelectItem>
                         {(qualifiedTeachers.length > 0 ? qualifiedTeachers : teachers).map((tch) => {
                           const load = teacherLoads?.find((l) => l.id === tch.id);
@@ -593,7 +557,7 @@ export function Component() {
                     )}
                   </div>
 
-                  {/* Assistant Teacher — excludes primary teacher */}
+                  {/* Assistant Teacher -- excludes primary teacher */}
                   <div className="space-y-2">
                     <Label>{t('form.assistantTeacher')}</Label>
                     <Select
@@ -628,130 +592,15 @@ export function Component() {
               );
             })()}
 
-            {/* Allocation status — shown when an elective group is selected */}
-            {allocationStatus && activeElectiveGroup && activeGroupSubject && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
-                    Elective allocation — {activeElectiveGroup.name}
-                  </p>
-                  {!electiveEditOpen && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={openElectiveEditor}
-                      title="Edit elective settings"
-                    >
-                      <Pencil className="size-3" />
-                    </Button>
-                  )}
-                </div>
-
-                {!electiveEditOpen ? (
-                  <>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">
-                        Periods/week × Sections:
-                      </span>
-                      <span className="font-medium tabular-nums">
-                        {activeElectiveGroup.periodsPerWeek} × {activeGroupSubject.parallelSections}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Required:</span>
-                      <span className="font-bold tabular-nums">{allocationStatus.required} hrs</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Already allocated:</span>
-                      <span className="font-bold tabular-nums">{allocationStatus.allocated} hrs</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Remaining:</span>
-                      <span className={`font-bold tabular-nums ${allocationStatus.remaining === 0 ? 'text-green-600' : 'text-amber-700'}`}>
-                        {allocationStatus.remaining} hrs
-                      </span>
-                    </div>
-                    {allocationStatus.remaining === 0 && (
-                      <p className="text-[10px] text-green-700">Fully allocated for this subject.</p>
-                    )}
-                  </>
-                ) : (
-                  <div className="space-y-2 pt-1 border-t border-amber-500/20">
-                    <p className="text-[10px] text-muted-foreground">
-                      Changing these affects all divisions using this elective group.
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-[10px]">Periods/week (group)</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={50}
-                          value={electiveEditPeriods}
-                          onChange={(e) => setElectiveEditPeriods(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="h-7 text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px]">Parallel sections (subject)</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={10}
-                          value={electiveEditSections}
-                          onChange={(e) => setElectiveEditSections(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="h-7 text-xs"
-                        />
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      New required: <span className="font-bold">{electiveEditPeriods * electiveEditSections} hrs</span>
-                    </p>
-                    <div className="flex items-center justify-end gap-1 pt-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-[10px] px-2"
-                        onClick={() => setElectiveEditOpen(false)}
-                        disabled={isUpdatingGroup || isUpdatingSubject}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-6 text-[10px] px-2"
-                        onClick={handleSaveElectiveSettings}
-                        disabled={isUpdatingGroup || isUpdatingSubject}
-                      >
-                        {(isUpdatingGroup || isUpdatingSubject) ? 'Saving...' : 'Save'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Weightage */}
             <div className="space-y-2">
               <Label>{t('form.weightage')}</Label>
               <Input
                 type="number"
                 min={1}
-                placeholder={
-                  allocationStatus
-                    ? `Up to ${allocationStatus.remaining} hrs remaining`
-                    : t('form.weightagePlaceholder')
-                }
+                placeholder={t('form.weightagePlaceholder')}
                 {...form.register('weightage', { valueAsNumber: true })}
               />
-              {allocationStatus && (
-                <p className="text-[10px] text-muted-foreground">
-                  Max {allocationStatus.remaining} hrs available for this teacher (or edit the elective settings above to change the required total).
-                </p>
-              )}
               {form.formState.errors.weightage && (
                 <p className="text-sm text-destructive">{form.formState.errors.weightage.message}</p>
               )}
@@ -759,7 +608,7 @@ export function Component() {
 
             <Separator />
 
-            {/* Scheduling Preferences — collapsible, fully wired to form */}
+            {/* Scheduling Preferences -- collapsible, fully wired to form */}
             <SchedulingPreferencesSection form={form} />
             <p className="text-[10px] text-muted-foreground">Preferences are applied during timetable generation. They do not affect existing timetables.</p>
 
@@ -790,6 +639,20 @@ export function Component() {
         loading={isDeleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Unified elective editor modal -- edit (from badge click) */}
+      <ElectiveGroupEditorModal
+        open={!!electiveModalTarget}
+        onOpenChange={(open) => { if (!open) setElectiveModalTarget(null); }}
+        initialData={electiveModalTarget}
+      />
+
+      {/* Unified elective editor modal -- create (from "Create Elective" button) */}
+      <ElectiveGroupEditorModal
+        open={electiveModalCreateOpen}
+        onOpenChange={setElectiveModalCreateOpen}
+        initialData={null}
       />
     </div>
   );
@@ -949,7 +812,7 @@ function SchedulingPreferencesSection({
               type="number"
               min={1}
               className="h-7 text-xs"
-              placeholder="—"
+              placeholder="--"
               value={prefs.minPeriodsPerDay ?? ''}
               onChange={(e) => setNum('schedulingPreferences.minPeriodsPerDay', e.target.value)}
             />
@@ -960,7 +823,7 @@ function SchedulingPreferencesSection({
               type="number"
               min={1}
               className="h-7 text-xs"
-              placeholder="—"
+              placeholder="--"
               value={prefs.maxPeriodsPerDay ?? ''}
               onChange={(e) => setNum('schedulingPreferences.maxPeriodsPerDay', e.target.value)}
             />

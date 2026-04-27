@@ -8,7 +8,7 @@ import { router } from '@/app/router';
 import '@/i18n';
 
 // Session restore is owned by AuthenticatedLayout. Do NOT add a parallel
-// auth initializer here — two racing paths were the cause of a refresh bug
+// auth initializer here -- two racing paths were the cause of a refresh bug
 // where users landed back on the dashboard.
 
 export default function App() {

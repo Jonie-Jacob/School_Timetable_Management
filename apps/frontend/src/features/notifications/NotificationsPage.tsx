@@ -109,7 +109,7 @@ export function Component() {
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm">
-                      {className ? `${className} — Division ${divLabel}` : 'Timetable conflict'}
+                      {className ? `${className} -- Division ${divLabel}` : 'Timetable conflict'}
                     </span>
                     <Badge variant={badgeVariant} className="text-[10px]">
                       {conflictType.replace(/_/g, ' ')}

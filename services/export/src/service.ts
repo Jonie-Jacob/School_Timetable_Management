@@ -19,7 +19,9 @@ interface SlotInfo {
  */
 interface CellEntry {
   subject: string;
+  subjectAbbr?: string;
   teacher: string;
+  assistantTeacher?: string;
 }
 
 interface CellContent {
@@ -36,12 +38,18 @@ interface DayColumn {
   periods: Map<number, CellContent>;
 }
 
+interface TeacherStats {
+  totalPeriodsPerWeek: number;
+  classCounts: { className: string; periods: number }[];
+}
+
 interface TimetableGrid {
   title: string;
   subtitle: string;
   classTeacherName?: string | null;
   slots: SlotInfo[];
   days: DayColumn[];
+  teacherStats?: TeacherStats;
 }
 
 // ── Helpers ──
@@ -90,8 +98,9 @@ export class ExportService {
         slot: true,
         divisionAssignment: {
           include: {
-            subject: { select: { name: true } },
+            subject: { select: { name: true, abbreviation: true } },
             teacher: { select: { name: true } },
+            assistantTeacher: { select: { name: true } },
             electiveGroup: { select: { name: true } },
           },
         },
@@ -142,7 +151,7 @@ export class ExportService {
 
     // Group by day, then by slot sortOrder. Multiple timetable_slots may
     // share the same (day, slot) when an elective group has parallel
-    // sections — we accumulate them into one CellContent with multiple
+    // sections -- we accumulate them into one CellContent with multiple
     // entries and remember the elective group name for the header line.
     const dayMap = new Map<string, DayColumn>();
     for (const s of slots) {
@@ -160,7 +169,9 @@ export class ExportService {
       const cell = day.periods.get(s.slot.sortOrder) ?? { entries: [] };
       cell.entries.push({
         subject: da.subject.name,
+        subjectAbbr: da.subject.abbreviation ?? undefined,
         teacher: da.teacher?.name ?? '(Unassigned)',
+        assistantTeacher: da.assistantTeacher?.name ?? undefined,
       });
       if (da.electiveGroup?.name) {
         cell.electiveGroupName = da.electiveGroup.name;
@@ -194,7 +205,9 @@ export class ExportService {
       where: {
         schoolId,
         timetable: { academicYearId },
-        divisionAssignment: { teacherId },
+        divisionAssignment: {
+          OR: [{ teacherId }, { assistantTeacherId: teacherId }],
+        },
       },
       include: {
         workingDay: true,
@@ -207,7 +220,15 @@ export class ExportService {
           },
         },
         divisionAssignment: {
-          include: { subject: { select: { name: true } } },
+          select: {
+            id: true,
+            teacherId: true,
+            assistantTeacherId: true,
+            electiveGroupId: true,
+            subject: { select: { name: true, abbreviation: true } },
+            teacher: { select: { name: true } },
+            assistantTeacher: { select: { name: true } },
+          },
         },
       },
       orderBy: [
@@ -277,21 +298,53 @@ export class ExportService {
       const day = dayMap.get(dayKey)!;
       const className = s.timetable.division.class.name;
       const divLabel = s.timetable.division.label;
+      const isAssistant = s.divisionAssignment?.assistantTeacherId === teacherId;
       const cell = day.periods.get(s.slot.sortOrder) ?? { entries: [] };
+      // Show the other teacher (assistant if viewing primary, primary if viewing assistant)
+      const da = s.divisionAssignment;
+      const otherTeacher = isAssistant
+        ? da?.teacher?.name
+        : da?.assistantTeacher?.name;
       cell.entries.push({
-        subject: s.divisionAssignment?.subject?.name ?? '-',
-        teacher: `${className} ${divLabel}`,
+        subject: da?.subject?.name ?? '-',
+        subjectAbbr: da?.subject?.abbreviation ?? undefined,
+        teacher: isAssistant ? `${className} ${divLabel} (Asst)` : `${className} ${divLabel}`,
+        assistantTeacher: otherTeacher ?? undefined,
       });
       day.periods.set(s.slot.sortOrder, cell);
     }
 
     const orderedDays = Array.from(dayMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 
+    // Compute teacher stats: total periods and class-wise breakdown.
+    // Use distinct keys to handle cross-div electives (same teacher at
+    // same time in multiple divisions = 1 period, not N).
+    const classCountMap = new Map<string, Set<string>>();
+    const totalDistinct = new Set<string>();
+    for (const s of timetableSlots) {
+      const da = s.divisionAssignment;
+      if (!da) continue;
+      const className = `${s.timetable.division.class.name} ${s.timetable.division.label}`;
+      if (!classCountMap.has(className)) classCountMap.set(className, new Set());
+      const slotKey = da.electiveGroupId
+        ? `${s.workingDay.dayOfWeek}:${s.slot.sortOrder}:eg:${da.electiveGroupId}`
+        : `${s.workingDay.dayOfWeek}:${s.slot.sortOrder}:da:${da.id}`;
+      classCountMap.get(className)!.add(slotKey);
+      totalDistinct.add(slotKey);
+    }
+    const classCounts = Array.from(classCountMap.entries())
+      .map(([className, keys]) => ({ className, periods: keys.size }))
+      .sort((a, b) => a.className.localeCompare(b.className));
+
     return {
       title: teacher.name,
       subtitle: `Teacher Timetable`,
       slots: orderedSlots,
       days: orderedDays,
+      teacherStats: {
+        totalPeriodsPerWeek: totalDistinct.size,
+        classCounts,
+      },
     };
   }
 
@@ -320,7 +373,7 @@ export class ExportService {
       const cells = grid.slots.map((slot) => {
         const isBreak = slot.slotType !== SlotType.PERIOD;
         if (isBreak) {
-          return `<td class="break-cell">—</td>`;
+          return `<td class="break-cell">--</td>`;
         }
         const period = day.periods.get(slot.sortOrder);
         if (!period || period.entries.length === 0) {
@@ -328,16 +381,53 @@ export class ExportService {
         }
         const isElective = !!period.electiveGroupName;
         const header = isElective
-          ? `<div class="elective-header">${this.escapeHtml(period.electiveGroupName!)}</div>`
+          ? `<div class="elective-header">${this.escapeHtml(period.electiveGroupName!.replace(/^class\s+(?:[A-Za-z]+\s+)+?(?=[A-Za-z]+\s*\/)/i, ''))}</div>`
           : '';
-        const stacked = period.entries.map((e) => `
-          <div class="entry">
-            <div class="subject">${this.escapeHtml(e.subject)}</div>
-            <div class="teacher">${this.escapeHtml(e.teacher)}</div>
-          </div>
-        `).join('');
+
+        // Group entries by subject -- collapse same-subject entries into one
+        // with combined teacher/class labels (e.g. "Malayalam" → "X C, X A, X B")
+        const grouped = new Map<string, { abbr?: string; teachers: string[]; assistants: string[] }>();
+        for (const e of period.entries) {
+          const existing = grouped.get(e.subject);
+          if (existing) {
+            existing.teachers.push(e.teacher);
+            if (e.assistantTeacher) existing.assistants.push(e.assistantTeacher);
+          } else {
+            grouped.set(e.subject, {
+              abbr: e.subjectAbbr,
+              teachers: [e.teacher],
+              assistants: e.assistantTeacher ? [e.assistantTeacher] : [],
+            });
+          }
+        }
+
+        let entriesHtml: string;
+        if (isElective && grouped.size > 1) {
+          // Elective with multiple subjects: compact "Abbr - Teacher1, Teacher2" lines
+          entriesHtml = Array.from(grouped.entries()).map(([subject, g]) => {
+            const label = g.abbr || subject;
+            const asstSuffix = g.assistants.length > 0
+              ? ` <span class="assistant">(Asst: ${this.escapeHtml(g.assistants.join(', '))})</span>`
+              : '';
+            return `<div class="elective-line"><span class="subject">${this.escapeHtml(label)}</span> - ${this.escapeHtml(g.teachers.join(', '))}${asstSuffix}</div>`;
+          }).join('');
+          return `<td class="period-cell elective-cell">${header}<div class="entries-wrap">${entriesHtml}</div></td>`;
+        }
+
+        entriesHtml = Array.from(grouped.entries()).map(([subject, g]) => {
+          const asstLine = g.assistants.length > 0
+            ? `<div class="assistant">Asst: ${this.escapeHtml(g.assistants.join(', '))}</div>`
+            : '';
+          return `<div class="entry">
+            <div class="subject">${this.escapeHtml(subject)}</div>
+            <div class="teacher">${this.escapeHtml(g.teachers.join(', '))}</div>
+            ${asstLine}
+          </div>`;
+        }).join('');
+        const useGrid = grouped.size > 1;
+        const gridClass = useGrid ? ' entries-grid' : '';
         const cls = isElective ? 'period-cell elective-cell' : 'period-cell';
-        return `<td class="${cls}">${header}${stacked}</td>`;
+        return `<td class="${cls}">${header}<div class="entries-wrap${gridClass}">${entriesHtml}</div></td>`;
       }).join('');
       return `<tr>
         <td class="day-label">${this.escapeHtml(day.label)}</td>
@@ -355,36 +445,64 @@ export class ExportService {
 <meta charset="UTF-8">
 <title>${this.escapeHtml(grid.title)} - ${this.escapeHtml(grid.subtitle)}</title>
 <style>
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; }
   h1 { text-align: center; font-size: 22px; margin-bottom: 4px; }
   h2 { text-align: center; font-size: 14px; color: #555; margin-bottom: 6px; font-weight: normal; }
   .class-teacher { text-align: center; font-size: 12px; color: #333; margin-bottom: 14px; font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  th, td { border: 1px solid #333; padding: 5px 4px; text-align: center; vertical-align: middle; word-wrap: break-word; overflow-wrap: anywhere; }
-  th { background: #2c3e50; color: #fff; font-weight: 600; }
+  table.timetable { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+  table.timetable th, table.timetable td { border: 1px solid #333; padding: 5px 4px; text-align: center; vertical-align: middle; word-wrap: break-word; overflow-wrap: anywhere; }
+  table.timetable th { background: #2c3e50; color: #fff; font-weight: 600; }
   .slot-header { padding: 4px 3px; }
   .slot-header .slot-name { font-size: 11px; }
   .slot-header .slot-time { font-size: 8px; font-weight: normal; color: #cfd8dc; white-space: nowrap; margin-top: 2px; }
-  .slot-header.break-col { background: #7f8c8d; min-width: 42px; }
-  .day-label { background: #ecf0f1; font-weight: 700; width: 80px; text-align: left; padding-left: 8px; white-space: nowrap; }
+  .slot-header.break-col { background: #7f8c8d; writing-mode: vertical-lr; text-orientation: mixed; padding: 4px 2px; }
+  .slot-header.break-col .slot-name { font-size: 9px; }
+  .slot-header.break-col .slot-time { font-size: 7px; }
+  col.break-col { width: 30px; }
+  col.day-col { width: 80px; }
+  .day-label { background: #ecf0f1; font-weight: 700; text-align: left; padding-left: 8px; white-space: nowrap; }
   .period-cell { vertical-align: middle; }
   .subject { font-weight: 600; font-size: 11px; }
   .teacher { font-size: 10px; color: #555; }
+  .assistant { font-size: 9px; color: #888; font-style: italic; }
+  /* Grid layout for cells with multiple entries (electives, teacher multi-class) */
+  .entries-wrap { }
+  .entries-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; }
+  .entries-grid .entry { border: 1px solid #ddd; border-radius: 2px; padding: 2px; background: #fafafa; }
+  .elective-cell .entries-grid .entry { border-color: #fcd34d; background: #fffef5; }
   .elective-cell { background: #fffbeb; }
   .elective-cell .elective-header { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: #b45309; font-weight: 700; padding-bottom: 2px; border-bottom: 1px dashed #f59e0b; margin-bottom: 2px; }
-  .elective-cell .entry { padding: 2px 0; border-top: 1px dotted #fcd34d; }
-  .elective-cell .entry:first-of-type { border-top: none; }
+  .elective-line { font-size: 9px; line-height: 1.3; text-align: left; padding: 1px 2px; }
+  .elective-line .subject { font-weight: 700; }
+  .elective-line .assistant { font-size: 8px; color: #888; font-style: italic; }
   .break-cell { background: #fff4d6; color: #8a6d3b; font-style: italic; }
   .empty-cell { color: #b2bec3; }
   tr:nth-child(even) td:not(.day-label):not(.break-cell) { background: #f8f9fa; }
+  /* Stats: multi-column layout */
+  .stats-section { margin-top: 16px; }
+  .stats-section h3 { font-size: 13px; margin-bottom: 6px; text-align: center; }
+  .stats-columns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .stats-table { border-collapse: collapse; font-size: 11px; }
+  .stats-table th, .stats-table td { border: 1px solid #333; padding: 4px 10px; text-align: left; }
+  .stats-table th { background: #2c3e50; color: #fff; font-weight: 600; }
+  .stats-table td:last-child { text-align: center; }
+  .stats-total { font-weight: 700; background: #ecf0f1; }
 </style>
 </head>
 <body>
+  <div class="page-wrapper">
   <h1>${this.escapeHtml(grid.title)}</h1>
   <h2>${this.escapeHtml(grid.subtitle)}</h2>
   ${classTeacherLine}
-  <table>
+  <table class="timetable">
+    <colgroup>
+      <col class="day-col">
+      ${grid.slots.map(s => s.slotType !== SlotType.PERIOD ? '<col class="break-col">' : '<col>').join('\n      ')}
+    </colgroup>
     <thead>
       <tr>
         <th class="day-label">Day</th>
@@ -395,6 +513,8 @@ export class ExportService {
       ${rows}
     </tbody>
   </table>
+  ${grid.teacherStats ? this.renderStatsHtml(grid.teacherStats) : ''}
+  </div>
 </body>
 </html>`;
   }
@@ -407,7 +527,209 @@ export class ExportService {
       .replace(/"/g, '&quot;');
   }
 
-  // ── PDF Export (HTML file for local dev — Chromium in production) ──
+  private renderStatsHtml(stats: TeacherStats): string {
+    // Split into chunks of 10 rows for multi-column layout
+    const chunkSize = 6;
+    const chunks: typeof stats.classCounts[] = [];
+    for (let i = 0; i < stats.classCounts.length; i += chunkSize) {
+      chunks.push(stats.classCounts.slice(i, i + chunkSize));
+    }
+
+    const tables = chunks.map((chunk, idx) => {
+      const rows = chunk.map(c =>
+        `<tr><td>${this.escapeHtml(c.className)}</td><td>${c.periods}</td></tr>`
+      ).join('');
+      // Add total row only on the last chunk
+      const totalRow = idx === chunks.length - 1
+        ? `<tr class="stats-total"><td>Total</td><td>${stats.totalPeriodsPerWeek}</td></tr>`
+        : '';
+      return `<table class="stats-table">
+        <thead><tr><th>Class</th><th>P/W</th></tr></thead>
+        <tbody>${rows}${totalRow}</tbody>
+      </table>`;
+    }).join('');
+
+    return `
+  <div class="stats-section">
+    <h3>Summary</h3>
+    <div class="stats-columns">${tables}</div>
+  </div>`;
+  }
+
+  // ── Free Periods Export ──
+
+  async exportFreePeriods(schoolId: string, academicYearId: string) {
+    // Get all teachers
+    const teachers = await prisma.teacher.findMany({
+      where: { schoolId, academicYearId, deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    if (teachers.length === 0) throw new AppError('No teachers found', 404, 'NO_TEACHERS');
+
+    // Get a period structure to define the slot grid (use the one with most periods)
+    const periodStructures = await prisma.periodStructure.findMany({
+      where: { schoolId, academicYearId, deletedAt: null },
+      include: {
+        workingDays: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            slots: { orderBy: { sortOrder: 'asc' } },
+          },
+        },
+      },
+    });
+    if (periodStructures.length === 0) throw new AppError('No period structures found', 404, 'NO_PERIOD_STRUCTURES');
+
+    // Use the structure with the most PERIOD slots as the canonical grid.
+    // This ensures P1–P8 all appear even when multiple structures exist.
+    const countPeriodSlots = (ps: typeof periodStructures[0]) =>
+      ps.workingDays[0]?.slots.filter(s => s.slotType === SlotType.PERIOD).length ?? 0;
+    const canonicalPS = periodStructures.reduce((best, ps) =>
+      countPeriodSlots(ps) > countPeriodSlots(best) ? ps : best
+    );
+
+    // Build canonical day → period slots mapping
+    const daySlots: { dayLabel: string; dayOfWeek: number; periods: { label: string; startTime: Date; endTime: Date }[] }[] = [];
+    for (const wd of canonicalPS.workingDays) {
+      const periods = wd.slots
+        .filter(s => s.slotType === SlotType.PERIOD)
+        .map(s => ({ label: `P${s.slotNumber ?? ''}`, startTime: s.startTime, endTime: s.endTime }));
+      daySlots.push({ dayLabel: wd.label, dayOfWeek: wd.dayOfWeek, periods });
+    }
+
+    // Get ALL timetable slots for ALL teachers (primary + assistant)
+    const timetableSlots = await prisma.timetableSlot.findMany({
+      where: {
+        schoolId,
+        timetable: { academicYearId, status: { in: ['GENERATED', 'OUTDATED'] } },
+        divisionAssignment: {
+          deletedAt: null,
+          OR: [{ teacherId: { not: null } }, { assistantTeacherId: { not: null } }],
+        },
+      },
+      select: {
+        slot: { select: { startTime: true, endTime: true } },
+        workingDay: { select: { dayOfWeek: true } },
+        divisionAssignment: { select: { teacherId: true, assistantTeacherId: true } },
+      },
+    });
+
+    // Build busy ranges: teacher_id → list of (dayOfWeek, startMs, endMs)
+    // Use time-range overlap to handle different period structures with
+    // overlapping but non-identical times.
+    const busyRanges = new Map<string, { day: number; start: number; end: number }[]>();
+    for (const ts of timetableSlots) {
+      const da = ts.divisionAssignment;
+      if (!da) continue;
+      const range = {
+        day: ts.workingDay.dayOfWeek,
+        start: ts.slot.startTime.getTime(),
+        end: ts.slot.endTime.getTime(),
+      };
+      for (const tid of [da.teacherId, da.assistantTeacherId]) {
+        if (tid) {
+          if (!busyRanges.has(tid)) busyRanges.set(tid, []);
+          busyRanges.get(tid)!.push(range);
+        }
+      }
+    }
+
+    // Helper: is teacher busy during a canonical period? (time-range overlap)
+    function isTeacherBusy(teacherId: string, dayOfWeek: number, periodStart: Date, periodEnd: Date): boolean {
+      const ranges = busyRanges.get(teacherId);
+      if (!ranges) return false;
+      const pStart = periodStart.getTime();
+      const pEnd = periodEnd.getTime();
+      return ranges.some(r => r.day === dayOfWeek && r.start < pEnd && pStart < r.end);
+    }
+
+    // Build HTML: one page per day
+    const pages = daySlots.map((day, dayIdx) => {
+      const headerCells = day.periods.map(p => {
+        const time = formatSlotRange(p.startTime, p.endTime);
+        return `<th><div class="slot-name">${p.label}</div><div class="slot-time">${time}</div></th>`;
+      }).join('');
+
+      // For each period, find free teachers
+      const freeByPeriod = day.periods.map(p =>
+        teachers
+          .filter(t => !isTeacherBusy(t.id, day.dayOfWeek, p.startTime, p.endTime))
+          .map(t => t.name)
+      );
+
+      const maxFree = Math.max(...freeByPeriod.map(f => f.length), 1);
+
+      // Build rows: serial number + one teacher name per column (or empty)
+      const rows: string[] = [];
+      for (let r = 0; r < maxFree; r++) {
+        const cells = freeByPeriod.map(names => {
+          const name = r < names.length ? this.escapeHtml(names[r]) : '';
+          return `<td class="${name ? 'free-teacher' : 'empty-cell'}">${name || ''}</td>`;
+        }).join('');
+        rows.push(`<tr><td class="corner">${r + 1}</td>${cells}</tr>`);
+      }
+
+      // Count row per period
+      const countCells = freeByPeriod.map(names =>
+        `<td class="count-cell">${names.length}</td>`
+      ).join('');
+
+      const pageBreak = dayIdx < daySlots.length - 1 ? ' style="page-break-after: always;"' : '';
+
+      return `<div${pageBreak}>
+        <h2>${this.escapeHtml(day.dayLabel)}</h2>
+        <table class="free-table">
+          <thead>
+            <tr><th class="corner">Free Teachers</th>${headerCells}</tr>
+          </thead>
+          <tbody>
+            ${rows.join('\n')}
+            <tr class="count-row"><td class="corner"><strong>Total Free</strong></td>${countCells}</tr>
+          </tbody>
+        </table>
+      </div>`;
+    }).join('\n');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Free Periods - Teachers</title>
+<style>
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; }
+  h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+  h2 { text-align: center; font-size: 16px; margin-bottom: 8px; color: #333; }
+  .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 16px; }
+  .free-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 20px; }
+  .free-table th, .free-table td { border: 1px solid #333; padding: 3px 6px; text-align: center; vertical-align: top; }
+  .free-table th { background: #2c3e50; color: #fff; font-weight: 600; }
+  .slot-name { font-size: 11px; }
+  .slot-time { font-size: 7px; font-weight: normal; color: #cfd8dc; margin-top: 1px; }
+  .corner { background: #ecf0f1; font-weight: 700; text-align: left; padding-left: 8px; width: 100px; }
+  .free-teacher { text-align: left; padding-left: 6px; font-size: 9px; white-space: nowrap; }
+  .empty-cell { }
+  .count-row td { background: #ecf0f1; font-weight: 700; font-size: 11px; }
+  tr:nth-child(even) td:not(.corner) { background: #f8f9fa; }
+</style>
+</head>
+<body>
+  <h1>Free Periods -- Teacher Availability</h1>
+  <div class="subtitle">${teachers.length} teachers</div>
+  ${pages}
+</body>
+</html>`;
+
+    return {
+      format: 'pdf',
+      html,
+      filename: `Free_Periods_${Date.now()}.html`,
+    };
+  }
+
+  // ── PDF Export (HTML file for local dev -- Chromium in production) ──
 
   async exportDivisionPdf(schoolId: string, academicYearId: string, divisionId: string) {
     const grid = await this.getDivisionGrid(schoolId, academicYearId, divisionId);
@@ -584,6 +906,15 @@ export class ExportService {
   private writeSheet(sheet: ExcelJS.Worksheet, grid: TimetableGrid) {
     const totalCols = grid.slots.length + 1; // +1 for Day column
 
+    // Page setup: landscape, fit width to one page (height can span)
+    sheet.pageSetup = {
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.4, right: 0.4, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+    };
+
     // Title row
     const titleRow = sheet.addRow([grid.title]);
     titleRow.font = { size: 16, bold: true };
@@ -642,7 +973,7 @@ export class ExportService {
     sheet.getColumn(1).width = 14;
     for (let i = 2; i <= totalCols; i++) sheet.getColumn(i).width = 18;
 
-    // Data rows — one per weekday. Elective cells stack their entries
+    // Data rows -- one per weekday. Elective cells stack their entries
     // separated by blank lines and prepend an "ELECTIVE: <name>" header.
     let dayIdx = 0;
     for (const day of grid.days) {
@@ -650,7 +981,7 @@ export class ExportService {
       for (const slot of grid.slots) {
         const isBreak = slot.slotType !== SlotType.PERIOD;
         if (isBreak) {
-          values.push('—');
+          values.push('--');
           continue;
         }
         const period = day.periods.get(slot.sortOrder);
@@ -660,10 +991,35 @@ export class ExportService {
         }
         const lines: string[] = [];
         if (period.electiveGroupName) {
-          lines.push(`[${period.electiveGroupName.toUpperCase()}]`);
+          lines.push(`[${period.electiveGroupName.replace(/^class\s+(?:[A-Za-z]+\s+)+?(?=[A-Za-z]+\s*\/)/i, '').toUpperCase()}]`);
         }
+        // Group by subject to collapse same-subject entries
+        const grouped = new Map<string, { abbr?: string; teachers: string[]; assistants: string[] }>();
         for (const e of period.entries) {
-          lines.push(`${e.subject}\n${e.teacher}`);
+          const existing = grouped.get(e.subject);
+          if (existing) {
+            existing.teachers.push(e.teacher);
+            if (e.assistantTeacher) existing.assistants.push(e.assistantTeacher);
+          } else {
+            grouped.set(e.subject, {
+              abbr: e.subjectAbbr,
+              teachers: [e.teacher],
+              assistants: e.assistantTeacher ? [e.assistantTeacher] : [],
+            });
+          }
+        }
+        if (period.electiveGroupName && grouped.size > 1) {
+          // Compact elective format: "Abbr - Teacher1, Teacher2"
+          for (const [subject, g] of grouped) {
+            const label = g.abbr || subject;
+            const asstSuffix = g.assistants.length > 0 ? ` (Asst: ${g.assistants.join(', ')})` : '';
+            lines.push(`${label} - ${g.teachers.join(', ')}${asstSuffix}`);
+          }
+        } else {
+          for (const [subject, g] of grouped) {
+            const asstSuffix = g.assistants.length > 0 ? `\nAsst: ${g.assistants.join(', ')}` : '';
+            lines.push(`${subject}\n${g.teachers.join(', ')}${asstSuffix}`);
+          }
         }
         values.push(lines.join('\n'));
       }
@@ -708,6 +1064,43 @@ export class ExportService {
         }
       });
       dayIdx++;
+    }
+
+    // Teacher stats section
+    if (grid.teacherStats) {
+      sheet.addRow([]); // spacer
+      sheet.addRow([]); // spacer
+
+      const statsHeaderRow = sheet.addRow(['Summary']);
+      statsHeaderRow.font = { size: 13, bold: true };
+      sheet.mergeCells(statsHeaderRow.number, 1, statsHeaderRow.number, 3);
+
+      const statsColHeader = sheet.addRow(['Class', 'Periods/Week']);
+      statsColHeader.eachCell((cell, colNumber) => {
+        if (colNumber > 2) return;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+        cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      });
+
+      for (const c of grid.teacherStats.classCounts) {
+        const row = sheet.addRow([c.className, c.periods]);
+        row.eachCell((cell, colNumber) => {
+          if (colNumber > 2) return;
+          cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
+          cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+        });
+      }
+
+      const totalRow = sheet.addRow(['Total', grid.teacherStats.totalPeriodsPerWeek]);
+      totalRow.eachCell((cell, colNumber) => {
+        if (colNumber > 2) return;
+        cell.font = { bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECF0F1' } };
+        cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      });
     }
   }
 

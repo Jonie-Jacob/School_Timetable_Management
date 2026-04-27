@@ -77,7 +77,7 @@ export function cognitoSignIn(email: string, password: string): Promise<CognitoA
       },
       onFailure: (err) => reject(err),
       newPasswordRequired: () => {
-        reject(new Error('New password required — please contact admin.'));
+        reject(new Error('New password required -- please contact admin.'));
       },
     });
   });

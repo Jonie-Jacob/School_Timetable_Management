@@ -8,8 +8,8 @@ interface Props {
 
 /**
  * Shows a per-class assignment breakdown for a teacher with two period counts:
- * - "Assigned" — from division_assignments (available before generation)
- * - "Timetable" — from generated timetable slots (computed on backend)
+ * - "Assigned" -- from division_assignments (available before generation)
+ * - "Timetable" -- from generated timetable slots (computed on backend)
  */
 export function TeacherBreakdown({ teacherId }: Props) {
   const { data: breakdown, isLoading } = useGetTeacherBreakdownQuery(teacherId, { skip: !teacherId });
@@ -21,7 +21,7 @@ export function TeacherBreakdown({ teacherId }: Props) {
   if (!breakdown || breakdown.length === 0) return null;
 
   const totalAssigned = teacherLoad?.assignedPeriods ?? breakdown.reduce((sum, r) => sum + r.weightage, 0);
-  // Use distinct time slots from the load API — this correctly detects double-bookings.
+  // Use distinct time slots from the load API -- this correctly detects double-bookings.
   // If assigned=27 but timetable=26, one time slot has two assignments (conflict).
   const totalTimetable = teacherLoad?.timetablePeriods ?? null;
 
@@ -80,7 +80,7 @@ export function TeacherBreakdown({ teacherId }: Props) {
                 </td>
                 <td className="px-4 py-2 text-xs">{row.subject}</td>
                 <td className="px-4 py-2 text-xs text-muted-foreground">
-                  {row.electiveGroup ?? '—'}
+                  {row.electiveGroup ?? '--'}
                 </td>
                 <td className="px-4 py-2 text-center">
                   {row.role === 'assistant' ? (
@@ -92,7 +92,7 @@ export function TeacherBreakdown({ teacherId }: Props) {
                   )}
                 </td>
                 <td className="px-4 py-2 text-center">
-                  <span className="text-xs font-medium">{row.weightage || '—'}</span>
+                  <span className="text-xs font-medium">{row.weightage || '--'}</span>
                 </td>
                 <td className="px-4 py-2 text-center">
                   {row.timetablePeriods != null ? (
@@ -103,7 +103,7 @@ export function TeacherBreakdown({ teacherId }: Props) {
                       {row.timetablePeriods}
                     </Badge>
                   ) : (
-                    <span className="text-[10px] text-muted-foreground">—</span>
+                    <span className="text-[10px] text-muted-foreground">--</span>
                   )}
                 </td>
               </tr>

@@ -109,10 +109,12 @@ Run migrations: `npx prisma migrate dev --schema packages/shared/prisma/schema.p
 - **Teacher maxPeriodsPerWeek** is a **soft cap** — engine tries to respect, may exceed, violations shown as warnings.
 - **Subjects** have an optional `abbreviation` field (max 10 chars) — short code shown in timetable grid (e.g., "Phy", "Maths", "CS").
 - **Subject deletion** cascades: timetable slots become empty, affected timetables flagged OUTDATED with conflict notifications.
-- **Elective groups** — co-scheduled subjects. Cross-division electives enforce same teachers across linked divisions of the same class. Each subject has `parallel_sections` in `elective_group_subjects`: teachers <= ps = parallel mode (all teach every slot), teachers > ps = split mode (teachers take turns).
+- **Elective groups** — co-scheduled subjects. Cross-division electives co-schedule all participating divisions at the same time slot. Each subject has `parallel_sections` in `elective_group_subjects`: teachers <= ps = parallel mode (all teach every slot), teachers > ps = split mode (teachers take turns). Cross-div electives may be **asymmetric** — different divisions can have different subject subsets (e.g., XI B has only Maths, XI C has IP+Psy, XI D has all three). The output writer must use only each division's own assignments when writing timetable_slots.
 - **Scheduling preferences** — per-assignment JSONB field with preferred/excluded days, period ranges, adjacency, min/max per day. Constraint type: HARD or SOFT.
 - **Assistant teachers** — optional co-teacher per assignment. Treated identically to primary for scheduling (HARD constraint, same busy tracking). Shown as "Asst: Name" in timetable views.
 - **Timetable visibility** — both `GENERATED` and `OUTDATED` timetables are viewable, exportable, and included in teacher period counts.
+- **Unified Elective Modal** — single modal for creating/editing elective groups with subjects, teachers, division participation grid, and scheduling preferences. Opens from Elective Groups table page and Assignment Editor page. Per-division electives with matching name/teachers/weightage are grouped in UI (Approach A — separate DB records, visual consolidation). Cross-division electives are each their own entry.
+- **Export features** — PDF/Excel for divisions, classes, teachers. Teacher export includes summary table (class-wise period counts). Free Periods export (day-by-day teacher availability grid). Elective cells use compact format ("Subject - Teacher1, Teacher2"). Export uses time-range overlap for cross-structure free period detection.
 
 ## Coding Conventions
 
@@ -192,7 +194,7 @@ cd services\teacher; npx serverless deploy --stage prod
 - Frontend uses `sonner` for toasts, `@dnd-kit` for drag-and-drop, `shadcn/ui` primitives.
 - The guided setup wizard uses a **Floating Action Button (FAB)** — not sidebar-based. The FAB doubles as a conflict notification hub after setup is complete.
 - Vite proxy uses `rewrite` to strip `/api` prefix before forwarding to localhost services.
-- Cross-div elective assignments must have **identical teacher sets** across all participating divisions. Duplicates or missing teachers cause incorrect scheduling.
+- Cross-div elective divisions may have **different subject subsets** (asymmetric). For subjects shared across divisions, teacher sets must be identical. The output writer writes timetable_slots using only each division's own assignments.
 - `parallel_sections` in `elective_group_subjects` determines parallel vs split mode. Ensure this matches the actual number of simultaneous classes intended.
 
 ## Recently Fixed Bugs

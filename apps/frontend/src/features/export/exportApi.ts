@@ -73,6 +73,12 @@ export const exportApi = createApi({
       query: (body) => ({ url: 'export/teachers/excel', method: 'POST', body }),
       transformResponse: (r: ExcelExportResponse) => r.data,
     }),
+
+    // Free periods export
+    exportFreePeriods: builder.mutation<PdfExportResponse['data'], void>({
+      query: () => ({ url: 'export/free-periods', method: 'POST', body: {} }),
+      transformResponse: (r: PdfExportResponse) => r.data,
+    }),
   }),
 });
 
@@ -87,6 +93,7 @@ export const {
   useExportTeacherExcelMutation,
   useExportTeachersPdfMutation,
   useExportTeachersExcelMutation,
+  useExportFreePeriodsMutation,
 } = exportApi;
 
 // ── Download helpers ──

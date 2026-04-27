@@ -7125,10 +7125,11 @@ The following business requirements extend the core specification (Sections 2 an
 
 11. The same elective group may be assigned to **multiple divisions within the same class** (e.g., XII A, XII B, and XII C all share "Bio/Maths"). This enables students from different divisions to **physically regroup** — all Bio students attend one session, all Maths students attend another — regardless of their home division.
 12. Cross-division electives are limited to divisions of the **same class**. They shall not span different classes (e.g., XI and XII cannot share an elective).
-13. When the same elective group is assigned to a second (or subsequent) division of the same class, the system shall **enforce the same teachers** as the first division's assignment. Since students physically regroup across divisions, each subject is taught by **one teacher** serving all combined students.
+13. For subjects that appear in multiple divisions, the system shall **enforce the same teachers** across those divisions. Since students physically regroup, each subject is taught by the same teacher(s) serving all combined students.
 14. The timetable generation engine shall co-schedule cross-division elective slots into the **exact same** `(day, slot)` positions across **all linked divisions**. This is a hard constraint — generation fails if the slots cannot be aligned.
 15. In the timetable grid, cross-division elective cells shall display a visual indicator (e.g., "⟐ Shared: XII A, B, C") showing which divisions are linked.
-16. Modifying the teacher for one division's elective assignment shall automatically update all other divisions sharing the same elective group within the same class.
+16. Modifying the teacher for one division's elective assignment shall automatically update all other divisions sharing the same elective group within the same class (for subjects present in both divisions).
+17. **Asymmetric cross-division electives**: Different divisions within the same cross-div elective group may have **different subject subsets**. For example, XI B may have only Mathematics, XI C may have IP + Psychology, and XI D may have all three. This represents different streams — students from one division may only be offered certain subjects. All divisions are still co-scheduled at the same time slot. The timetable output must only include each division's own subject assignments, not the full group's subject list.
 
 > **See also**: Section 9 (Elective Group Model) and Section 9.3.4 (Cross-Division Elective Assignment) for technical data model and implementation details.
 
@@ -7283,6 +7284,42 @@ WHERE NOT EXISTS (
 |--------|------|-------------|
 | `GET` | `/api/assignments/unassigned` | List unassigned teacher-subject pairs |
 | `POST` | `/api/assignments/quick-assign` | Assign with conflict detection |
+
+---
+
+### Feature 4 — Unified Elective Group Editor Modal (Implemented April 2026)
+
+#### Overview
+Single modal for creating and editing elective groups with all settings in one place: group config (name, periods/week, per-division vs cross-division type), subjects with parallel_sections and teacher assignments, division participation grid (class multi-select with subject checkboxes per division), and scheduling preferences (default + per-division overrides).
+
+#### Architecture (Approach A — UI Consolidation)
+- **Per-division electives** keep separate `ElectiveGroup` DB records per division. The UI groups them visually by matching name + teachers + weightage signature. Save fans out to individual records. Naming convention: `"{name} ({className} {divLabel})"`.
+- **Cross-division electives** use one shared `ElectiveGroup` record. Never grouped with other cross-div electives.
+- No DB schema changes. Engine algorithm unchanged.
+
+#### API Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/elective-groups/grouped` | Returns grouped elective groups for UI display |
+| `POST` | `/api/elective-groups/bulk-save` | Batch save entire modal state in one transaction |
+
+#### Integration Points
+- **Elective Groups page**: DataTable listing with edit button per row
+- **Assignment Editor page**: Edit button on elective rows opens modal; "Create Elective" button in Add Assignment dialog
+- Add Assignment dialog no longer has elective group dropdown — elective creation goes through the unified modal
+
+### Feature 5 — Free Periods Export (Implemented April 2026)
+
+#### Overview
+Export showing teacher availability day-by-day. One page per working day, with a table where columns are period slots and rows list the teachers free during that period (alphabetically). Includes total count per period. Uses time-range overlap detection to handle multiple period structures.
+
+#### API Endpoint
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/export/free-periods` | Generate free periods HTML export |
+
+#### Button Placement
+Teacher Timetables page, next to "Export All" buttons.
 
 ---
 

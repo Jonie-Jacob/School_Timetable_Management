@@ -66,7 +66,7 @@ export function Component() {
             }));
             return;
           }
-          // No cached school data — call /auth/login to get schools list
+          // No cached school data -- call /auth/login to get schools list
           const resp = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -97,7 +97,7 @@ export function Component() {
           return;
         }
       } catch {
-        // No valid session — user needs to log in
+        // No valid session -- user needs to log in
       }
       dispatch(authChecked());
     })();

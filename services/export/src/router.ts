@@ -53,6 +53,11 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.exportTeachersExcel(event);
   }
 
+  // Free periods export
+  if (method === 'POST' && path === '/api/export/free-periods') {
+    return controller.exportFreePeriods(event);
+  }
+
   return {
     statusCode: 404,
     body: JSON.stringify({ error: { code: 'NOT_FOUND', message: `Route not found: ${method} ${path}` } }),

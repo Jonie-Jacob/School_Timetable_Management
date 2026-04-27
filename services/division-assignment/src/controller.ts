@@ -5,6 +5,7 @@ import {
   createAssignmentSchema, updateAssignmentSchema,
   createElectiveGroupSchema, updateElectiveGroupSchema,
   addElectiveSubjectSchema, updateElectiveSubjectSchema,
+  bulkSaveElectiveGroupSchema,
 } from '@timetable/shared';
 import { AssignmentService } from './service';
 
@@ -96,6 +97,21 @@ export class AssignmentController {
     const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
     const result = await service.listElectiveGroups(ctx.schoolId, ctx.academicYearId);
+    return success(result);
+  }
+
+  async listGroupedElectiveGroups(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const result = await service.getGroupedElectiveGroups(ctx.schoolId, ctx.academicYearId);
+    return success(result);
+  }
+
+  async bulkSaveElectiveGroup(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const body = parseBody(event, bulkSaveElectiveGroupSchema);
+    const result = await service.bulkSaveElectiveGroup(ctx.schoolId, ctx.academicYearId, body);
     return success(result);
   }
 

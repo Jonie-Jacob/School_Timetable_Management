@@ -46,7 +46,7 @@ export function Component() {
                 try {
                   const result = await exportPdf({ teacherId }).unwrap();
                   downloadHtmlAsPdf(result.html, result.filename);
-                  toast.success('Export ready — use browser print dialog to save as PDF');
+                  toast.success('Export ready -- use browser print dialog to save as PDF');
                 } catch {
                   toast.error('Export failed');
                 }

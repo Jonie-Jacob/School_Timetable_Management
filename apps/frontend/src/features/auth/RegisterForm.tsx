@@ -72,7 +72,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     try {
       if (isCognitoMode()) {
         await cognitoSignUp(values.email, values.password);
-        // Cognito requires email verification — show confirmation code input
+        // Cognito requires email verification -- show confirmation code input
         setSavedValues(values);
         setPendingConfirmation(true);
       } else {

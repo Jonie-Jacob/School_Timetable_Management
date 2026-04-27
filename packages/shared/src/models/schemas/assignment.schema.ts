@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const schedulingPreferencesSchema = z.object({
+export const schedulingPreferencesSchema = z.object({
   constraintType: z.enum(['HARD', 'SOFT']),
   preferredDays: z.array(z.number().min(0).max(6)).optional(),
   excludedDays: z.array(z.number().min(0).max(6)).optional(),

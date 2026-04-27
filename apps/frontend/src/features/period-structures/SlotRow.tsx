@@ -20,11 +20,11 @@ interface SlotRowProps {
 }
 
 function calcDuration(start: string, end: string): string {
-  if (!start || !end) return '—';
+  if (!start || !end) return '--';
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   const diff = eh * 60 + em - (sh * 60 + sm);
-  return diff > 0 ? `${diff}m` : '—';
+  return diff > 0 ? `${diff}m` : '--';
 }
 
 export function SlotRow({ slot, onUpdate, onDelete }: SlotRowProps) {
@@ -44,7 +44,7 @@ export function SlotRow({ slot, onUpdate, onDelete }: SlotRowProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const periodNumber = slot.type === 'PERIOD' ? slot.periodNumber : '—';
+  const periodNumber = slot.type === 'PERIOD' ? slot.periodNumber : '--';
 
   return (
     <tr ref={setNodeRef} style={style} className="border-b last:border-b-0">

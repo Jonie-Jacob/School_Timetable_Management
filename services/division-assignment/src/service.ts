@@ -4,6 +4,7 @@ import {
   type CreateAssignmentDto, type UpdateAssignmentDto,
   type CreateElectiveGroupDto, type UpdateElectiveGroupDto,
   type AddElectiveSubjectDto, type UpdateElectiveSubjectDto,
+  type BulkSaveElectiveGroupDto,
 } from '@timetable/shared';
 
 export class AssignmentService {
@@ -311,7 +312,7 @@ export class AssignmentService {
         },
       });
       // Only auto-create if the sibling already participates in this elective group
-      // (has at least one assignment for it) — otherwise it's a per-division elective
+      // (has at least one assignment for it) -- otherwise it's a per-division elective
       if (!siblingHasGroup) continue;
 
       // Check if this specific (subject + teacher) already exists in the sibling
@@ -377,6 +378,256 @@ export class AssignmentService {
         _count: { select: { divisionAssignments: { where: { deletedAt: null } } } },
       },
     });
+  }
+
+  /**
+   * Returns elective groups grouped for UI display.
+   * Per-division groups with identical name + teachers + weightage are merged.
+   * Cross-division groups are each their own entry.
+   */
+  async getGroupedElectiveGroups(schoolId: string, academicYearId: string) {
+    const groups = await prisma.electiveGroup.findMany({
+      where: { schoolId, academicYearId, deletedAt: null },
+      orderBy: { name: 'asc' },
+      include: {
+        subjects: {
+          include: { subject: { select: { id: true, name: true, abbreviation: true } } },
+        },
+        divisionAssignments: {
+          where: { deletedAt: null },
+          include: {
+            teacher: { select: { id: true, name: true } },
+            assistantTeacher: { select: { id: true, name: true } },
+            subject: { select: { id: true, name: true } },
+            division: {
+              select: {
+                id: true, label: true,
+                class: { select: { id: true, name: true, sortOrder: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Compute per-group metadata
+    type GroupMeta = {
+      group: typeof groups[0];
+      divisionIds: Set<string>;
+      classIds: Set<string>;
+      isCrossDiv: boolean;
+      signature: string;
+    };
+
+    const metas: GroupMeta[] = groups.map(g => {
+      const divIds = new Set(g.divisionAssignments.map(da => da.divisionId));
+      const classIds = new Set(g.divisionAssignments.map(da => da.division.class.id));
+      const isCrossDiv = divIds.size > 1;
+
+      // Build signature for grouping per-division electives
+      const subjectSig = g.subjects
+        .map(s => `${s.subjectId}:${s.parallelSections}`)
+        .sort().join('|');
+      // Group teachers by subject for signature
+      const teachersBySubject = new Map<string, string[]>();
+      for (const da of g.divisionAssignments) {
+        const key = da.subject.id;
+        const tSig = `${da.teacherId ?? ''}:${da.assistantTeacherId ?? ''}:${da.weightage}`;
+        if (!teachersBySubject.has(key)) teachersBySubject.set(key, []);
+        const existing = teachersBySubject.get(key)!;
+        if (!existing.includes(tSig)) existing.push(tSig);
+      }
+      const teacherSig = Array.from(teachersBySubject.entries())
+        .map(([sid, sigs]) => `${sid}=${sigs.sort().join(',')}`)
+        .sort().join('|');
+
+      const signature = `${g.periodsPerWeek}||${subjectSig}||${teacherSig}`;
+
+      return { group: g, divisionIds: divIds, classIds, isCrossDiv, signature };
+    });
+
+    // Group per-division electives by base name + signature
+    type GroupedEntry = {
+      displayName: string;
+      type: 'per-division' | 'cross-division';
+      underlyingGroupIds: string[];
+      config: { name: string; periodsPerWeek: number };
+      subjects: Array<{
+        subjectId: string;
+        subjectName: string;
+        subjectAbbreviation: string | null;
+        parallelSections: number;
+        teachers: Array<{
+          teacherId: string | null;
+          teacherName: string | null;
+          assistantTeacherId: string | null;
+          assistantTeacherName: string | null;
+          weightage: number;
+        }>;
+      }>;
+      divisions: Array<{
+        divisionId: string;
+        classId: string;
+        className: string;
+        classSortOrder: number;
+        divisionLabel: string;
+        subjectIds: string[];
+        schedulingPreferences: any;
+      }>;
+      defaultSchedulingPreferences: any;
+    };
+
+    const result: GroupedEntry[] = [];
+    const usedGroupIds = new Set<string>();
+
+    // First: cross-division groups (each is its own entry)
+    for (const meta of metas) {
+      if (!meta.isCrossDiv) continue;
+      usedGroupIds.add(meta.group.id);
+      const g = meta.group;
+
+      // Extract unique teacher assignments per subject (deduplicate across divisions)
+      const subjectTeachers = new Map<string, Map<string, { teacherId: string | null; teacherName: string | null; assistantTeacherId: string | null; assistantTeacherName: string | null; weightage: number }>>();
+      for (const da of g.divisionAssignments) {
+        if (!subjectTeachers.has(da.subject.id)) subjectTeachers.set(da.subject.id, new Map());
+        const tKey = `${da.teacherId}:${da.assistantTeacherId}:${da.weightage}`;
+        if (!subjectTeachers.get(da.subject.id)!.has(tKey)) {
+          subjectTeachers.get(da.subject.id)!.set(tKey, {
+            teacherId: da.teacherId, teacherName: da.teacher?.name ?? null,
+            assistantTeacherId: da.assistantTeacherId, assistantTeacherName: da.assistantTeacher?.name ?? null,
+            weightage: da.weightage,
+          });
+        }
+      }
+
+      // Build division participation
+      const divMap = new Map<string, { divisionId: string; classId: string; className: string; classSortOrder: number; divisionLabel: string; subjectIds: string[]; schedulingPreferences: any }>();
+      for (const da of g.divisionAssignments) {
+        if (!divMap.has(da.divisionId)) {
+          divMap.set(da.divisionId, {
+            divisionId: da.divisionId,
+            classId: da.division.class.id,
+            className: da.division.class.name,
+            classSortOrder: da.division.class.sortOrder,
+            divisionLabel: da.division.label,
+            subjectIds: [],
+            schedulingPreferences: null,
+          });
+        }
+        const div = divMap.get(da.divisionId)!;
+        if (!div.subjectIds.includes(da.subject.id)) div.subjectIds.push(da.subject.id);
+        // Use first assignment's prefs as representative
+        if (!div.schedulingPreferences && da.schedulingPreferences) {
+          div.schedulingPreferences = da.schedulingPreferences;
+        }
+      }
+
+      // Derive display name: strip class prefix
+      const displayName = g.name.replace(/^class\s+(?:[A-Za-z]+\s+)+?(?=[A-Za-z]+\s*\/)/i, '');
+
+      // Find default scheduling preferences (most common)
+      const allPrefs = g.divisionAssignments.map(da => da.schedulingPreferences).filter(Boolean);
+      const defaultPrefs = allPrefs.length > 0 ? allPrefs[0] : null;
+
+      result.push({
+        displayName,
+        type: 'cross-division',
+        underlyingGroupIds: [g.id],
+        config: { name: g.name, periodsPerWeek: g.periodsPerWeek },
+        subjects: g.subjects.map(s => ({
+          subjectId: s.subject.id,
+          subjectName: s.subject.name,
+          subjectAbbreviation: (s.subject as any).abbreviation ?? null,
+          parallelSections: s.parallelSections,
+          teachers: Array.from(subjectTeachers.get(s.subject.id)?.values() ?? []),
+        })),
+        divisions: Array.from(divMap.values()).sort((a, b) =>
+          a.classSortOrder - b.classSortOrder || a.divisionLabel.localeCompare(b.divisionLabel)
+        ),
+        defaultSchedulingPreferences: defaultPrefs,
+      });
+    }
+
+    // Second: per-division groups -- group by base name + signature
+    const perDivBuckets = new Map<string, GroupMeta[]>();
+    for (const meta of metas) {
+      if (meta.isCrossDiv) continue;
+      // Base name: strip " (ClassName DivLabel)" suffix
+      const baseName = meta.group.name.replace(/^class\s+(?:[A-Za-z]+\s+)+?(?=[A-Za-z]+\s*\/)/i, '').replace(/\s*\([^)]+\)\s*$/, '');
+      const bucketKey = `${baseName}||${meta.signature}`;
+      if (!perDivBuckets.has(bucketKey)) perDivBuckets.set(bucketKey, []);
+      perDivBuckets.get(bucketKey)!.push(meta);
+    }
+
+    for (const [, bucket] of perDivBuckets) {
+      const first = bucket[0].group;
+      const baseName = first.name.replace(/^class\s+(?:[A-Za-z]+\s+)+?(?=[A-Za-z]+\s*\/)/i, '').replace(/\s*\([^)]+\)\s*$/, '');
+      const displayName = baseName;
+
+      // Collect teacher assignments from the first group (they're identical across the bucket)
+      const subjectTeachers = new Map<string, Array<{ teacherId: string | null; teacherName: string | null; assistantTeacherId: string | null; assistantTeacherName: string | null; weightage: number }>>();
+      for (const da of first.divisionAssignments) {
+        if (!subjectTeachers.has(da.subject.id)) subjectTeachers.set(da.subject.id, []);
+        const tKey = `${da.teacherId}:${da.assistantTeacherId}:${da.weightage}`;
+        const arr = subjectTeachers.get(da.subject.id)!;
+        if (!arr.some(t => `${t.teacherId}:${t.assistantTeacherId}:${t.weightage}` === tKey)) {
+          arr.push({
+            teacherId: da.teacherId, teacherName: da.teacher?.name ?? null,
+            assistantTeacherId: da.assistantTeacherId, assistantTeacherName: da.assistantTeacher?.name ?? null,
+            weightage: da.weightage,
+          });
+        }
+      }
+
+      // Collect all divisions across the bucket
+      const divisions: GroupedEntry['divisions'] = [];
+      for (const meta of bucket) {
+        usedGroupIds.add(meta.group.id);
+        for (const da of meta.group.divisionAssignments) {
+          if (!divisions.some(d => d.divisionId === da.divisionId)) {
+            divisions.push({
+              divisionId: da.divisionId,
+              classId: da.division.class.id,
+              className: da.division.class.name,
+              classSortOrder: da.division.class.sortOrder,
+              divisionLabel: da.division.label,
+              subjectIds: meta.group.divisionAssignments
+                .filter(x => x.divisionId === da.divisionId)
+                .map(x => x.subject.id)
+                .filter((v, i, a) => a.indexOf(v) === i),
+              schedulingPreferences: da.schedulingPreferences,
+            });
+          }
+        }
+      }
+      divisions.sort((a, b) => a.classSortOrder - b.classSortOrder || a.divisionLabel.localeCompare(b.divisionLabel));
+
+      const allPrefs = bucket.flatMap(m => m.group.divisionAssignments.map(da => da.schedulingPreferences)).filter(Boolean);
+
+      result.push({
+        displayName,
+        type: 'per-division',
+        underlyingGroupIds: bucket.map(m => m.group.id),
+        config: { name: baseName, periodsPerWeek: first.periodsPerWeek },
+        subjects: first.subjects.map(s => ({
+          subjectId: s.subject.id,
+          subjectName: s.subject.name,
+          subjectAbbreviation: (s.subject as any).abbreviation ?? null,
+          parallelSections: s.parallelSections,
+          teachers: subjectTeachers.get(s.subject.id) ?? [],
+        })),
+        divisions,
+        defaultSchedulingPreferences: allPrefs.length > 0 ? allPrefs[0] : null,
+      });
+    }
+
+    // Sort: cross-div first, then by display name
+    result.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'cross-division' ? -1 : 1;
+      return a.displayName.localeCompare(b.displayName);
+    });
+
+    return result;
   }
 
   async getElectiveGroup(schoolId: string, academicYearId: string, id: string) {
@@ -584,6 +835,359 @@ export class AssignmentService {
     await prisma.electiveGroupSubject.delete({ where: { id: link.id } });
   }
 
+  // ── Bulk Save Elective Group ──
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async bulkSaveElectiveGroup(schoolId: string, academicYearId: string, input: any) {
+    const config = input.config as { name: string; periodsPerWeek: number; type: 'per-division' | 'cross-division' };
+    const subjects = input.subjects as Array<{ subjectId: string; parallelSections: number; teachers: Array<{ teacherId: string | null; assistantTeacherId?: string | null; weightage: number }> }>;
+    const divisionParticipation = input.divisionParticipation as Record<string, string[]>;
+    const defaultSchedulingPreferences = input.defaultSchedulingPreferences as any;
+    const perDivisionOverrides = (input.perDivisionOverrides ?? {}) as Record<string, any>;
+    const confirmDeleteSlots = input.confirmDeleteSlots as boolean;
+    const divisionIds = Object.keys(divisionParticipation);
+
+    if (divisionIds.length === 0) {
+      throw new AppError('At least one division must be selected', 400, 'VALIDATION_ERROR');
+    }
+
+    // Validate cross-div: all divisions must belong to same class
+    if (config.type === 'cross-division') {
+      const divisions = await prisma.division.findMany({
+        where: { id: { in: divisionIds }, deletedAt: null },
+        select: { id: true, classId: true },
+      });
+      const classIds = new Set(divisions.map(d => d.classId));
+      if (classIds.size > 1) {
+        throw new AppError('Cross-division electives must be within the same class', 400, 'VALIDATION_ERROR');
+      }
+    }
+
+    // Load division info for naming
+    const divisionInfo = await prisma.division.findMany({
+      where: { id: { in: divisionIds }, deletedAt: null },
+      select: { id: true, label: true, class: { select: { id: true, name: true } } },
+    });
+    const divInfoMap = new Map(divisionInfo.map(d => [d.id, d]));
+
+    // Identify existing state (edit mode)
+    let existingGroupIds: string[] = [];
+    if (input.groupId) {
+      // Find all groups in this UI group by checking the grouped endpoint logic
+      // For cross-div: just the one groupId
+      // For per-div: find all groups with matching base name pattern
+      if (config.type === 'cross-division') {
+        existingGroupIds = [input.groupId];
+      } else {
+        // Find all per-division groups that share the same base name
+        const sourceGroup = await prisma.electiveGroup.findFirst({
+          where: { id: input.groupId, schoolId, deletedAt: null },
+        });
+        if (sourceGroup) {
+          const baseName = sourceGroup.name.replace(/^class\s+(?:[A-Za-z]+\s+)+?(?=[A-Za-z]+\s*\/)/i, '').replace(/\s*\([^)]+\)\s*$/, '');
+          const allGroups = await prisma.electiveGroup.findMany({
+            where: {
+              schoolId, academicYearId, deletedAt: null,
+              OR: [
+                { name: baseName },
+                { name: { startsWith: `${baseName} (` } },
+              ],
+            },
+            select: { id: true },
+          });
+          existingGroupIds = allGroups.map(g => g.id);
+        }
+      }
+    }
+
+    // Collect existing assignments that will be affected
+    const existingAssignments = existingGroupIds.length > 0
+      ? await prisma.divisionAssignment.findMany({
+          where: { electiveGroupId: { in: existingGroupIds }, deletedAt: null },
+          select: { id: true, divisionId: true, subjectId: true, teacherId: true, electiveGroupId: true },
+        })
+      : [];
+
+    // Check for timetable_slots on assignments that will be removed
+    const removedDivisionIds = new Set<string>();
+    for (const da of existingAssignments) {
+      if (!divisionIds.includes(da.divisionId)) {
+        removedDivisionIds.add(da.divisionId);
+      }
+    }
+    if (removedDivisionIds.size > 0 && !confirmDeleteSlots) {
+      const slotsCount = await prisma.timetableSlot.count({
+        where: {
+          divisionAssignment: {
+            electiveGroupId: { in: existingGroupIds },
+            divisionId: { in: Array.from(removedDivisionIds) },
+          },
+        },
+      });
+      if (slotsCount > 0) {
+        throw new AppError(
+          `Removing divisions will delete ${slotsCount} timetable slot(s). Set confirmDeleteSlots to proceed.`,
+          409, 'SLOTS_REQUIRE_CONFIRMATION',
+        );
+      }
+    }
+
+    // Execute in transaction
+    return prisma.$transaction(async (tx) => {
+      // ── Step 1: Soft-delete old assignments for removed divisions ──
+      if (existingGroupIds.length > 0) {
+        // Delete timetable_slots for removed assignments
+        if (removedDivisionIds.size > 0) {
+          await tx.timetableSlot.deleteMany({
+            where: {
+              divisionAssignment: {
+                electiveGroupId: { in: existingGroupIds },
+                divisionId: { in: Array.from(removedDivisionIds) },
+              },
+            },
+          });
+          await tx.divisionAssignment.updateMany({
+            where: {
+              electiveGroupId: { in: existingGroupIds },
+              divisionId: { in: Array.from(removedDivisionIds) },
+              deletedAt: null,
+            },
+            data: { deletedAt: new Date() },
+          });
+        }
+
+        // Soft-delete old ElectiveGroup records that are no longer needed
+        if (config.type === 'per-division') {
+          // For per-div: delete groups whose division is no longer participating
+          for (const gId of existingGroupIds) {
+            const groupAssignments = existingAssignments.filter(da => da.electiveGroupId === gId);
+            const groupDivIds = new Set(groupAssignments.map(da => da.divisionId));
+            const stillActive = Array.from(groupDivIds).some(dId => divisionIds.includes(dId));
+            if (!stillActive) {
+              await tx.electiveGroup.update({ where: { id: gId }, data: { deletedAt: new Date() } });
+            }
+          }
+        }
+      }
+
+      // ── Step 2: Create/update ElectiveGroup records ──
+      const groupIdByDivision = new Map<string, string>(); // divisionId → electiveGroupId
+
+      if (config.type === 'cross-division') {
+        // One shared ElectiveGroup for all divisions
+        let groupId: string;
+        if (existingGroupIds.length > 0) {
+          groupId = existingGroupIds[0];
+          await tx.electiveGroup.update({
+            where: { id: groupId },
+            data: { name: config.name, periodsPerWeek: config.periodsPerWeek, deletedAt: null },
+          });
+        } else {
+          const created = await tx.electiveGroup.create({
+            data: { schoolId, academicYearId, name: config.name, periodsPerWeek: config.periodsPerWeek },
+          });
+          groupId = created.id;
+        }
+        for (const dId of divisionIds) groupIdByDivision.set(dId, groupId);
+
+        // Upsert ElectiveGroupSubject records
+        const existingSubjects = await tx.electiveGroupSubject.findMany({
+          where: { electiveGroupId: groupId },
+        });
+        const existingSubjectIds = new Set(existingSubjects.map(s => s.subjectId));
+        const newSubjectIds = new Set(subjects.map(s => s.subjectId));
+
+        // Delete removed subjects
+        for (const es of existingSubjects) {
+          if (!newSubjectIds.has(es.subjectId)) {
+            await tx.electiveGroupSubject.delete({ where: { id: es.id } });
+          }
+        }
+        // Create/update subjects
+        for (const sub of subjects) {
+          if (existingSubjectIds.has(sub.subjectId)) {
+            await tx.electiveGroupSubject.updateMany({
+              where: { electiveGroupId: groupId, subjectId: sub.subjectId },
+              data: { parallelSections: sub.parallelSections },
+            });
+          } else {
+            await tx.electiveGroupSubject.create({
+              data: { schoolId, electiveGroupId: groupId, subjectId: sub.subjectId, parallelSections: sub.parallelSections },
+            });
+          }
+        }
+      } else {
+        // Per-division: one ElectiveGroup per division
+        // Build a map of existing groupId → divisionId
+        const existingGroupToDivMap = new Map<string, string>();
+        for (const da of existingAssignments) {
+          if (!existingGroupToDivMap.has(da.electiveGroupId!)) {
+            existingGroupToDivMap.set(da.electiveGroupId!, da.divisionId);
+          }
+        }
+
+        for (const dId of divisionIds) {
+          const div = divInfoMap.get(dId);
+          if (!div) continue;
+          const groupName = `${config.name} (${div.class.name} ${div.label})`;
+
+          // Find existing group for this division
+          let groupId: string | undefined;
+          for (const [gId, gDivId] of existingGroupToDivMap) {
+            if (gDivId === dId) { groupId = gId; break; }
+          }
+
+          if (groupId) {
+            await tx.electiveGroup.update({
+              where: { id: groupId },
+              data: { name: groupName, periodsPerWeek: config.periodsPerWeek, deletedAt: null },
+            });
+          } else {
+            const created = await tx.electiveGroup.create({
+              data: { schoolId, academicYearId, name: groupName, periodsPerWeek: config.periodsPerWeek },
+            });
+            groupId = created.id;
+          }
+          groupIdByDivision.set(dId, groupId);
+
+          // Upsert ElectiveGroupSubject records for this group
+          const existingSubs = await tx.electiveGroupSubject.findMany({
+            where: { electiveGroupId: groupId },
+          });
+          const existingSubIds = new Set(existingSubs.map(s => s.subjectId));
+          const divSubjectIds = new Set(divisionParticipation[dId] ?? []);
+
+          for (const es of existingSubs) {
+            if (!divSubjectIds.has(es.subjectId)) {
+              await tx.electiveGroupSubject.delete({ where: { id: es.id } });
+            }
+          }
+          for (const sub of subjects) {
+            if (!divSubjectIds.has(sub.subjectId)) continue;
+            if (existingSubIds.has(sub.subjectId)) {
+              await tx.electiveGroupSubject.updateMany({
+                where: { electiveGroupId: groupId, subjectId: sub.subjectId },
+                data: { parallelSections: sub.parallelSections },
+              });
+            } else {
+              await tx.electiveGroupSubject.create({
+                data: { schoolId, electiveGroupId: groupId, subjectId: sub.subjectId, parallelSections: sub.parallelSections },
+              });
+            }
+          }
+        }
+      }
+
+      // ── Step 3: Upsert DivisionAssignment records ──
+      const affectedDivisionIds = new Set<string>();
+
+      for (const dId of divisionIds) {
+        const groupId = groupIdByDivision.get(dId);
+        if (!groupId) continue;
+        const divSubjectIds = divisionParticipation[dId] ?? [];
+        const prefs = perDivisionOverrides[dId] ?? defaultSchedulingPreferences ?? undefined;
+
+        // Get existing assignments for this division + group
+        const existingDAs = await tx.divisionAssignment.findMany({
+          where: { divisionId: dId, electiveGroupId: groupId, deletedAt: null },
+          select: { id: true, subjectId: true, teacherId: true, assistantTeacherId: true, weightage: true },
+        });
+
+        // Build desired assignments from input
+        type DesiredDA = { subjectId: string; teacherId: string | null; assistantTeacherId: string | null; weightage: number };
+        const desired: DesiredDA[] = [];
+        for (const sub of subjects) {
+          if (!divSubjectIds.includes(sub.subjectId)) continue;
+          for (const t of sub.teachers) {
+            desired.push({
+              subjectId: sub.subjectId,
+              teacherId: t.teacherId,
+              assistantTeacherId: t.assistantTeacherId ?? null,
+              weightage: t.weightage,
+            });
+          }
+        }
+
+        // Diff: find assignments to create, update, or delete
+        const usedExistingIds = new Set<string>();
+        for (const d of desired) {
+          // Find matching existing assignment (same subject + teacher)
+          const match = existingDAs.find(e =>
+            e.subjectId === d.subjectId && e.teacherId === d.teacherId && !usedExistingIds.has(e.id)
+          );
+          if (match) {
+            usedExistingIds.add(match.id);
+            // Update if changed
+            if (match.weightage !== d.weightage || match.assistantTeacherId !== d.assistantTeacherId) {
+              await tx.divisionAssignment.update({
+                where: { id: match.id },
+                data: {
+                  weightage: d.weightage,
+                  assistantTeacherId: d.assistantTeacherId,
+                  schedulingPreferences: prefs ?? undefined,
+                },
+              });
+              affectedDivisionIds.add(dId);
+            } else {
+              // Update prefs even if teacher/weightage didn't change
+              await tx.divisionAssignment.update({
+                where: { id: match.id },
+                data: { schedulingPreferences: prefs ?? undefined },
+              });
+            }
+          } else {
+            // Create new assignment
+            await tx.divisionAssignment.create({
+              data: {
+                schoolId, academicYearId, divisionId: dId,
+                subjectId: d.subjectId, teacherId: d.teacherId,
+                assistantTeacherId: d.assistantTeacherId,
+                weightage: d.weightage, electiveGroupId: groupId,
+                schedulingPreferences: prefs ?? undefined,
+              },
+            });
+            affectedDivisionIds.add(dId);
+          }
+        }
+
+        // Soft-delete assignments no longer needed
+        for (const e of existingDAs) {
+          if (!usedExistingIds.has(e.id)) {
+            // Delete timetable_slots referencing this assignment
+            await tx.timetableSlot.deleteMany({
+              where: { divisionAssignmentId: e.id },
+            });
+            await tx.divisionAssignment.update({
+              where: { id: e.id },
+              data: { deletedAt: new Date() },
+            });
+            affectedDivisionIds.add(dId);
+          }
+        }
+      }
+
+      // ── Step 4: Flag affected timetables ──
+      const flaggedGroupIds = new Set<string>();
+      for (const dId of [...affectedDivisionIds, ...removedDivisionIds]) {
+        const gId = groupIdByDivision.get(dId) ?? existingGroupIds[0];
+        if (gId && !flaggedGroupIds.has(gId)) {
+          flaggedGroupIds.add(gId);
+          await flagAffectedTimetables({
+            schoolId, academicYearId,
+            entityType: 'ELECTIVE_GROUP',
+            entityId: gId,
+            changeDescription: 'Elective group updated via bulk save',
+          });
+        }
+      }
+
+      return {
+        groupIds: Array.from(new Set(groupIdByDivision.values())),
+        divisionsAffected: affectedDivisionIds.size + removedDivisionIds.size,
+      };
+    }, { timeout: 30000 }); // 30s timeout for large transactions
+  }
+
   // ── Unassigned Teacher Subjects ──
 
   async getUnassignedTeacherSubjects(
@@ -620,7 +1224,7 @@ export class AssignmentService {
     );
 
     // If filtering by class, further filter to subjects that could be assigned to divisions of that class
-    // (This is informational — any subject can be assigned to any division)
+    // (This is informational -- any subject can be assigned to any division)
 
     return unassigned.map((ts) => ({
       teacherSubjectId: ts.id,

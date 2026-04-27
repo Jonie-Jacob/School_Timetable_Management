@@ -70,7 +70,7 @@ export const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryE
       // Retry the original request with the new token
       result = await rawBaseQuery(args, api, extraOptions);
     } catch {
-      // Refresh failed — session is truly expired, force logout
+      // Refresh failed -- session is truly expired, force logout
       api.dispatch(loggedOut());
     }
   }

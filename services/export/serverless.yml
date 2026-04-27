@@ -85,5 +85,10 @@ functions:
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
+          method: POST
+          path: /api/export/free-periods
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
           method: GET
           path: /api/export/health

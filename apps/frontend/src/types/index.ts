@@ -1,2 +1,2 @@
-// Shared types — added per phase
+// Shared types -- added per phase
 export {};

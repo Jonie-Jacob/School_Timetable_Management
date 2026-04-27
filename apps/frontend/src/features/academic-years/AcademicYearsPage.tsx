@@ -102,7 +102,7 @@ export function Component() {
         <StatusBadge status={ay.status.toLowerCase() as 'active' | 'archived'} />
       </div>
       <p className="text-sm text-muted-foreground">
-        {dayjs(ay.startDate).format('MMM YYYY')} — {dayjs(ay.endDate).format('MMM YYYY')}
+        {dayjs(ay.startDate).format('MMM YYYY')} -- {dayjs(ay.endDate).format('MMM YYYY')}
       </p>
       {ay.status !== 'ACTIVE' && (
         <Button

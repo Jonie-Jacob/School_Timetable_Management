@@ -15,7 +15,7 @@ import {
 const DAY_ORDER = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
 
 function formatWorkingDays(workingDays: PeriodStructure['workingDays'], tShort: (key: string) => string) {
-  if (!workingDays?.length) return '—';
+  if (!workingDays?.length) return '--';
   const sorted = [...workingDays].sort((a, b) => a.sortOrder - b.sortOrder);
   return sorted.map((d) => tShort(`daysShort.${DAY_ORDER[d.dayOfWeek]}`)).join(', ');
 }
@@ -55,7 +55,7 @@ export function Component() {
       header: t('table.divisions'),
       cell: ({ row }) => {
         const divs = row.original.divisions;
-        if (!divs?.length) return '—';
+        if (!divs?.length) return '--';
         return (
           <div className="flex flex-wrap gap-1">
             {divs.map((d: { id: string; label: string; class: { name: string } }) => (

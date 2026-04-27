@@ -11,7 +11,7 @@ import { FeatureErrorBoundary } from '@/components/shared';
 export function AppShell() {
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
-      {/* Desktop Sidebar — hidden at sm/md */}
+      {/* Desktop Sidebar -- hidden at sm/md */}
       <Sidebar />
 
       {/* Main column with warm gradient background */}
@@ -21,12 +21,12 @@ export function AppShell() {
         <div className="orb orb-2" />
         <div className="orb orb-3" />
 
-        {/* Desktop TopBar — hidden at sm/md */}
+        {/* Desktop TopBar -- hidden at sm/md */}
         <div className="relative z-10">
           <TopBar />
         </div>
 
-        {/* Mobile Header — visible at sm/md */}
+        {/* Mobile Header -- visible at sm/md */}
         <div className="relative z-10">
           <MobileHeader />
         </div>
@@ -36,7 +36,7 @@ export function AppShell() {
           <ReadOnlyBanner />
         </div>
 
-        {/* Breadcrumb — desktop only */}
+        {/* Breadcrumb -- desktop only */}
         <div className="hidden lg:block relative z-10">
           <Breadcrumb />
         </div>
@@ -49,10 +49,10 @@ export function AppShell() {
         </main>
       </div>
 
-      {/* Mobile Bottom Tab Bar — visible at sm/md */}
+      {/* Mobile Bottom Tab Bar -- visible at sm/md */}
       <BottomTabBar />
 
-      {/* Floating Action Button — setup wizard / conflict notifications */}
+      {/* Floating Action Button -- setup wizard / conflict notifications */}
       <FloatingActionButton />
     </div>
   );

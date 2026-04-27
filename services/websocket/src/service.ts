@@ -163,7 +163,7 @@ export class WebSocketService {
         const statusCode = (err as { $metadata?: { httpStatusCode?: number } })
           ?.$metadata?.httpStatusCode;
         if (statusCode === 410) {
-          // Stale connection — remove from DynamoDB
+          // Stale connection -- remove from DynamoDB
           await this.disconnect(conn.connectionId);
         }
         failed.push(conn.connectionId);

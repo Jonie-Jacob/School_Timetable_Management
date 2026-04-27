@@ -20,11 +20,11 @@ interface SlotCardProps {
 }
 
 function calcDuration(start: string, end: string): string {
-  if (!start || !end) return '—';
+  if (!start || !end) return '--';
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   const diff = eh * 60 + em - (sh * 60 + sm);
-  return diff > 0 ? `${diff}m` : '—';
+  return diff > 0 ? `${diff}m` : '--';
 }
 
 function slotLabel(slot: EditorSlot, t: (key: string) => string): string {
@@ -99,7 +99,7 @@ export function SlotCard({ slot, onUpdate, onDelete }: SlotCardProps) {
           onChange={(val) => onUpdate(slot.id, { startTime: val })}
           className="h-8 text-sm w-24"
         />
-        <span className="text-muted-foreground">—</span>
+        <span className="text-muted-foreground">--</span>
         <TimePicker
           value={slot.endTime}
           onChange={(val) => onUpdate(slot.id, { endTime: val })}

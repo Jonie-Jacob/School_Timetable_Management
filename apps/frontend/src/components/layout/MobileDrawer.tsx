@@ -33,7 +33,7 @@ interface MobileDrawerProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// Same grouping as the desktop sidebar — Workspace / Timetables / Setup.
+// Same grouping as the desktop sidebar -- Workspace / Timetables / Setup.
 // Notifications live in the topbar bell, not here.
 const NAV_SECTIONS = [
   {

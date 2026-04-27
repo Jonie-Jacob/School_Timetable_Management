@@ -53,13 +53,13 @@ export function Component() {
         </>
       )}
 
-      {/* Error or empty — show welcome state */}
+      {/* Error or empty -- show welcome state */}
       {!isLoading && (isError || isEmpty) && <WelcomeState />}
 
       {/* Data loaded */}
       {!isLoading && !isError && !isEmpty && (
         <>
-          {/* Summary cards — 6 in a row on xl, 3 on lg, 2 on mobile */}
+          {/* Summary cards -- 6 in a row on xl, 3 on lg, 2 on mobile */}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {cards.map((card) => (
               <SummaryCard key={card.label} {...card} />
@@ -68,7 +68,7 @@ export function Component() {
 
           <ConflictBanner count={data.unresolvedConflicts} />
 
-          {/* Setup wizard — compact horizontal stepper */}
+          {/* Setup wizard -- compact horizontal stepper */}
           {wizardLoading && <SetupStepperSkeleton />}
 
           {showSetupWizard && (
@@ -91,7 +91,7 @@ export function Component() {
         </>
       )}
 
-      {/* Quick links — always visible when not loading */}
+      {/* Quick links -- always visible when not loading */}
       {!isLoading && <QuickLinks />}
     </div>
   );

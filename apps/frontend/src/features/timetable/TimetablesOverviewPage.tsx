@@ -119,17 +119,17 @@ export function Component() {
 
         const next = { ...prev };
 
-        // Update phase based on progress — only if we haven't received
+        // Update phase based on progress -- only if we haven't received
         // richer WebSocket phase updates
         if (!prev.phases.length || prev.phases[prev.phases.length - 1] === 'loading') {
           if (completed === 0 && activeGen.active) {
-            next.currentPhase = { phase: 'demand_placement', message: `Scheduling ${total} divisions — constraint propagation in progress...`, totalDivisions: total, completedDivisions: 0 };
+            next.currentPhase = { phase: 'demand_placement', message: `Scheduling ${total} divisions -- constraint propagation in progress...`, totalDivisions: total, completedDivisions: 0 };
           } else if (completed > 0 && completed < total) {
             next.currentPhase = { phase: 'writing', message: `Writing timetables (${completed}/${total})...`, totalDivisions: total, completedDivisions: completed };
           }
         }
 
-        // Update division completed from polled jobs — but DON'T overwrite
+        // Update division completed from polled jobs -- but DON'T overwrite
         // entries that came from WebSocket (which have richer violation data)
         if (jobs) {
           const newCompleted = new Map(prev.divisionCompleted);
@@ -154,14 +154,14 @@ export function Component() {
         // Check if all done
         if (!activeGen.active && completed >= total) {
           // If WS is active (we've received phase events), don't build summary
-          // from polling — wait for the richer generation_summary WS event
+          // from polling -- wait for the richer generation_summary WS event
           // which includes failureAnalysis
           if (prev.phases.length > 0 && !prev.summary) {
-            // WS is active but summary hasn't arrived yet — just mark complete
+            // WS is active but summary hasn't arrived yet -- just mark complete
             next.active = false;
             next.currentPhase = { phase: 'complete', message: `All ${total} timetables generated`, totalDivisions: total, completedDivisions: total };
           } else if (!prev.summary) {
-            // No WS — build summary from polling data (fallback)
+            // No WS -- build summary from polling data (fallback)
             next.active = false;
             next.currentPhase = { phase: 'complete', message: `All ${total} timetables generated`, totalDivisions: total, completedDivisions: total };
 
@@ -205,7 +205,7 @@ export function Component() {
         switch (event.type) {
           case 'generation_phase': {
             const p = event.payload as unknown as PhaseState;
-            // New generation starting — clear old results
+            // New generation starting -- clear old results
             if (p.phase === 'loading') {
               next.summary = null;
               next.divisionCompleted = new Map();
@@ -315,7 +315,7 @@ export function Component() {
 
     try {
       await generateMutation({ divisionIds: ids, adjacencyConstraintEnabled: adjacencyEnabled }).unwrap();
-      toast.info(`Queued ${ids.length} division(s) — generation starting...`);
+      toast.info(`Queued ${ids.length} division(s) -- generation starting...`);
     } catch (err: unknown) {
       const error = err as { status?: number; data?: { error?: { code?: string; message?: string } } };
       // Reset progress on failure
@@ -343,7 +343,7 @@ export function Component() {
                   try {
                     const result = await exportClassesPdf({ classIds }).unwrap();
                     downloadHtmlAsPdf(result.html, result.filename);
-                    toast.success('Export ready — use browser print dialog to save as PDF');
+                    toast.success('Export ready -- use browser print dialog to save as PDF');
                   } catch { toast.error('Export failed'); }
                 }}
                 onExportExcel={async () => {
@@ -441,10 +441,10 @@ export function Component() {
                     <td className="px-4 py-3 font-medium">{div.className}</td>
                     <td className="px-4 py-3">
                       Division {div.label}
-                      {div.streamName && <span className="text-muted-foreground"> — {div.streamName}</span>}
+                      {div.streamName && <span className="text-muted-foreground"> -- {div.streamName}</span>}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {div.periodStructure?.name ?? '—'}
+                      {div.periodStructure?.name ?? '--'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <Badge
@@ -505,7 +505,7 @@ export function Component() {
             <tfoot>
               <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white">
                 <td colSpan={5} className="px-4 py-2.5 text-xs text-white/60">
-                  {allDivisions.length} division(s) — {generated} generated, {outdated} outdated, {pending} pending
+                  {allDivisions.length} division(s) -- {generated} generated, {outdated} outdated, {pending} pending
                 </td>
               </tr>
             </tfoot>

@@ -104,7 +104,7 @@ export function LoginForm({ onSwitchToRegister, onSwitchToForgot }: LoginFormPro
       }
     } catch (err: any) {
       if (err?.code === 'UserNotConfirmedException' || err?.name === 'UserNotConfirmedException') {
-        // User exists but email not verified — show confirmation screen
+        // User exists but email not verified -- show confirmation screen
         setSavedCredentials({ email: values.email, password: values.password });
         setNeedsConfirmation(true);
         // Resend the confirmation code automatically

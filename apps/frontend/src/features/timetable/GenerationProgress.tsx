@@ -196,7 +196,7 @@ export function GenerationProgress({ state, onDismiss }: GenerationProgressProps
                   {PHASE_LABELS[phase] ?? phase}
                 </div>
 
-                {/* Demand-driven placement details — show during placement AND after as summary */}
+                {/* Demand-driven placement details -- show during placement AND after as summary */}
                 {phase === 'demand_placement' && state.currentStep && (
                   <div className="mt-1 space-y-1">
                     {isCurrent && (
@@ -327,7 +327,7 @@ export function GenerationProgress({ state, onDismiss }: GenerationProgressProps
             <div className="flex items-center gap-2 text-sm">
               <CheckCircle2 className="size-4 text-emerald-500" />
               <span className="font-medium">
-                {state.summary.perfectDivisions} / {state.summary.totalDivisions} divisions — perfect
+                {state.summary.perfectDivisions} / {state.summary.totalDivisions} divisions -- perfect
               </span>
             </div>
 
@@ -424,7 +424,7 @@ function FailureAnalysisSection({ analyses }: { analyses: FailureAnalysis[] }) {
         onClick={() => setExpanded(!expanded)}
       >
         <AlertTriangle className="size-4" />
-        <span>{analyses.length} placement issue(s) — data fixes needed</span>
+        <span>{analyses.length} placement issue(s) -- data fixes needed</span>
         {expanded ? <ChevronDown className="size-3 ml-auto" /> : <ChevronRight className="size-3 ml-auto" />}
       </button>
 
@@ -461,7 +461,7 @@ function FailureAnalysisSection({ analyses }: { analyses: FailureAnalysis[] }) {
                       <span className="text-[11px] text-muted-foreground leading-tight">
                         <span className="font-medium text-foreground">{a.subject}</span>
                         {a.teachers.length > 0 && (
-                          <span> — {a.teachers.join(', ')}</span>
+                          <span> -- {a.teachers.join(', ')}</span>
                         )}
                       </span>
                     </button>

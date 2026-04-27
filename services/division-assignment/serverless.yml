@@ -59,6 +59,16 @@ functions:
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
+          method: GET
+          path: /api/elective-groups/grouped
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/elective-groups/bulk-save
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
           method: POST
           path: /api/elective-groups
           authorizer:

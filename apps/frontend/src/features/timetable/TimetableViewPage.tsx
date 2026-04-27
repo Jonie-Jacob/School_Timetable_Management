@@ -94,7 +94,7 @@ export function Component() {
   } | null>(null);
   // Track which slot IDs are involved in an in-flight swap for loading indicators
   const [swappingSlotIds, setSwappingSlotIds] = useState<Set<string>>(new Set());
-  // Post-swap result dialog — shows after a forced swap with conflicts
+  // Post-swap result dialog -- shows after a forced swap with conflicts
   const [swapResultDialog, setSwapResultDialog] = useState<{
     conflicts: SwapConflict[];
     resolving: Set<string>; // conflictedSlotIds currently being auto-resolved
@@ -122,10 +122,10 @@ export function Component() {
   const [sheetSelectedTeacherId, setSheetSelectedTeacherId] = useState<string>('');
   const [sheetSubjectId, setSheetSubjectId] = useState<string>('');
   // Filter / sort controls for the teacher picker.
-  // teacherPool — which teachers are eligible for the picker:
+  // teacherPool -- which teachers are eligible for the picker:
   //   'relevant' = qualified for the subject (default)
   //   'all'      = every teacher in the school
-  // hideConflicts — independent toggle, applied AFTER the pool filter, that
+  // hideConflicts -- independent toggle, applied AFTER the pool filter, that
   // removes any teacher already booked in the same (day, slot) elsewhere.
   // Combinations: Relevant + No conflicts, All + No conflicts, etc.
   const [teacherPool, setTeacherPool] = useState<'relevant' | 'all'>('relevant');
@@ -152,7 +152,7 @@ export function Component() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const divisionLabel = division
-    ? `${classItem?.name ?? ''} — Division ${division.label}${division.streamName ? ` (${division.streamName})` : ''}`
+    ? `${classItem?.name ?? ''} -- Division ${division.label}${division.streamName ? ` (${division.streamName})` : ''}`
     : '';
 
   // Build complete slot sequence from period structure or detect gaps
@@ -193,7 +193,7 @@ export function Component() {
       if (force && result.conflicts?.length > 0) {
         // Show post-swap result dialog with conflict details
         setSwapResultDialog({ conflicts: result.conflicts, resolving: new Set() });
-        toast.success('Slot swapped — conflicts created.');
+        toast.success('Slot swapped -- conflicts created.');
       } else {
         toast.success('Slot swapped.');
       }
@@ -205,7 +205,7 @@ export function Component() {
           const parsed = JSON.parse(error.data!.error!.message!);
           if (parsed.conflicts) {
             setSwapConflictDialog({ sourceSlotId, targetSlotId, conflicts: parsed.conflicts });
-            return; // Don't clear swapping IDs yet — dialog is open
+            return; // Don't clear swapping IDs yet -- dialog is open
           }
         } catch { /* fall through to generic error */ }
       }
@@ -338,7 +338,7 @@ export function Component() {
                     }
                     const period = getPeriodForSlot(day.periods, slot.sortOrder);
                     if (!period) {
-                      // No timetable_slot row for this (day, slot) — new period
+                      // No timetable_slot row for this (day, slot) -- new period
                       // added after generation. Click creates the row then opens editor.
                       const handleNewSlotClick = async () => {
                         if (!grid?.timetable?.id) return;
@@ -372,7 +372,7 @@ export function Component() {
                       return (
                         <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40 cursor-pointer hover:bg-muted/30 transition-colors" onClick={handleNewSlotClick}>
                           <div className="h-10 flex items-center justify-center">
-                            <span className="text-xs text-muted-foreground/40">—</span>
+                            <span className="text-xs text-muted-foreground/40">--</span>
                           </div>
                         </td>
                       );
@@ -454,7 +454,7 @@ export function Component() {
                           return (
                             <DroppableCell slotId={sid} swapValidity={validity}>
                               <div className="h-10 flex items-center justify-center">
-                                <span className="text-xs text-muted-foreground/40">—</span>
+                                <span className="text-xs text-muted-foreground/40">--</span>
                               </div>
                             </DroppableCell>
                           );
@@ -473,7 +473,7 @@ export function Component() {
         </DragOverlay>
       </DndContext>
 
-      {/* Click-to-edit cell sheet — glassmorphism design matching the rest of the app */}
+      {/* Click-to-edit cell sheet -- glassmorphism design matching the rest of the app */}
       <Sheet open={!!editSlot} onOpenChange={(open) => { if (!open) setEditSlot(null); }}>
         <SheetContent
           side="right"
@@ -482,7 +482,7 @@ export function Component() {
         >
           {editSlot && (
             <div className="flex h-full flex-col">
-              {/* Dark gradient header — matches table header styling */}
+              {/* Dark gradient header -- matches table header styling */}
               <div className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 px-5 py-4 text-white relative">
                 <button
                   type="button"
@@ -519,7 +519,7 @@ export function Component() {
                   )}
                 </div>
 
-                {/* Subject filter pills — every subject taught in this division */}
+                {/* Subject filter pills -- every subject taught in this division */}
                 {(() => {
                   const assignments = divisionAssignments ?? [];
                   const uniqueSubjects = Array.from(
@@ -552,23 +552,23 @@ export function Component() {
                   );
                 })()}
 
-                {/* Teacher options for selected subject — with filter + sort */}
+                {/* Teacher options for selected subject -- with filter + sort */}
                 {sheetSubjectId && (() => {
                   const allTeachers = teacherLoads ?? [];
                   const conflictIds = new Set((slotConflicts ?? []).map((c) => c.teacherId));
 
-                  // Step 1 — pool filter (Relevant vs All)
+                  // Step 1 -- pool filter (Relevant vs All)
                   let visibleTeachers =
                     teacherPool === 'all'
                       ? allTeachers
                       : allTeachers.filter((t) => t.qualifiedSubjectIds.includes(sheetSubjectId));
 
-                  // Step 2 — conflict filter (independent toggle)
+                  // Step 2 -- conflict filter (independent toggle)
                   if (hideConflicts) {
                     visibleTeachers = visibleTeachers.filter((t) => !conflictIds.has(t.id));
                   }
 
-                  // Step 3 — sort
+                  // Step 3 -- sort
                   visibleTeachers = [...visibleTeachers].sort((a, b) => {
                     if (teacherSort === 'name') {
                       return a.name.localeCompare(b.name);
@@ -583,7 +583,7 @@ export function Component() {
                   const visibleConflictCount = visibleTeachers.filter((t) => conflictIds.has(t.id)).length;
 
                   // Identify which teachers already have an existing assignment
-                  // for this (subject, division) — used for the badge.
+                  // for this (subject, division) -- used for the badge.
                   const subjectAssignments = (divisionAssignments ?? []).filter(
                     (a) => a.subjectId === sheetSubjectId,
                   );
@@ -733,7 +733,7 @@ export function Component() {
                     </div>
                     {slotConflicts.map((c) => (
                       <div key={`${c.teacherId}-${c.className}-${c.divisionLabel}`} className="text-[11px] text-muted-foreground pl-5">
-                        {c.teacherName} — {c.className}-{c.divisionLabel} ({c.subjectName})
+                        {c.teacherName} -- {c.className}-{c.divisionLabel} ({c.subjectName})
                       </div>
                     ))}
                   </div>
@@ -800,7 +800,7 @@ export function Component() {
                       if (exactMatch) {
                         targetAssignmentId = exactMatch.id;
                       } else if (subjectAssignments.length === 1) {
-                        // Path 2: exactly one assignment for this subject — update its teacher
+                        // Path 2: exactly one assignment for this subject -- update its teacher
                         const a = subjectAssignments[0];
                         await updateAssignment({ id: a.id, teacherId: sheetSelectedTeacherId }).unwrap();
                         targetAssignmentId = a.id;
@@ -1013,7 +1013,7 @@ export function Component() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Post-swap result dialog — shows conflicts with auto-resolve ── */}
+      {/* ── Post-swap result dialog -- shows conflicts with auto-resolve ── */}
       <Dialog
         open={!!swapResultDialog}
         onOpenChange={(v) => { if (!v) setSwapResultDialog(null); }}
@@ -1022,7 +1022,7 @@ export function Component() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="size-5 text-amber-500" />
-              Swap Completed — {swapResultDialog?.conflicts.length} Conflict{(swapResultDialog?.conflicts.length ?? 0) !== 1 ? 's' : ''} Created
+              Swap Completed -- {swapResultDialog?.conflicts.length} Conflict{(swapResultDialog?.conflicts.length ?? 0) !== 1 ? 's' : ''} Created
             </DialogTitle>
             <DialogDescription>
               The following teacher conflicts were created in other divisions. You can auto-resolve them or fix manually.

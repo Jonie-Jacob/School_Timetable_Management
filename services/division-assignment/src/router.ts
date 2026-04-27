@@ -32,6 +32,16 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     if (method === 'DELETE') return controller.removeElectiveSubject(event, groupSubjectIdMatch[1], groupSubjectIdMatch[2]);
   }
 
+  // Grouped elective groups: /api/elective-groups/grouped (must be before :id match)
+  if (method === 'GET' && path === '/api/elective-groups/grouped') {
+    return controller.listGroupedElectiveGroups(event);
+  }
+
+  // Bulk save elective group: /api/elective-groups/bulk-save
+  if (method === 'POST' && path === '/api/elective-groups/bulk-save') {
+    return controller.bulkSaveElectiveGroup(event);
+  }
+
   // Elective group subjects: /api/elective-groups/:id/subjects
   const groupSubjectsMatch = path.match(/^\/api\/elective-groups\/([^/]+)\/subjects$/);
   if (method === 'POST' && groupSubjectsMatch) {

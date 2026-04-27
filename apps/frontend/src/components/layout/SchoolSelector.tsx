@@ -34,7 +34,7 @@ export function SchoolSelector() {
     dispatch(setActiveAcademicYear(null));
     localStorage.setItem('active-school-id', schoolId);
 
-    // Invalidate all RTK Query caches — new school means different data
+    // Invalidate all RTK Query caches -- new school means different data
     dispatch(academicYearApi.util.resetApiState());
     dispatch(classApi.util.resetApiState());
     dispatch(configApi.util.resetApiState());
@@ -53,7 +53,7 @@ export function SchoolSelector() {
           className="gap-2 h-8 rounded-lg border border-white/15 bg-white/10 text-white/80 hover:bg-white/15 hover:text-white"
         >
           <Building2 className="size-4 text-white/60" />
-          <span className="hidden sm:inline max-w-[150px] truncate font-semibold">{selected?.name ?? '—'}</span>
+          <span className="hidden sm:inline max-w-[150px] truncate font-semibold">{selected?.name ?? '--'}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

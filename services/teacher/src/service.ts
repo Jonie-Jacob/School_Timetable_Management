@@ -95,7 +95,7 @@ export class TeacherService {
     // Fetch all assignments with elective group info to handle cross-division
     // electives correctly. For cross-div electives (same elective group spanning
     // multiple divisions), the teacher teaches all divisions simultaneously in
-    // the same slot — so we count the group's periods_per_week ONCE, not per-division.
+    // the same slot -- so we count the group's periods_per_week ONCE, not per-division.
     const assignments = await prisma.divisionAssignment.findMany({
       where: {
         schoolId,
@@ -130,7 +130,7 @@ export class TeacherService {
 
     // Compute load per teacher, deduplicating cross-div elective groups.
     // Both primary (teacherId) and assistant (assistantTeacherId) are counted
-    // — assistant teachers are busy for the same slots as primary.
+    // -- assistant teachers are busy for the same slots as primary.
     const loadByTeacher = new Map<string, number>();
     const countedCrossDivPerTeacher = new Map<string, Set<string>>();
 
@@ -170,22 +170,33 @@ export class TeacherService {
       select: {
         workingDayId: true,
         slotId: true,
-        divisionAssignment: { select: { teacherId: true, assistantTeacherId: true } },
+        divisionAssignment: {
+          select: { teacherId: true, assistantTeacherId: true, electiveGroupId: true, id: true },
+        },
       },
     });
 
+    // Count timetable periods: use a key that de-duplicates cross-div elective
+    // slots (same elective group at same time = 1 period) but preserves
+    // double-bookings (different assignments at same time = 2 periods).
+    // Key: (workingDayId:slotId:electiveGroupId) for electives,
+    //      (workingDayId:slotId:assignmentId) for regular assignments.
     const timetableByTeacher = new Map<string, Set<string>>();
     for (const ts of timetableSlots) {
-      const slotKey = `${ts.workingDayId}:${ts.slotId}`;
-      const tid = ts.divisionAssignment?.teacherId;
-      const atid = ts.divisionAssignment?.assistantTeacherId;
+      const da = ts.divisionAssignment;
+      if (!da) continue;
+      const groupKey = da.electiveGroupId
+        ? `${ts.workingDayId}:${ts.slotId}:eg:${da.electiveGroupId}`
+        : `${ts.workingDayId}:${ts.slotId}:da:${da.id}`;
+      const tid = da.teacherId;
+      const atid = da.assistantTeacherId;
       if (tid) {
         if (!timetableByTeacher.has(tid)) timetableByTeacher.set(tid, new Set());
-        timetableByTeacher.get(tid)!.add(slotKey);
+        timetableByTeacher.get(tid)!.add(groupKey);
       }
       if (atid) {
         if (!timetableByTeacher.has(atid)) timetableByTeacher.set(atid, new Set());
-        timetableByTeacher.get(atid)!.add(slotKey);
+        timetableByTeacher.get(atid)!.add(groupKey);
       }
     }
 
@@ -389,7 +400,7 @@ export class TeacherService {
 
   /**
    * Returns every teacher currently scheduled in the given (workingDay, slot)
-   * pair across the school/AY — excluding any timetable slots for the given
+   * pair across the school/AY -- excluding any timetable slots for the given
    * division (so when editing a cell, we don't flag the current cell as a
    * conflict with itself).
    *

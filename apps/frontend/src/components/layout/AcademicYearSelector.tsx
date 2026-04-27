@@ -53,7 +53,7 @@ export function AcademicYearSelector() {
           className="gap-2 h-8 rounded-lg border border-white/15 bg-white/10 text-white/80 hover:bg-white/15 hover:text-white"
         >
           <CalendarRange className="size-4 text-white/60" />
-          <span className="hidden sm:inline font-semibold">{selected?.label ?? '—'}</span>
+          <span className="hidden sm:inline font-semibold">{selected?.label ?? '--'}</span>
           {selected && (
             <Badge
               variant={selected.status === 'ACTIVE' ? 'success' : 'secondary'}

@@ -10,7 +10,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Left branding panel — desktop only */}
+      {/* Left branding panel -- desktop only */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-center items-center bg-gradient-to-br from-primary to-secondary p-12 text-white relative overflow-hidden">
         {/* Background decorative circles */}
         <div className="absolute -top-24 -left-24 size-96 rounded-full bg-white/5" />
@@ -45,7 +45,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
       {/* Right form panel */}
       <div className="flex flex-1 flex-col items-center justify-center p-6 lg:p-12">
-        {/* Mobile logo — visible on sm/md */}
+        {/* Mobile logo -- visible on sm/md */}
         <div className="flex lg:hidden items-center gap-2 mb-8">
           <div className="flex size-10 items-center justify-center rounded-xl bg-primary font-bold text-white text-lg">
             ST

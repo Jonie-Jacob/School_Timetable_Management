@@ -189,7 +189,7 @@ export function Component() {
                   <h3 className="font-semibold">
                     Division {div.label}
                     {div.streamName && (
-                      <span className="font-normal text-muted-foreground"> — {div.streamName}</span>
+                      <span className="font-normal text-muted-foreground"> -- {div.streamName}</span>
                     )}
                   </h3>
                   {!isReadOnly && (
@@ -204,7 +204,7 @@ export function Component() {
                   )}
                 </div>
 
-                {/* Period structure — inline editable dropdown */}
+                {/* Period structure -- inline editable dropdown */}
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">{t('detail.periodStructure')}</Label>
                   {isReadOnly ? (
@@ -405,7 +405,7 @@ export function ClassTeacherField({
     });
   })();
 
-  // Index of the first non-assigned teacher — used to render a divider row.
+  // Index of the first non-assigned teacher -- used to render a divider row.
   const firstUnassignedIdx = filteredTeachers.findIndex(
     (t) => !assignedTeachersInDivision.has(t.id),
   );
@@ -416,7 +416,7 @@ export function ClassTeacherField({
       const result = await analyze({ classId, divisionId: division.id, teacherId }).unwrap();
       setAnalysis(result);
       if (result.case === 'A') {
-        // Simple case — set directly
+        // Simple case -- set directly
         await onSet(teacherId);
         toast.success(`${result.teacher.name} set as class teacher`);
         setModalOpen(false);

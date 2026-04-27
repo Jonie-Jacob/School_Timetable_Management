@@ -202,7 +202,7 @@ export class TimetableService {
     const failures = response.failures ?? [];
     if (failures.length > 0 || !response.tasks || response.tasks.length === 0) {
       const reasons = failures
-        .map((f) => `${f.reason ?? 'unknown'}${f.detail ? ` — ${f.detail}` : ''}`)
+        .map((f) => `${f.reason ?? 'unknown'}${f.detail ? ` -- ${f.detail}` : ''}`)
         .join('; ');
       throw new AppError(
         `ECS RunTask failed to schedule the engine task: ${reasons || 'no tasks returned'}`,
@@ -259,7 +259,7 @@ export class TimetableService {
       orderBy: { sortOrder: 'asc' },
     });
 
-    // Get division assignments — INCLUDING unassigned-teacher entries.
+    // Get division assignments -- INCLUDING unassigned-teacher entries.
     // The current round-robin placer has no teacher-conflict logic anyway,
     // so null-teacher rows can occupy slots just like any other row. When
     // the GA engine lands (Phase 2), null-teacher assignments will still be
@@ -399,14 +399,14 @@ export class TimetableService {
     };
 
     type PeriodDto = {
-      // We expose ONE timetableSlotId per (day, slot) cell — the first row's id —
+      // We expose ONE timetableSlotId per (day, slot) cell -- the first row's id --
       // so existing override/drag handlers keep working for non-elective cells.
       // The full set of underlying slot rows is also returned via slotIds.
       timetableSlotId: string;
       slotIds: string[];
       slot: { id: string; slotType: string; slotNumber: number | null; startTime: Date; endTime: Date; sortOrder: number };
       assignments: AssignmentDto[];
-      // Convenience flag — true iff any assignment in this cell belongs to
+      // Convenience flag -- true iff any assignment in this cell belongs to
       // an elective group. The frontend uses this to render a stacked cell
       // and to disable the click-to-edit dialog.
       isElective: boolean;
@@ -659,7 +659,7 @@ export class TimetableService {
       );
     }
 
-    // Refuse to PLACE an elective assignment via override either — electives
+    // Refuse to PLACE an elective assignment via override either -- electives
     // must come from a regenerated timetable, not manual single-cell edits.
     if (dto.divisionAssignmentId) {
       const target = await prisma.divisionAssignment.findFirst({
@@ -884,7 +884,7 @@ export class TimetableService {
           : sourceSlot.timetableId,
         divisionId: c.divisionId,
         conflictType: 'SWAP_CONFLICT' as const,
-        changeDescription: `Teacher "${c.teacherName}" is double-booked — also teaching ${c.className} Division ${c.divisionLabel} at the same time slot`,
+        changeDescription: `Teacher "${c.teacherName}" is double-booked -- also teaching ${c.className} Division ${c.divisionLabel} at the same time slot`,
       }));
       await prisma.timetableNotification.createMany({ data: notificationData }).catch(() => {
         // Gracefully handle if SWAP_CONFLICT enum doesn't exist yet (migration pending)
@@ -922,7 +922,7 @@ export class TimetableService {
 
     const teacherId = conflictedSlot.divisionAssignment?.teacher?.id;
     if (!teacherId) {
-      throw new AppError('No teacher assigned to this slot — nothing to resolve', 400, 'NO_TEACHER');
+      throw new AppError('No teacher assigned to this slot -- nothing to resolve', 400, 'NO_TEACHER');
     }
 
     const timetableId = conflictedSlot.timetableId;
@@ -1119,6 +1119,8 @@ export class TimetableService {
           include: {
             subject: { select: { id: true, name: true } },
             electiveGroup: { select: { id: true, name: true } },
+            assistantTeacher: { select: { id: true, name: true } },
+            teacher: { select: { id: true, name: true } },
           },
         },
       },
@@ -1130,7 +1132,7 @@ export class TimetableService {
 
     // Pick canonical period structures for this teacher:
     // 1. Every structure used by any division where the teacher has assignments.
-    // 2. Fallback (teacher has zero assignments) — any structure in the school
+    // 2. Fallback (teacher has zero assignments) -- any structure in the school
     //    so the grid still shows Mon–Fri × P1..PN.
     const assignmentPeriodStructureIds = new Set<string>();
     for (const s of slots) {
@@ -1180,7 +1182,9 @@ export class TimetableService {
       id: string;
       subject: { id: string; name: string };
       teacher: { id: string; name: string } | null;
+      assistantTeacher: { id: string; name: string } | null;
       electiveGroup: { id: string; name: string } | null;
+      role?: 'primary' | 'assistant';
     };
     type TeacherPeriodDto = {
       timetableSlotId: string;
@@ -1251,14 +1255,22 @@ export class TimetableService {
       period.timetableSlotId = s.id;
       period.slotIds = [s.id];
       const role = da.assistantTeacherId === teacherId ? 'assistant' as const : 'primary' as const;
+      // For teacher timetable: show who the OTHER teacher is.
+      // If current teacher is primary → show assistant teacher name.
+      // If current teacher is assistant → show primary teacher name.
+      const otherTeacher = role === 'assistant'
+        ? (da.teacher ? { id: da.teacher.id, name: da.teacher.name } : null)
+        : (da.assistantTeacher ? { id: da.assistantTeacher.id, name: da.assistantTeacher.name } : null);
+
       period.assignments.push({
         id: da.id,
         subject: da.subject,
         // Reuse "teacher" field to carry the class-division label for
-        // the UI cell — the cell renders `assignment.teacher?.name`.
+        // the UI cell -- the cell renders `assignment.teacher?.name`.
         teacher: { id: s.timetable.division.id, name: divLabel },
         electiveGroup: da.electiveGroup,
         role,
+        assistantTeacher: otherTeacher,
       });
       if (da.electiveGroupId) period.isElective = true;
     }

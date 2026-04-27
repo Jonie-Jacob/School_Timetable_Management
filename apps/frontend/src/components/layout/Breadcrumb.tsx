@@ -45,7 +45,7 @@ function buildCrumbs(segments: string[]): CrumbEntry[] {
     const isLast = i === segments.length - 1;
 
     if (isUuid(segment)) {
-      // Skip standalone UUIDs — they are ID params.
+      // Skip standalone UUIDs -- they are ID params.
       // If the next segment is a known label (edit, assignments, etc.), the UUID is just a parent.
       // Collapse "teachers / <uuid> / edit" → "Teachers > Edit"
       i++;

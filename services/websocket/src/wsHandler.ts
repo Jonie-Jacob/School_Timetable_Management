@@ -31,7 +31,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           return { statusCode: 400, body: 'Missing schoolId query parameter' };
         }
 
-        // Extract userId from JWT token (simple decode, not full validation —
+        // Extract userId from JWT token (simple decode, not full validation --
         // API Gateway authorizer handles real auth if configured)
         let userId = 'unknown';
         if (token) {
@@ -41,7 +41,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             );
             userId = payload.email ?? payload.sub ?? 'unknown';
           } catch {
-            // Token decode failed — still allow connection
+            // Token decode failed -- still allow connection
           }
         }
 
@@ -57,7 +57,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
 
       case '$default': {
-        // Client-to-server messages — not used for generation progress
+        // Client-to-server messages -- not used for generation progress
         // but could be extended for future features
         console.log(`[WS $default] connectionId=${connectionId} body=${event.body}`);
         return { statusCode: 200, body: 'OK' };

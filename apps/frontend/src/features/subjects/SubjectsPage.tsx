@@ -170,7 +170,7 @@ export function Component() {
         size: 100,
         cell: ({ row }) => (
           <span className="text-muted-foreground text-xs font-mono">
-            {row.original.abbreviation || '—'}
+            {row.original.abbreviation || '--'}
           </span>
         ),
       },

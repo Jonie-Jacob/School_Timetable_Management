@@ -928,14 +928,28 @@ def _find_valid_slots_cross_div(
         # NOTE: minPeriodsPerDay for cross-div electives is now handled by
         # _find_valid_blocks_cross_div() in block-atomic mode.
 
-        # Teacher check — teachers are shared, only need to check once
-        picked = first_la.pick_available_teachers(
-            slot.day_of_week, slot.start_time,
-            state.teacher_busy, wsd.teacher_unavailable_times,
-            wsd.teacher_partitions, first_div,
-            end_time=slot.end_time,
-        )
-        if picked is None:
+        # Teacher check — check ALL teachers across ALL divisions in this
+        # cross-div elective (handles asymmetric electives where different
+        # divisions have different subject/teacher subsets).
+        teacher_conflict = False
+        for check_div_id in div_ids:
+            check_data = wsd.divisions[check_div_id]
+            check_la = None
+            for la in check_data.logical_assignments:
+                if la.elective_group_id == eg_id:
+                    check_la = la
+                    break
+            if check_la:
+                picked = check_la.pick_available_teachers(
+                    slot.day_of_week, slot.start_time,
+                    state.teacher_busy, wsd.teacher_unavailable_times,
+                    wsd.teacher_partitions, check_div_id,
+                    end_time=slot.end_time,
+                )
+                if picked is None:
+                    teacher_conflict = True
+                    break
+        if teacher_conflict:
             continue
 
         # Demand scoring with adjacency
@@ -1016,7 +1030,9 @@ def _place_cross_div(
                 state.placement_counts[(div_id, la_idx)] += 1
                 break
 
-    # Mark teachers busy ONCE using first division's LA
+    # Mark teachers busy ONCE — collect the UNION of teacher_ids from ALL
+    # divisions' LAs for this elective (handles asymmetric electives where
+    # different divisions have different subject subsets).
     first_div = div_ids[0]
     first_data = wsd.divisions[first_div]
     first_la = None
@@ -1027,30 +1043,23 @@ def _place_cross_div(
             first_la_idx = idx
             break
 
+    # Collect ALL teacher IDs across ALL divisions in this cross-div elective
+    all_teacher_ids: set[str] = set()
+    for div_id in div_ids:
+        div_data = wsd.divisions[div_id]
+        for la in div_data.logical_assignments:
+            if la.elective_group_id == eg_id:
+                all_teacher_ids.update(la.teacher_ids)
+                break
+
     added_slots: list[tuple[str, int, str, str]] = []
     if first_la:
         slot = first_data.period_slots[gi] if gi < len(first_data.period_slots) else None
         if slot:
-            picked = first_la.pick_available_teachers(
-                slot.day_of_week, slot.start_time,
-                state.teacher_busy, wsd.teacher_unavailable_times,
-                wsd.teacher_partitions, first_div,
-                end_time=slot.end_time,
-            )
-            if picked is None:
-                picked = first_la.teacher_ids
-            picked_set = set(picked)
-            for tid in picked:
+            # Mark ALL teachers from ALL divisions busy at this slot
+            for tid in all_teacher_ids:
                 state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
                 added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
-            # Mark ALL split-mode elective teachers busy — they will be
-            # distributed to specific slots by the output writer, so no
-            # regular assignment should occupy any elective slot for them.
-            if first_la.is_elective:
-                for tid in first_la.teacher_ids:
-                    if tid not in picked_set:
-                        state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
-                        added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
 
     state.history.append((first_div, first_la_idx, gi, added_slots))
 
@@ -1316,13 +1325,26 @@ def _find_valid_blocks_cross_div(
                     block_valid = False
                     break
 
-            picked = first_la.pick_available_teachers(
-                slot.day_of_week, slot.start_time,
-                state.teacher_busy, wsd.teacher_unavailable_times,
-                wsd.teacher_partitions, first_div,
-                end_time=slot.end_time,
-            )
-            if picked is None:
+            # Check ALL divisions' teachers (asymmetric elective support)
+            teacher_ok = True
+            for check_div_id in div_ids:
+                check_data = wsd.divisions[check_div_id]
+                check_la = None
+                for la2 in check_data.logical_assignments:
+                    if la2.elective_group_id == eg_id:
+                        check_la = la2
+                        break
+                if check_la:
+                    picked = check_la.pick_available_teachers(
+                        slot.day_of_week, slot.start_time,
+                        state.teacher_busy, wsd.teacher_unavailable_times,
+                        wsd.teacher_partitions, check_div_id,
+                        end_time=slot.end_time,
+                    )
+                    if picked is None:
+                        teacher_ok = False
+                        break
+            if not teacher_ok:
                 block_valid = False
                 break
 
@@ -1410,7 +1432,7 @@ def _place_block_cross_div(
                     state.placement_counts[(div_id, la_idx)] += 1
                 break
 
-    # Mark teachers busy ONCE using first division
+    # Mark teachers busy ONCE — UNION of teacher_ids from ALL divisions
     first_div = div_ids[0]
     first_data = wsd.divisions[first_div]
     first_la = None
@@ -1421,30 +1443,24 @@ def _place_block_cross_div(
             first_la_idx = idx
             break
 
+    # Collect ALL teacher IDs across ALL divisions
+    all_teacher_ids: set[str] = set()
+    for div_id in div_ids:
+        div_data = wsd.divisions[div_id]
+        for la in div_data.logical_assignments:
+            if la.elective_group_id == eg_id:
+                all_teacher_ids.update(la.teacher_ids)
+                break
+
     all_added_slots: list[tuple[str, int, str, str]] = []
     if first_la:
         for offset in range(block_size):
             gi = gi_start + offset
             slot = first_data.period_slots[gi] if gi < len(first_data.period_slots) else None
             if slot:
-                picked = first_la.pick_available_teachers(
-                    slot.day_of_week, slot.start_time,
-                    state.teacher_busy, wsd.teacher_unavailable_times,
-                    wsd.teacher_partitions, first_div,
-                    end_time=slot.end_time,
-                )
-                if picked is None:
-                    picked = first_la.teacher_ids
-                picked_set = set(picked)
-                for tid in picked:
+                for tid in all_teacher_ids:
                     state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
                     all_added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
-                # Mark ALL split-mode elective teachers busy
-                if first_la.is_elective:
-                    for tid in first_la.teacher_ids:
-                        if tid not in picked_set:
-                            state.teacher_busy.add(tid, slot.day_of_week, slot.start_time, slot.end_time)
-                            all_added_slots.append((tid, slot.day_of_week, slot.start_time, slot.end_time))
 
     state.history.append((first_div, first_la_idx, gi_start, all_added_slots))
 

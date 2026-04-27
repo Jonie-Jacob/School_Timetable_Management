@@ -188,7 +188,7 @@ export class ClassService {
       };
     }
 
-    // Teacher doesn't teach in this division — find what they teach elsewhere
+    // Teacher doesn't teach in this division -- find what they teach elsewhere
     const teacherAssignmentsElsewhere = await prisma.divisionAssignment.findMany({
       where: { teacherId, schoolId, academicYearId, deletedAt: null, divisionId: { not: divisionId } },
       include: {

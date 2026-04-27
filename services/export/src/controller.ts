@@ -112,4 +112,13 @@ export class ExportController {
     const result = await service.exportTeachersExcel(auth.schoolId!, academicYearId, dto.teacherIds ?? []);
     return success(result);
   }
+
+  // Free periods export
+
+  async exportFreePeriods(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const { academicYearId } = await academicYearMiddleware(event, { schoolId: auth.schoolId! });
+    const result = await service.exportFreePeriods(auth.schoolId!, academicYearId);
+    return success(result);
+  }
 }

@@ -52,7 +52,7 @@ export function Component() {
   const hasExistingTimetable = !!timetable;
 
   const divisionLabel = division
-    ? `${classItem?.name ?? ''} — Division ${division.label}${division.streamName ? ` (${division.streamName})` : ''}`
+    ? `${classItem?.name ?? ''} -- Division ${division.label}${division.streamName ? ` (${division.streamName})` : ''}`
     : '';
 
   const handleGenerate = async () => {
@@ -68,7 +68,7 @@ export function Component() {
       if (job?.jobId) {
         setActiveJobId(job.jobId);
       }
-      // Always refetch — mock generator completes inline
+      // Always refetch -- mock generator completes inline
       refetchTimetable();
       if (!job?.jobId) {
         toast.success(t('generator.success'));

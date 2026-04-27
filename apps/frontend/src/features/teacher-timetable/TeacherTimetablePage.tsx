@@ -17,9 +17,11 @@ import {
   useExportTeacherExcelMutation,
   useExportTeachersPdfMutation,
   useExportTeachersExcelMutation,
+  useExportFreePeriodsMutation,
   downloadHtmlAsPdf,
   downloadExcel,
 } from '@/features/export/exportApi';
+import { CalendarOff } from 'lucide-react';
 
 type SortKey = 'name' | 'load-asc' | 'load-desc';
 
@@ -38,6 +40,7 @@ export function Component() {
   const [exportExcel] = useExportTeacherExcelMutation();
   const [exportAllPdf] = useExportTeachersPdfMutation();
   const [exportAllExcel] = useExportTeachersExcelMutation();
+  const [exportFreePeriods] = useExportFreePeriodsMutation();
 
   // Index loads by id for quick lookup, then merge with the teacher list so
   // teachers without any assignments still show up (with 0 periods).
@@ -74,7 +77,7 @@ export function Component() {
     try {
       const result = await exportPdf({ teacherId }).unwrap();
       downloadHtmlAsPdf(result.html, result.filename);
-      toast.success('Export ready — use browser print dialog to save as PDF');
+      toast.success('Export ready -- use browser print dialog to save as PDF');
     } catch {
       toast.error('Export failed');
     } finally {
@@ -101,7 +104,7 @@ export function Component() {
       // Empty teacherIds array → backend returns every teacher in the AY
       const result = await exportAllPdf({ teacherIds: [] }).unwrap();
       downloadHtmlAsPdf(result.html, result.filename);
-      toast.success('All-teachers export ready — use browser print dialog to save as PDF');
+      toast.success('All-teachers export ready -- use browser print dialog to save as PDF');
     } catch (err: any) {
       toast.error(err?.data?.error?.message ?? 'Export failed');
     } finally {
@@ -122,6 +125,19 @@ export function Component() {
     }
   };
 
+  const handleExportFreePeriods = async () => {
+    setExportingAll(true);
+    try {
+      const result = await exportFreePeriods().unwrap();
+      downloadHtmlAsPdf(result.html, result.filename);
+      toast.success('Free periods export ready');
+    } catch (err: any) {
+      toast.error(err?.data?.error?.message ?? 'Export failed');
+    } finally {
+      setExportingAll(false);
+    }
+  };
+
   const isLoading = teachersLoading || loadsLoading;
 
   return (
@@ -131,6 +147,10 @@ export function Component() {
         description="View and export weekly timetables for every teacher."
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportFreePeriods} disabled={exportingAll}>
+              <CalendarOff className="size-3.5" />
+              Free Periods
+            </Button>
             <Button variant="outline" size="sm" onClick={handleExportAllPdf} disabled={exportingAll}>
               <FileText className="size-3.5" />
               Export All (PDF)
@@ -224,7 +244,7 @@ export function Component() {
                           {row.timetablePeriods}
                         </Badge>
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">—</span>
+                        <span className="text-[10px] text-muted-foreground">--</span>
                       )}
                     </td>
                     <td className="px-4 py-3">

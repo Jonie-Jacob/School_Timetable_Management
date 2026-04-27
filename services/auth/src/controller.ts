@@ -77,6 +77,6 @@ export class AuthController {
     const email = event.headers?.['x-user-email'];
     if (email) return email;
 
-    throw new AppError('Unauthorized — provide Bearer token or x-user-email header', 401, 'UNAUTHORIZED');
+    throw new AppError('Unauthorized -- provide Bearer token or x-user-email header', 401, 'UNAUTHORIZED');
   }
 }
