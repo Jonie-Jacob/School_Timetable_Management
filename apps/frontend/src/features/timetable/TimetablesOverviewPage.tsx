@@ -335,11 +335,11 @@ export function Component() {
         description="View and manage timetables across all classes and divisions."
         actions={
           <div className="flex items-center gap-2">
-            {generated > 0 && (
+            {(generated > 0 || outdated > 0) && (
               <ExportButton
                 label="Export All"
                 onExportPdf={async () => {
-                  const classIds = [...new Set(allDivisions.filter(d => d.timetable?.status === 'GENERATED').map(d => d.classId))];
+                  const classIds = [...new Set(allDivisions.filter(d => d.timetable?.status === 'GENERATED' || d.timetable?.status === 'OUTDATED').map(d => d.classId))];
                   try {
                     const result = await exportClassesPdf({ classIds }).unwrap();
                     downloadHtmlAsPdf(result.html, result.filename);
@@ -347,7 +347,7 @@ export function Component() {
                   } catch { toast.error('Export failed'); }
                 }}
                 onExportExcel={async () => {
-                  const classIds = [...new Set(allDivisions.filter(d => d.timetable?.status === 'GENERATED').map(d => d.classId))];
+                  const classIds = [...new Set(allDivisions.filter(d => d.timetable?.status === 'GENERATED' || d.timetable?.status === 'OUTDATED').map(d => d.classId))];
                   try {
                     const result = await exportClassesExcel({ classIds }).unwrap();
                     downloadExcel(result.base64, result.filename);

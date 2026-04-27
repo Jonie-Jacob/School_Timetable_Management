@@ -319,12 +319,37 @@ export class ExportService {
     // Compute teacher stats: total periods and class-wise breakdown.
     // Use distinct keys to handle cross-div electives (same teacher at
     // same time in multiple divisions = 1 period, not N).
+
+    // Step 1: For electives, build a combined class name from all
+    // participating divisions (e.g., "XI B, XI C, XI D" instead of
+    // separate entries that each show the same period count).
+    const electiveGroupDivisions = new Map<string, Set<string>>();
+    for (const s of timetableSlots) {
+      const da = s.divisionAssignment;
+      if (!da?.electiveGroupId) continue;
+      const divName = `${s.timetable.division.class.name} ${s.timetable.division.label}`;
+      if (!electiveGroupDivisions.has(da.electiveGroupId))
+        electiveGroupDivisions.set(da.electiveGroupId, new Set());
+      electiveGroupDivisions.get(da.electiveGroupId)!.add(divName);
+    }
+    // Build sorted combined names per elective group
+    const electiveGroupClassName = new Map<string, string>();
+    for (const [egId, divs] of electiveGroupDivisions) {
+      electiveGroupClassName.set(
+        egId,
+        Array.from(divs).sort((a, b) => a.localeCompare(b)).join(', '),
+      );
+    }
+
+    // Step 2: Count periods per class, using combined name for electives
     const classCountMap = new Map<string, Set<string>>();
     const totalDistinct = new Set<string>();
     for (const s of timetableSlots) {
       const da = s.divisionAssignment;
       if (!da) continue;
-      const className = `${s.timetable.division.class.name} ${s.timetable.division.label}`;
+      const className = da.electiveGroupId
+        ? electiveGroupClassName.get(da.electiveGroupId)!
+        : `${s.timetable.division.class.name} ${s.timetable.division.label}`;
       if (!classCountMap.has(className)) classCountMap.set(className, new Set());
       const slotKey = da.electiveGroupId
         ? `${s.workingDay.dayOfWeek}:${s.slot.sortOrder}:eg:${da.electiveGroupId}`
