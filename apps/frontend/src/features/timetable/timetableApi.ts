@@ -164,6 +164,33 @@ interface PreviewAffectedDivision {
   action: 'displaced_to_source' | 'empty_freed';
 }
 
+// ── Resolution candidate types ──
+
+export interface ResolutionCandidate {
+  slotId: string;
+  dayLabel: string;
+  dayOfWeek: number;
+  periodNumber: number | null;
+  sortOrder: number;
+  subjectName: string | null;
+  teacherName: string | null;
+  isEmpty: boolean;
+  score: number;
+}
+
+export interface ResolutionCandidatesResponse {
+  conflictedSlot: {
+    id: string;
+    className: string;
+    divisionLabel: string;
+    subjectName: string;
+    teacherName: string;
+    dayLabel: string;
+    periodNumber: number | null;
+  } | null;
+  candidates: ResolutionCandidate[];
+}
+
 export interface PreviewElectiveSwapResponse {
   sourceElectiveGroup: { id: string; name: string };
   sourceCoordinates: { dayLabel: string; slotSortOrder: number };
@@ -255,6 +282,13 @@ export const timetableApi = createApi({
       invalidatesTags: ['Timetable'],
     }),
 
+    // ── Resolution candidates ──
+
+    getResolutionCandidates: builder.query<ResolutionCandidatesResponse, string>({
+      query: (slotId) => `timetables/slots/${slotId}/resolution-candidates`,
+      transformResponse: (response: { data: ResolutionCandidatesResponse }) => response.data,
+    }),
+
     // ── Elective swap endpoints ──
 
     getValidElectiveSwapTargets: builder.query<ValidElectiveSwapTargetsResponse, string>({
@@ -297,4 +331,5 @@ export const {
   useLazyGetValidElectiveSwapTargetsQuery,
   useSwapElectiveSlotsMutation,
   usePreviewElectiveSwapMutation,
+  useLazyGetResolutionCandidatesQuery,
 } = timetableApi;

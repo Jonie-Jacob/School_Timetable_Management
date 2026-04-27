@@ -1132,6 +1132,129 @@ export class TimetableService {
     };
   }
 
+  // ── Resolution Candidates ──
+
+  async getResolutionCandidates(schoolId: string, conflictedSlotId: string) {
+    const conflictedSlot = await prisma.timetableSlot.findFirst({
+      where: { id: conflictedSlotId, schoolId },
+      include: {
+        timetable: { include: { division: { include: { class: true } } } },
+        divisionAssignment: {
+          include: {
+            subject: { select: { id: true, name: true } },
+            teacher: { select: { id: true, name: true } },
+          },
+        },
+        workingDay: true,
+        slot: true,
+      },
+    });
+    if (!conflictedSlot) throw new NotFoundError('TimetableSlot', conflictedSlotId);
+
+    const teacherId = conflictedSlot.divisionAssignment?.teacher?.id;
+    if (!teacherId) {
+      return { candidates: [], conflictedSlot: null };
+    }
+
+    const timetableId = conflictedSlot.timetableId;
+
+    const allSlots = await prisma.timetableSlot.findMany({
+      where: {
+        timetableId,
+        id: { not: conflictedSlotId },
+      },
+      include: {
+        divisionAssignment: {
+          include: {
+            subject: { select: { id: true, name: true } },
+            teacher: { select: { id: true, name: true } },
+            electiveGroup: { select: { id: true } },
+          },
+        },
+        workingDay: true,
+        slot: true,
+      },
+    });
+
+    type CandidateInfo = {
+      slotId: string;
+      dayLabel: string;
+      dayOfWeek: number;
+      periodNumber: number | null;
+      sortOrder: number;
+      subjectName: string | null;
+      teacherName: string | null;
+      isEmpty: boolean;
+      score: number;
+    };
+    const candidates: CandidateInfo[] = [];
+
+    for (const candidate of allSlots) {
+      // Skip non-period slots
+      if (candidate.slot?.slotType !== 'PERIOD') continue;
+      // Skip elective slots
+      if (candidate.divisionAssignment?.electiveGroup) continue;
+
+      const candidateTeacherId = candidate.divisionAssignment?.teacher?.id;
+
+      // Check: would the conflicted teacher be free at the candidate's time?
+      const conflictedTeacherBusy = await this.findTeacherTimeConflict(
+        schoolId,
+        [conflictedSlotId, candidate.id],
+        candidate.workingDay!.dayOfWeek,
+        candidate.slot!.startTime,
+        candidate.slot!.endTime,
+        teacherId,
+      );
+      if (conflictedTeacherBusy) continue;
+
+      // Check: would the candidate's teacher be free at the conflicted position?
+      if (candidateTeacherId) {
+        const candidateTeacherBusy = await this.findTeacherTimeConflict(
+          schoolId,
+          [conflictedSlotId, candidate.id],
+          conflictedSlot.workingDay!.dayOfWeek,
+          conflictedSlot.slot!.startTime,
+          conflictedSlot.slot!.endTime,
+          candidateTeacherId,
+        );
+        if (candidateTeacherBusy) continue;
+      }
+
+      let score = 0;
+      if (!candidate.divisionAssignmentId) score = 100;
+      else if (!candidateTeacherId) score = 80;
+      else score = 50;
+
+      candidates.push({
+        slotId: candidate.id,
+        dayLabel: candidate.workingDay?.label ?? '',
+        dayOfWeek: candidate.workingDay?.dayOfWeek ?? 0,
+        periodNumber: candidate.slot?.slotNumber ?? null,
+        sortOrder: candidate.slot?.sortOrder ?? 0,
+        subjectName: candidate.divisionAssignment?.subject?.name ?? null,
+        teacherName: candidate.divisionAssignment?.teacher?.name ?? null,
+        isEmpty: !candidate.divisionAssignmentId,
+        score,
+      });
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    return {
+      conflictedSlot: {
+        id: conflictedSlotId,
+        className: conflictedSlot.timetable.division?.class?.name ?? '',
+        divisionLabel: conflictedSlot.timetable.division?.label ?? '',
+        subjectName: conflictedSlot.divisionAssignment?.subject?.name ?? '',
+        teacherName: conflictedSlot.divisionAssignment?.teacher?.name ?? '',
+        dayLabel: conflictedSlot.workingDay?.label ?? '',
+        periodNumber: conflictedSlot.slot?.slotNumber ?? null,
+      },
+      candidates,
+    };
+  }
+
   // ── Create Empty Slot ──
 
   async createEmptySlot(schoolId: string, dto: CreateEmptySlotDto) {

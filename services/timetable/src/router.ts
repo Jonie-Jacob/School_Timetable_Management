@@ -64,6 +64,13 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.previewElectiveSwap(event);
   }
 
+  // Resolution candidates: GET /timetables/slots/:slotId/resolution-candidates
+  const resolutionMatch = path.match(/^\/api\/timetables\/slots\/([^/]+)\/resolution-candidates$/);
+  if (method === 'GET' && resolutionMatch) {
+    event.pathParameters = { ...event.pathParameters, slotId: resolutionMatch[1] };
+    return controller.getResolutionCandidates(event);
+  }
+
   // Valid elective swap targets: GET /timetables/slots/:slotId/valid-elective-swaps
   const validElectiveSwapsMatch = path.match(/^\/api\/timetables\/slots\/([^/]+)\/valid-elective-swaps$/);
   if (method === 'GET' && validElectiveSwapsMatch) {

@@ -74,6 +74,26 @@ functions:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
+          path: /api/timetables/slots/swap-elective
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/timetables/slots/preview-elective-swap
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
+          path: /api/timetables/slots/{slotId}/valid-elective-swaps
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
+          path: /api/timetables/slots/{slotId}/resolution-candidates
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
           path: /api/timetables/slots/auto-resolve
           authorizer:
             name: cognitoAuthorizer
