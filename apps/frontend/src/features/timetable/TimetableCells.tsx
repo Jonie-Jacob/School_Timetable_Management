@@ -49,6 +49,7 @@ export function CellContent({ assignment, isDragging }: CellContentProps) {
 
 interface ElectiveCellContentProps {
   assignments: TimetableSlotAssignment[];
+  isDragging?: boolean;
 }
 
 /**
@@ -70,7 +71,7 @@ function stripClassPrefix(name: string): string {
  * elective rows; click is wired by the parent to open a read-only info sheet
  * that links to /elective-groups for actual editing.
  */
-export function ElectiveCellContent({ assignments }: ElectiveCellContentProps) {
+export function ElectiveCellContent({ assignments, isDragging }: ElectiveCellContentProps) {
   const fullName = assignments.find((a) => a.electiveGroup)?.electiveGroup?.name ?? 'Elective';
   const displayName = stripClassPrefix(fullName);
   // Color the cell by the elective group name so all the elective's slots
@@ -80,10 +81,12 @@ export function ElectiveCellContent({ assignments }: ElectiveCellContentProps) {
   return (
     <div
       className={cn(
-        'rounded-lg px-1.5 py-1 select-none ring-1 ring-amber-500/40 cursor-pointer hover:ring-amber-500/70 hover:shadow-sm transition-all',
+        'rounded-lg px-1.5 py-1 select-none ring-1 ring-amber-500/40 transition-all',
         colorClass,
+        isDragging && 'shadow-xl ring-2 ring-amber-500 scale-105 opacity-90',
+        !isDragging && 'cursor-grab active:cursor-grabbing hover:ring-amber-500/70 hover:shadow-sm',
       )}
-      title={`${fullName} -- click for details`}
+      title={`${fullName} -- drag to swap`}
     >
       <div className="text-[9px] font-bold uppercase tracking-wider opacity-90 truncate">
         {displayName}

@@ -145,7 +145,12 @@ export function Component() {
   const periodStructureId = division?.periodStructureId;
   const { data: periodStructure } = useGetPeriodStructureQuery(periodStructureId!, { skip: !periodStructureId });
 
-  const [activeDrag, setActiveDrag] = useState<{ slotId: string; assignment: TimetableSlotAssignment } | null>(null);
+  const [activeDrag, setActiveDrag] = useState<{
+    slotId: string;
+    assignment: TimetableSlotAssignment;
+    isElective: boolean;
+    electiveAssignments?: TimetableSlotAssignment[];
+  } | null>(null);
   const [fetchValidSwaps] = useLazyGetValidSwapTargetsQuery();
   const [swapTargets, setSwapTargets] = useState<{ valid: Set<string>; invalid: Set<string> } | null>(null);
 
@@ -224,22 +229,10 @@ export function Component() {
     const sourceSlotId = active.id as string;
     const targetSlotId = over.id as string;
 
-    // Find assignments for source and target
-    const allPeriods = grid?.days?.flatMap((d) => d.periods) ?? [];
-    const sourcePeriod = allPeriods.find((p) => p.timetableSlotId === sourceSlotId);
-    const targetPeriod = allPeriods.find((p) => p.timetableSlotId === targetSlotId);
-
-    // Refuse to drag elective cells (the backend would reject the override)
-    if (sourcePeriod?.isElective || targetPeriod?.isElective) {
-      toast.error('Elective cells cannot be moved. Use the Assignments page or regenerate the timetable.');
-      return;
-    }
-
-    const sourceAssignment = sourcePeriod?.assignments[0];
-    if (!sourceAssignment) return;
-
+    // Backend swapSlots() auto-detects elective involvement and delegates
+    // to swapElectiveSlots() when needed. No frontend guard required.
     await executeSwap(sourceSlotId, targetSlotId);
-  }, [grid, executeSwap]);
+  }, [executeSwap]);
 
   if (isLoading) {
     return (
@@ -293,18 +286,43 @@ export function Component() {
       <DndContext sensors={sensors} onDragStart={(e) => {
         const allP = grid.days.flatMap((d) => d.periods);
         const p = allP.find((pp) => pp.timetableSlotId === e.active.id);
-        if (p?.isElective) return;
         const a = p?.assignments[0];
-        if (a) {
-          setActiveDrag({ slotId: p!.timetableSlotId, assignment: a });
-          // Fetch valid swap targets in background
-          fetchValidSwaps(p!.timetableSlotId).unwrap().then((result) => {
+        if (!a) return;
+
+        setActiveDrag({
+          slotId: p!.timetableSlotId,
+          assignment: a,
+          isElective: !!p!.isElective,
+          electiveAssignments: p!.isElective ? p!.assignments : undefined,
+        });
+
+        // Fetch valid swap targets -- backend handles elective vs regular routing
+        fetchValidSwaps(p!.timetableSlotId).unwrap().then((result) => {
+          // Backend may return coordinate-based results for electives or
+          // slot-ID-based results for regular. Handle both formats.
+          if ('validSlotIds' in result) {
             setSwapTargets({
               valid: new Set(result.validSlotIds),
               invalid: new Set(result.invalidSlotIds),
             });
-          }).catch(() => setSwapTargets(null));
-        }
+          } else {
+            // Coordinate-based results from elective targets -- map to slot IDs in current grid
+            const coordResult = result as { validCoordinates: { dayOfWeek: number; slotSortOrder: number }[]; invalidCoordinates: { dayOfWeek: number; slotSortOrder: number }[] };
+            const valid = new Set<string>();
+            const invalid = new Set<string>();
+            for (const coord of coordResult.validCoordinates) {
+              const day = grid.days.find((d) => d.workingDay.dayOfWeek === coord.dayOfWeek);
+              const period = day?.periods.find((pp) => pp.slot.sortOrder === coord.slotSortOrder);
+              if (period) valid.add(period.timetableSlotId);
+            }
+            for (const coord of coordResult.invalidCoordinates) {
+              const day = grid.days.find((d) => d.workingDay.dayOfWeek === coord.dayOfWeek);
+              const period = day?.periods.find((pp) => pp.slot.sortOrder === coord.slotSortOrder);
+              if (period) invalid.add(period.timetableSlotId);
+            }
+            setSwapTargets({ valid, invalid });
+          }
+        }).catch(() => setSwapTargets(null));
       }} onDragEnd={(e) => { setSwapTargets(null); handleDragEnd(e); }} onDragCancel={() => { setActiveDrag(null); setSwapTargets(null); }}>
         <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-x-auto shadow-sm">
           <table className="w-full text-sm border-collapse">
@@ -380,18 +398,41 @@ export function Component() {
 
                     const firstAssignment = period.assignments[0];
 
-                    // Elective cells: render the stacked elective view.
-                    // Click opens the read-only info sheet. Drag-drop stays
-                    // disabled because the override endpoint refuses these.
+                    // Elective cells: render the stacked elective view with drag-drop.
+                    // Click opens the read-only info sheet.
                     if (period.isElective) {
                       const electiveGroupId = period.assignments.find((a) => a.electiveGroup)?.electiveGroup?.id;
+                      const sid = period.timetableSlotId;
+                      const isSource = activeDrag?.slotId === sid;
+                      const validity = !isSource && swapTargets
+                        ? swapTargets.valid.has(sid) ? 'valid' as const
+                          : swapTargets.invalid.has(sid) ? 'invalid' as const
+                          : undefined
+                        : undefined;
+                      const isCellSwapping = swappingSlotIds.has(sid);
+
                       return (
-                        <td
-                          key={slot.id}
-                          className="px-1 py-1 border-r border-border/40"
-                          onClick={() => { if (electiveGroupId) setElectiveInfoGroupId(electiveGroupId); }}
-                        >
-                          <ElectiveCellContent assignments={period.assignments} />
+                        <td key={slot.id} className="px-1 py-1 border-r border-border/40 relative">
+                          {isCellSwapping && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[2px] rounded-lg">
+                              <Loader2 className="size-5 animate-spin text-amber-500" />
+                            </div>
+                          )}
+                          {isDesktop ? (
+                            <DraggableCell slotId={sid}>
+                              <DroppableCell slotId={sid} swapValidity={validity}>
+                                <div onClick={(ev) => { ev.stopPropagation(); if (electiveGroupId) setElectiveInfoGroupId(electiveGroupId); }}>
+                                  <ElectiveCellContent assignments={period.assignments} />
+                                </div>
+                              </DroppableCell>
+                            </DraggableCell>
+                          ) : (
+                            <DroppableCell slotId={sid} swapValidity={validity}>
+                              <div onClick={() => { if (electiveGroupId) setElectiveInfoGroupId(electiveGroupId); }}>
+                                <ElectiveCellContent assignments={period.assignments} />
+                              </div>
+                            </DroppableCell>
+                          )}
                         </td>
                       );
                     }
@@ -469,7 +510,11 @@ export function Component() {
         </div>
 
         <DragOverlay>
-          {activeDrag && <CellContent assignment={activeDrag.assignment} isDragging />}
+          {activeDrag && (
+            activeDrag.isElective && activeDrag.electiveAssignments
+              ? <ElectiveCellContent assignments={activeDrag.electiveAssignments} isDragging />
+              : <CellContent assignment={activeDrag.assignment} isDragging />
+          )}
         </DragOverlay>
       </DndContext>
 
