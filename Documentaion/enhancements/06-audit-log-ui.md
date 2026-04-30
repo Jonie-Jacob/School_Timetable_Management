@@ -180,61 +180,59 @@ Add `AUDIT_LOG_TABLE` env var to all services (default: `sms-audit-logs`).
 
 ---
 
-### Phase 2: Audit Log Service (Shared)
+### Phase 2: Audit Log Service (Shared) -- ALREADY BUILT (Enhancement 14, Phase 5)
 
-#### 2.1 Create audit log helper
+> These helpers were pre-built in Enhancement 14, Phase 5. No new files needed.
+> Just use the existing shared helpers.
 
-**File:** `packages/shared/src/helpers/auditLogHelper.ts` (NEW)
+#### 2.1 Audit log helper -- ALREADY EXISTS
 
-```typescript
-interface AuditLogEntry {
-  schoolId: string;
-  academicYearId?: string;
-  userId: string;
-  userEmail: string;
-  userRole: string;
-  ipAddress: string;
-  userAgent: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  entityName: string;
-  description: string;
-  changes?: { field: string; oldValue: any; newValue: any }[];
-  relatedEntities?: { type: string; id: string; name: string }[];
-}
-
-export async function writeAuditLog(entry: AuditLogEntry): Promise<void> {
-  // Fire-and-forget: don't await, catch errors silently
-  // Writes to DynamoDB with PK, SK, GSI attributes
-}
-```
-
-#### 2.2 Create user context extractor
-
-The service layer needs access to user identity (userId, email, role, IP, userAgent) from the Lambda event. Currently the auth middleware returns `{ schoolId }`. Need to extend it or pass context through.
-
-**Approach:** Create a `RequestContext` type that carries user identity through the service layer:
+**File:** `packages/shared/src/helpers/auditLogHelper.ts`
 
 ```typescript
-interface RequestContext {
-  schoolId: string;
-  userId: string;
-  userEmail: string;
-  userRole: string;
-  ipAddress: string;
-  userAgent: string;
-  academicYearId?: string;
-}
+import { writeAuditLog, computeChanges, type AuditLogEntry } from '@timetable/shared';
 ```
 
-The controller extracts this from the event + auth middleware and passes to service methods.
+- `writeAuditLog(entry)` -- fire-and-forget DynamoDB PutCommand
+- `computeChanges(oldObj, newObj, fields)` -- field-level diff for `changes` field
+- DynamoDB table: `timetable-audit-logs-{stage}` (PK: schoolId, SK: timestamp#entityType#entityId)
+- GSIs: EntityType, User, Division
+- TTL: 2 years
 
-#### 2.3 Export from shared package
+#### 2.2 Request context helper -- ALREADY EXISTS
 
-**File:** `packages/shared/src/index.ts`
+**File:** `packages/shared/src/helpers/requestContextHelper.ts`
 
-Export `writeAuditLog`, `RequestContext` type.
+```typescript
+import { buildAuditContext, type AuditContext } from '@timetable/shared';
+```
+
+- `AuditContext` extends `RequestContext` with `userEmail`, `ipAddress`, `userAgent`
+- `buildAuditContext(event, ctx)` -- extracts audit fields from Lambda event
+
+**Usage in controllers:**
+```typescript
+const auth = await authMiddleware(event);
+const ctx = await academicYearMiddleware(event, auth);
+const auditCtx = buildAuditContext(event, ctx);
+// Pass auditCtx to service methods
+```
+
+#### 2.3 Exports -- ALREADY IN `@timetable/shared`
+
+All audit helpers are exported from `@timetable/shared`:
+- `writeAuditLog`, `computeChanges`, `AuditLogEntry`
+- `buildAuditContext`, `AuditContext`
+
+#### 2.4 DynamoDB table creation -- STILL NEEDED
+
+Create `timetable-audit-logs-{stage}` DynamoDB table with:
+- PK: `schoolId` (String)
+- SK: `sk` (String) -- format: `timestamp#entityType#entityId`
+- GSI1: `entityType` (PK) + `timestamp` (SK)
+- GSI2: `userId` (PK) + `timestamp` (SK)
+- GSI3: `divisionId` (PK) + `timestamp` (SK)
+- TTL attribute: `ttl`
 
 ---
 

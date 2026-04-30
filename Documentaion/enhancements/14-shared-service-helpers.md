@@ -558,11 +558,11 @@ export function checkPermission(
 
 ---
 
-### Phase 7: Timetable Status Helper
+### Phase 7: Timetable Status Helper -- IMPLEMENTED
 
-> Aligns with Enhancement 3 (Status Flags)
+> Aligns with Enhancement 3 (Status Flags). Enhancement 3 doc updated.
 
-#### 7.1 Create `timetableStatusHelper.ts`
+#### 7.1 Create `timetableStatusHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/timetableStatusHelper.ts` (NEW)
 
@@ -631,18 +631,15 @@ export async function findAffectedTimetableIds(
 ): Promise<string[]>
 ```
 
-#### 7.2 Deploy
-
-- Rebuild shared layer
-- Services adopt when implementing Enhancement 3
+#### 7.2 Deploy -- PENDING (batching with other phases)
 
 ---
 
-### Phase 8: Assignment Impact Assessment Helper
+### Phase 8: Assignment Impact Assessment Helper -- IMPLEMENTED
 
-> Aligns with Enhancement 4 (Timetable-Aware Assignments) and Enhancement 11 (Period Structure)
+> Aligns with Enhancement 4 and 11. Enhancement 4 and 11 docs updated.
 
-#### 8.1 Create `assignmentImpactHelper.ts`
+#### 8.1 Create `assignmentImpactHelper.ts` -- DONE (types + skeleton, logic filled in by Enh 4)
 
 **File:** `packages/shared/src/helpers/assignmentImpactHelper.ts` (NEW)
 
@@ -700,18 +697,15 @@ export async function assessAssignmentImpact(
 ): Promise<AssignmentImpact>
 ```
 
-#### 8.2 Deploy
-
-- Rebuild shared layer
-- Services adopt when implementing Enhancement 4 and 11
+#### 8.2 Deploy -- PENDING (batching with other phases)
 
 ---
 
-### Phase 9: Email Helper
+### Phase 9: Email Helper -- IMPLEMENTED
 
-> Aligns with Enhancement 13 (Super Admin Portal)
+> Aligns with Enhancement 13. Enhancement 13 doc updated.
 
-#### 9.1 Create `emailHelper.ts`
+#### 9.1 Create `emailHelper.ts` -- DONE (sendEmail + 6 templates)
 
 **File:** `packages/shared/src/helpers/emailHelper.ts` (NEW)
 
@@ -741,18 +735,15 @@ export const EMAIL_TEMPLATES = {
 };
 ```
 
-#### 9.2 Deploy
-
-- Rebuild shared layer (includes AWS SES SDK)
-- Auth service adopts when implementing Enhancement 13
+#### 9.2 Deploy -- PENDING (batching). Added @aws-sdk/client-ses to shared deps.
 
 ---
 
-### Phase 10: Subscription Helper
+### Phase 10: Subscription Helper -- IMPLEMENTED
 
-> Aligns with Enhancement 13 (Super Admin Portal)
+> Aligns with Enhancement 13. Enhancement 13 doc updated.
 
-#### 10.1 Create `subscriptionHelper.ts`
+#### 10.1 Create `subscriptionHelper.ts` -- DONE (3 tiers, checkTierAllows, checkSubscriptionStatus)
 
 **File:** `packages/shared/src/helpers/subscriptionHelper.ts` (NEW)
 
@@ -798,10 +789,7 @@ export async function checkSubscriptionStatus(
 ): Promise<{ active: boolean; readOnly: boolean; reason?: 'EXPIRED' | 'SUSPENDED' | 'DEACTIVATED' }>
 ```
 
-#### 10.2 Deploy
-
-- Rebuild shared layer
-- Services adopt when implementing Enhancement 13
+#### 10.2 Deploy -- PENDING (batching)
 
 ---
 

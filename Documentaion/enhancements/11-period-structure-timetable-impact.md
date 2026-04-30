@@ -126,6 +126,16 @@ If `impact.hasImpact` is false or no timetables exist, frontend skips the wizard
 
 ### Phase 2: Impact Assessment Endpoint
 
+> Uses pre-built types from Enhancement 14, Phase 8:
+> ```typescript
+> import {
+>   assessAssignmentImpact, type AssignmentImpact, type ResolutionStep,
+>   type SlotFillDetails, type PwBalanceDetails,
+> } from '@timetable/shared';
+> ```
+> The `assessAssignmentImpact()` skeleton supports `changeType: 'STRUCTURE_CHANGE'`
+> with `addedSlotIds` and `removedSlotIds` params. Fill in the logic here.
+
 #### 2.1 New endpoint: assess period structure impact
 
 **File:** `services/school-config/src/service.ts`

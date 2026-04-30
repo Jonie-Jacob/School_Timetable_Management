@@ -714,29 +714,44 @@ Cannot edit: adminEmail (managed by super admin), subscription, deactivated stat
 
 ---
 
-### Phase 10: Email Notifications
+### Phase 10: Email Notifications -- HELPERS ALREADY BUILT (Enhancement 14, Phases 9-10)
 
-#### 10.1 Email templates needed
+> Email and subscription helpers were pre-built in Enhancement 14, Phases 9-10.
+>
+> **Already available from `@timetable/shared`:**
+> ```typescript
+> import {
+>   sendEmail, EMAIL_TEMPLATES, type EmailParams,
+>   checkTierAllows, checkSubscriptionStatus, TIER_LIMITS,
+>   type SubscriptionTier, type TierLimits, type SubscriptionAction,
+> } from '@timetable/shared';
+> ```
+>
+> **Email templates pre-built:** `schoolWelcome`, `upgradeRequest`, `upgradeApproved`, `upgradeRejected`, `subscriptionExpiring`, `subscriptionExpired`
+>
+> **Tier limits pre-built:** BASIC (1 gen, no teacher/viewer), ADVANCED (unlimited), PREMIUM (+ support)
+>
+> **Subscription checks pre-built:** `checkTierAllows(action)`, `checkSubscriptionStatus(schoolId)`
 
-| Email | Recipient | Trigger | Content |
-|-------|-----------|---------|---------|
-| Welcome | School admin | School created | Login URL, temp password, school name, plan details |
-| Upgrade Request | Super admin(s) | School admin requests upgrade | School name, current tier, requested tier, contact |
-| Upgrade Approved | School admin | Super admin approves | New tier, start/end dates, features gained |
-| Upgrade Rejected | School admin | Super admin rejects | Reason, contact info |
-| Subscription Expiring | School admin | 30 days before expiry | Renewal instructions, Zyphr contact |
-| Subscription Expired | School admin | On expiry date | Read-only notice, renewal instructions |
+#### 10.1 Wire email templates into trigger points
 
-#### 10.2 Email service
+| Email | Template | Trigger | Where |
+|-------|----------|---------|-------|
+| Welcome | `EMAIL_TEMPLATES.schoolWelcome(...)` | School created | `auth/service.ts :: createSchool()` |
+| Upgrade Request | `EMAIL_TEMPLATES.upgradeRequest(...)` | School admin requests upgrade | `auth/service.ts :: createUpgradeRequest()` |
+| Upgrade Approved | `EMAIL_TEMPLATES.upgradeApproved(...)` | Super admin approves | `auth/service.ts :: approveUpgradeRequest()` |
+| Upgrade Rejected | `EMAIL_TEMPLATES.upgradeRejected(...)` | Super admin rejects | `auth/service.ts :: rejectUpgradeRequest()` |
+| Subscription Expiring | `EMAIL_TEMPLATES.subscriptionExpiring(...)` | 30 days before expiry | Cron job / scheduled Lambda |
+| Subscription Expired | `EMAIL_TEMPLATES.subscriptionExpired(...)` | On expiry date | Cron job / scheduled Lambda |
 
-**Option A:** AWS SES (already in region ap-south-1)
-**Option B:** Simple SMTP via nodemailer
+#### 10.2 Wire tier enforcement
 
-**Use AWS SES** since infrastructure is already on AWS. Create an email utility in `packages/shared/src/helpers/emailHelper.ts`.
-
-#### 10.3 Email trigger points
-
-Emails sent fire-and-forget (don't block the API response). Use a helper that catches errors silently and logs failures.
+| Check | Where |
+|-------|-------|
+| `checkTierAllows({ schoolId, action: 'GENERATE_TIMETABLE' })` | `timetable/service.ts :: triggerGeneration()` |
+| `checkTierAllows({ schoolId, action: 'CREATE_TEACHER_USER' })` | `auth/service.ts :: createUser()` |
+| `checkTierAllows({ schoolId, action: 'CREATE_VIEWER_USER' })` | `auth/service.ts :: createUser()` |
+| `checkSubscriptionStatus(schoolId)` | `auth/service.ts :: login()` -- return readOnly flag |
 
 ---
 

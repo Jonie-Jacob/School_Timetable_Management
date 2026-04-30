@@ -147,49 +147,48 @@ model SchoolUser {
 
 ---
 
-### Phase 2: Backend -- Permission System
+### Phase 2: Backend -- Permission System -- HELPERS ALREADY BUILT (Enhancement 14, Phase 6)
 
-#### 2.1 Define permissions registry
+> Permission helpers were pre-built in Enhancement 14, Phase 6. No new files needed.
+> Just wire them into controllers.
 
-**File:** `packages/shared/src/helpers/permissions.ts` (NEW)
+#### 2.1 Permission registry -- ALREADY EXISTS
 
-```typescript
-export const PERMISSIONS = {
-  view_dashboard: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'VIEWER'],
-  manage_classes: ['SUPER_ADMIN', 'SCHOOL_ADMIN'],
-  view_classes: ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'VIEWER'],
-  // ... full matrix from above
-} as const;
-
-export type Permission = keyof typeof PERMISSIONS;
-
-export function hasPermission(role: string, permission: Permission): boolean {
-  return PERMISSIONS[permission]?.includes(role as any) ?? false;
-}
-```
-
-#### 2.2 Create `requirePermission()` middleware
-
-**File:** `packages/shared/src/middleware/permissionMiddleware.ts` (NEW)
+**File:** `packages/shared/src/helpers/permissionHelper.ts`
 
 ```typescript
-export function requirePermission(auth: AuthResult, permission: Permission): void {
-  if (!hasPermission(auth.userRole, permission)) {
-    // Log unauthorized attempt to audit log (fire-and-forget)
-    writeAuditLog({ action: 'UNAUTHORIZED_ACCESS', ... });
-    throw new AppError('Access denied', 403, 'FORBIDDEN');
-  }
-}
+import {
+  hasPermission, requirePermission, getPermissionsForRole,
+  PERMISSION_MATRIX, type Permission, type PermissionUserRole,
+} from '@timetable/shared';
 ```
 
-#### 2.3 Add permission checks to ALL controllers
+- `PERMISSION_MATRIX` -- full 30-permission × 4-role matrix (single source of truth)
+- `hasPermission(role, permission)` -- boolean check
+- `requirePermission(role, permission, context?)` -- throws `ForbiddenError` if denied
+- `getPermissionsForRole(role)` -- returns all permissions for a role (for frontend)
 
-Every controller method gets a `requirePermission()` call after `authMiddleware()`:
+#### 2.2 Permission middleware -- ALREADY EXISTS
+
+**File:** `packages/shared/src/middleware/permissionMiddleware.ts`
+
+```typescript
+import { checkPermission } from '@timetable/shared';
+```
+
+- `checkPermission(auth, permission, context?)` -- controller-level guard
+- Automatically logs denied access to audit log (fire-and-forget via `writeAuditLog`)
+- Throws `ForbiddenError` (403) on denial
+
+#### 2.3 Add permission checks to ALL controllers -- STILL NEEDED
+
+Wire `checkPermission()` into every controller method after `authMiddleware()`:
 
 ```typescript
 async create(event) {
   const auth = await authMiddleware(event);
-  requirePermission(auth, 'manage_teachers');
+  checkPermission(auth, 'manage_teachers');
+  const ctx = await academicYearMiddleware(event, auth);
   // ... proceed
 }
 ```

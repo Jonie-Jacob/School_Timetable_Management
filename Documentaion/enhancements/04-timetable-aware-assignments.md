@@ -207,32 +207,26 @@ Check `academicYear.timetableGeneratedAt`:
 
 ---
 
-### Phase 3: Backend -- Timetable Impact Assessment
+### Phase 3: Backend -- Timetable Impact Assessment -- TYPES ALREADY BUILT (Enhancement 14, Phase 8)
 
-#### 3.1 Create `assessAssignmentImpact()` helper
+> Types and skeleton were pre-built in Enhancement 14, Phase 8.
+> File: `packages/shared/src/helpers/assignmentImpactHelper.ts`
+>
+> **Already available from `@timetable/shared`:**
+> ```typescript
+> import {
+>   assessAssignmentImpact,
+>   type AssignmentImpact, type ResolutionStep, type ResolutionStepType,
+>   type TeacherConflictDetails, type SlotRemovalDetails,
+>   type SlotFillDetails, type PwBalanceDetails, type WeightageAdjustmentDetails,
+> } from '@timetable/shared';
+> ```
+>
+> - All types fully defined (5 step detail interfaces)
+> - `assessAssignmentImpact()` is a skeleton returning `{ hasImpact: false, steps: [] }`
+> - **This phase fills in the actual assessment logic**
 
-**File:** `packages/shared/src/helpers/assignmentImpactHelper.ts` (NEW)
-
-Function called after any assignment change. Returns what needs resolution:
-
-**Input:** `schoolId`, `academicYearId`, `divisionId`, `changeType`, `changeDetails`
-
-**Output:**
-```typescript
-interface AssignmentImpact {
-  hasImpact: boolean;
-  steps: ResolutionStep[];
-}
-
-interface ResolutionStep {
-  type: 'TEACHER_CONFLICT' | 'SLOT_REMOVAL' | 'SLOT_FILL' | 'PW_BALANCE';
-  divisionId: string;
-  className: string;
-  divisionLabel: string;
-  isCascade: boolean;
-  details: TeacherConflictDetails | SlotRemovalDetails | SlotFillDetails | PwBalanceDetails;
-}
-```
+#### 3.1 Implement `assessAssignmentImpact()` logic
 
 #### 3.2 Create `getAssignmentImpact()` endpoint
 

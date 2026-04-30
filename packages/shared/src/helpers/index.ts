@@ -46,3 +46,36 @@ export {
   type Permission,
   type UserRole as PermissionUserRole,
 } from './permissionHelper';
+export {
+  TimetableStatusTag,
+  STATUS_SEVERITY,
+  recomputeTimetableStatus,
+  recomputeMultipleTimetableStatuses,
+  findAffectedTimetableIds,
+  type TimetableStatusTagType,
+  type TimetableStatusJson,
+} from './timetableStatusHelper';
+export {
+  assessAssignmentImpact,
+  type AssignmentImpact,
+  type ResolutionStep,
+  type ResolutionStepType,
+  type TeacherConflictDetails,
+  type SlotRemovalDetails,
+  type SlotFillDetails,
+  type PwBalanceDetails,
+  type WeightageAdjustmentDetails,
+} from './assignmentImpactHelper';
+export {
+  sendEmail,
+  EMAIL_TEMPLATES,
+  type EmailParams,
+} from './emailHelper';
+export {
+  checkTierAllows,
+  checkSubscriptionStatus,
+  TIER_LIMITS,
+  type SubscriptionTier,
+  type TierLimits,
+  type SubscriptionAction,
+} from './subscriptionHelper';

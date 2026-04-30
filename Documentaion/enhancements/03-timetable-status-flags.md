@@ -203,11 +203,32 @@ export interface TimetableStatusJson {
 
 ---
 
-### Phase 2: Status Recomputation Engine
+### Phase 2: Status Recomputation Engine -- HELPER ALREADY BUILT (Enhancement 14, Phase 7)
 
-#### 2.1 Create `recomputeTimetableStatus()` function
+> The recomputation helper was pre-built in Enhancement 14, Phase 7.
+> File: `packages/shared/src/helpers/timetableStatusHelper.ts`
+>
+> **Already available from `@timetable/shared`:**
+> ```typescript
+> import {
+>   TimetableStatusTag, STATUS_SEVERITY,
+>   recomputeTimetableStatus, recomputeMultipleTimetableStatuses,
+>   findAffectedTimetableIds,
+>   type TimetableStatusTagType, type TimetableStatusJson,
+> } from '@timetable/shared';
+> ```
+>
+> - `recomputeTimetableStatus(timetableId)` -- full status check (empty slots, teacher conflicts, availability, excess assignments, orphaned slots)
+> - Uses `findTeachersAtTime()` from Phase 1 for conflict detection
+> - Updates `status_json` column via raw SQL (safe if column doesn't exist yet)
+> - Scheduling preference violations are stubbed (TODO in this phase)
+>
+> **What still needs to be done in this phase:**
+> 1. Run the Prisma migration to add `status_json` column
+> 2. Implement scheduling preference violation checks (hard + soft)
+> 3. Wire `recomputeTimetableStatus()` into all 6+ services after data changes
 
-**File:** `packages/shared/src/helpers/timetableStatusHelper.ts` (NEW)
+#### 2.1 Complete preference violation checks in `recomputeTimetableStatus()`
 
 This is the core function that evaluates a timetable and returns its status. Called after every change.
 
