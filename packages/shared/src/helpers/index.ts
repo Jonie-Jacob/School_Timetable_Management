@@ -29,3 +29,12 @@ export {
   type PeriodSlotResult,
 } from './periodStructureHelper';
 export { checkDuplicateName } from './duplicateCheckHelper';
+export {
+  buildAuditContext,
+  type AuditContext,
+} from './requestContextHelper';
+export {
+  writeAuditLog,
+  computeChanges,
+  type AuditLogEntry,
+} from './auditLogHelper';

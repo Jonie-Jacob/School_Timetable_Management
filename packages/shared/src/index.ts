@@ -37,6 +37,11 @@ export {
   type PeriodSlot,
   type PeriodSlotResult,
   checkDuplicateName,
+  buildAuditContext,
+  type AuditContext,
+  writeAuditLog,
+  computeChanges,
+  type AuditLogEntry,
 } from './helpers';
 
 // Middleware

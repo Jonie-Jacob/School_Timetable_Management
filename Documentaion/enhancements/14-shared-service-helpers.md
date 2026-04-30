@@ -403,11 +403,11 @@ export async function checkDuplicateName(
 
 ---
 
-### Phase 5: Request Context & Audit Log Infrastructure
+### Phase 5: Request Context & Audit Log Infrastructure -- IMPLEMENTED
 
 > Aligns with Enhancement 6 (Audit Log UI) and Enhancement 7 (RBAC)
 
-#### 5.1 Create `requestContext.ts`
+#### 5.1 Create `requestContextHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/requestContext.ts` (NEW)
 
@@ -433,7 +433,7 @@ export function buildRequestContext(
 ): RequestContext
 ```
 
-#### 5.2 Create `auditLogHelper.ts`
+#### 5.2 Create `auditLogHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/auditLogHelper.ts` (NEW)
 
@@ -470,7 +470,7 @@ export function computeChanges(
 ): Record<string, { old: any; new: any }> | undefined
 ```
 
-#### 5.3 DynamoDB table for audit logs
+#### 5.3 DynamoDB table for audit logs -- PENDING (create during Enhancement 6 implementation)
 
 **Table:** `timetable-audit-logs`
 
@@ -486,10 +486,7 @@ GSI3 (Division): divisionId (PK), timestamp (SK)
 
 **Provisioned via Terraform** (or manual creation for now).
 
-#### 5.4 Deploy
-
-- Rebuild shared layer (includes DynamoDB SDK)
-- No service redeploys needed yet -- services adopt audit logging when implementing Enhancement 6
+#### 5.4 Deploy -- PENDING (batching with other phases). Added @aws-sdk/client-dynamodb + @aws-sdk/lib-dynamodb to shared package deps.
 
 ---
 
