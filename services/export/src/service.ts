@@ -1,6 +1,7 @@
 import {
   prisma, AppError, NotFoundError,
   buildTeacherBusyRanges, isTeacherBusyInRanges,
+  buildElectiveGroupClassName,
 } from '@timetable/shared';
 import { SlotType } from '@prisma/client';
 import ExcelJS from 'exceljs';
@@ -322,26 +323,16 @@ export class ExportService {
     // Use distinct keys to handle cross-div electives (same teacher at
     // same time in multiple divisions = 1 period, not N).
 
-    // Step 1: For electives, build a combined class name from all
-    // participating divisions (e.g., "XI B, XI C, XI D" instead of
-    // separate entries that each show the same period count).
-    const electiveGroupDivisions = new Map<string, Set<string>>();
-    for (const s of timetableSlots) {
-      const da = s.divisionAssignment;
-      if (!da?.electiveGroupId) continue;
-      const divName = `${s.timetable.division.class.name} ${s.timetable.division.label}`;
-      if (!electiveGroupDivisions.has(da.electiveGroupId))
-        electiveGroupDivisions.set(da.electiveGroupId, new Set());
-      electiveGroupDivisions.get(da.electiveGroupId)!.add(divName);
-    }
-    // Build sorted combined names per elective group
-    const electiveGroupClassName = new Map<string, string>();
-    for (const [egId, divs] of electiveGroupDivisions) {
-      electiveGroupClassName.set(
-        egId,
-        Array.from(divs).sort((a, b) => a.localeCompare(b)).join(', '),
-      );
-    }
+    // Step 1: Build combined class name for cross-div electives using shared helper
+    const electiveGroupClassName = buildElectiveGroupClassName(
+      timetableSlots
+        .filter((s: any) => s.divisionAssignment?.electiveGroupId)
+        .map((s: any) => ({
+          electiveGroupId: s.divisionAssignment.electiveGroupId,
+          className: s.timetable.division.class.name,
+          divisionLabel: s.timetable.division.label,
+        })),
+    );
 
     // Step 2: Count periods per class, using combined name for electives
     const classCountMap = new Map<string, Set<string>>();

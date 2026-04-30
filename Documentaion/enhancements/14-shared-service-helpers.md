@@ -223,9 +223,9 @@ export async function flagTimetables(
 
 ---
 
-### Phase 3: Teacher Load & Elective Group Helpers
+### Phase 3: Teacher Load & Elective Group Helpers -- IMPLEMENTED
 
-#### 3.1 Create `electiveGroupHelper.ts`
+#### 3.1 Create `electiveGroupHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/electiveGroupHelper.ts` (NEW)
 
@@ -262,7 +262,7 @@ export function buildElectiveGroupClassName(
 ): Map<string, string>
 ```
 
-#### 3.2 Create `teacherLoadHelper.ts`
+#### 3.2 Create `teacherLoadHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/teacherLoadHelper.ts` (NEW)
 
@@ -296,24 +296,17 @@ export async function computeTeacherLoads(
 ): Promise<TeacherLoadResult[]>
 ```
 
-#### 3.3 Refactor teacher service
+#### 3.3 Refactor teacher service -- DONE
 
-**File:** `services/teacher/src/service.ts`
+- `listLoad()` reduced from ~130 lines to 10 lines (delegates to `computeTeacherLoads()`)
+- `getTeacherBreakdown()` replaced 12-line cross-div dedup block with 1-line `identifyCrossDivElectiveGroups()` call
 
-- `listLoad()` → calls `computeTeacherLoads()` with all options
-- `getTeacherBreakdown()` → uses `identifyCrossDivElectiveGroups()` for dedup
+#### 3.4 Refactor export service -- DONE
 
-#### 3.4 Refactor export service
+- `getTeacherGrid()` replaced 18-line elective class name building with `buildElectiveGroupClassName()` call
+- `exportFreePeriods()` already uses `buildTeacherBusyRanges()` from Phase 1
 
-**File:** `services/export/src/service.ts`
-
-- `getTeacherGrid()` stats section → calls `computeTeacherLoads()`
-- `exportFreePeriods()` → uses `buildTeacherBusyRanges()` from Phase 1
-
-#### 3.5 Deploy
-
-- Rebuild shared layer
-- Redeploy: teacher, export services
+#### 3.5 Deploy -- PENDING (batching with other phases)
 
 ---
 

@@ -6,6 +6,8 @@ import {
   AppError,
   flagTimetables,
   findTeachersAtTime,
+  computeTeacherLoads,
+  identifyCrossDivElectiveGroups,
   type CreateTeacherDto,
   type UpdateTeacherDto,
   type SetTeacherSubjectsDto,
@@ -82,132 +84,14 @@ export class TeacherService {
    * rows for this teacher (primary only, not assistant).
    */
   async listLoad(schoolId: string, academicYearId: string) {
-    const teachers = await prisma.teacher.findMany({
-      where: { schoolId, academicYearId, deletedAt: null },
-      select: {
-        id: true,
-        name: true,
-        maxPeriodsPerWeek: true,
-        teacherSubjects: { select: { subjectId: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
-
-    // Fetch all assignments with elective group info to handle cross-division
-    // electives correctly. For cross-div electives (same elective group spanning
-    // multiple divisions), the teacher teaches all divisions simultaneously in
-    // the same slot -- so we count the group's periods_per_week ONCE, not per-division.
-    const assignments = await prisma.divisionAssignment.findMany({
-      where: {
-        schoolId,
-        academicYearId,
-        deletedAt: null,
-        OR: [{ teacherId: { not: null } }, { assistantTeacherId: { not: null } }],
-      },
-      select: {
-        teacherId: true,
-        assistantTeacherId: true,
-        weightage: true,
-        electiveGroupId: true,
-        divisionId: true,
-        electiveGroup: {
-          select: { id: true, periodsPerWeek: true },
-        },
-      },
-    });
-
-    // Identify cross-division elective groups (spanning 2+ divisions)
-    const egDivisions = new Map<string, Set<string>>();
-    for (const a of assignments) {
-      if (a.electiveGroupId) {
-        if (!egDivisions.has(a.electiveGroupId)) egDivisions.set(a.electiveGroupId, new Set());
-        egDivisions.get(a.electiveGroupId)!.add(a.divisionId);
-      }
-    }
-    const crossDivGroups = new Set<string>();
-    for (const [egId, divs] of egDivisions) {
-      if (divs.size > 1) crossDivGroups.add(egId);
-    }
-
-    // Compute load per teacher, deduplicating cross-div elective groups.
-    // Both primary (teacherId) and assistant (assistantTeacherId) are counted
-    // -- assistant teachers are busy for the same slots as primary.
-    const loadByTeacher = new Map<string, number>();
-    const countedCrossDivPerTeacher = new Map<string, Set<string>>();
-
-    function addLoad(tid: string, weightage: number, electiveGroupId: string | null) {
-      const current = loadByTeacher.get(tid) ?? 0;
-      if (electiveGroupId && crossDivGroups.has(electiveGroupId)) {
-        if (!countedCrossDivPerTeacher.has(tid)) countedCrossDivPerTeacher.set(tid, new Set());
-        const seen = countedCrossDivPerTeacher.get(tid)!;
-        if (!seen.has(electiveGroupId)) {
-          seen.add(electiveGroupId);
-          loadByTeacher.set(tid, current + weightage);
-        }
-      } else {
-        loadByTeacher.set(tid, current + weightage);
-      }
-    }
-
-    for (const a of assignments) {
-      if (a.teacherId) addLoad(a.teacherId, a.weightage, a.electiveGroupId);
-      if (a.assistantTeacherId) addLoad(a.assistantTeacherId, a.weightage, a.electiveGroupId);
-    }
-
-    // Count timetable-based periods: distinct (working_day, slot) pairs per teacher.
-    // For cross-div electives the teacher appears in multiple timetable_slots at the
-    // Count timetable periods per teacher using distinct time slots.
-    // This detects double-bookings: if assigned=27 but timetable=26, one slot
-    // has two assignments at the same time (teacher conflict).
-    const timetableSlots = await prisma.timetableSlot.findMany({
-      where: {
-        schoolId,
-        timetable: { academicYearId, status: { in: ['GENERATED', 'OUTDATED'] } },
-        divisionAssignment: {
-          deletedAt: null,
-          OR: [{ teacherId: { not: null } }, { assistantTeacherId: { not: null } }],
-        },
-      },
-      select: {
-        workingDayId: true,
-        slotId: true,
-        divisionAssignment: {
-          select: { teacherId: true, assistantTeacherId: true, electiveGroupId: true, id: true },
-        },
-      },
-    });
-
-    // Count timetable periods: use a key that de-duplicates cross-div elective
-    // slots (same elective group at same time = 1 period) but preserves
-    // double-bookings (different assignments at same time = 2 periods).
-    // Key: (workingDayId:slotId:electiveGroupId) for electives,
-    //      (workingDayId:slotId:assignmentId) for regular assignments.
-    const timetableByTeacher = new Map<string, Set<string>>();
-    for (const ts of timetableSlots) {
-      const da = ts.divisionAssignment;
-      if (!da) continue;
-      const groupKey = da.electiveGroupId
-        ? `${ts.workingDayId}:${ts.slotId}:eg:${da.electiveGroupId}`
-        : `${ts.workingDayId}:${ts.slotId}:da:${da.id}`;
-      const tid = da.teacherId;
-      const atid = da.assistantTeacherId;
-      if (tid) {
-        if (!timetableByTeacher.has(tid)) timetableByTeacher.set(tid, new Set());
-        timetableByTeacher.get(tid)!.add(groupKey);
-      }
-      if (atid) {
-        if (!timetableByTeacher.has(atid)) timetableByTeacher.set(atid, new Set());
-        timetableByTeacher.get(atid)!.add(groupKey);
-      }
-    }
-
-    return teachers.map((t) => ({
-      id: t.id,
-      name: t.name,
-      maxPeriodsPerWeek: t.maxPeriodsPerWeek,
-      assignedPeriods: loadByTeacher.get(t.id) ?? 0,
-      timetablePeriods: timetableByTeacher.has(t.id) ? timetableByTeacher.get(t.id)!.size : null,
-      qualifiedSubjectIds: t.teacherSubjects.map((ts) => ts.subjectId),
+    const loads = await computeTeacherLoads({ schoolId, academicYearId });
+    return loads.map((l) => ({
+      id: l.teacherId,
+      name: l.teacherName,
+      maxPeriodsPerWeek: l.maxPeriodsPerWeek,
+      assignedPeriods: l.assignedPeriods,
+      timetablePeriods: l.timetablePeriods,
+      qualifiedSubjectIds: l.qualifiedSubjectIds,
     }));
   }
 
@@ -246,17 +130,7 @@ export class TeacherService {
     });
 
     // Identify cross-division elective groups
-    const egDivs = new Map<string, Set<string>>();
-    for (const a of assignments) {
-      if (a.electiveGroupId) {
-        if (!egDivs.has(a.electiveGroupId)) egDivs.set(a.electiveGroupId, new Set());
-        egDivs.get(a.electiveGroupId)!.add(a.divisionId);
-      }
-    }
-    const crossDivGroups = new Set<string>();
-    for (const [egId, divs] of egDivs) {
-      if (divs.size > 1) crossDivGroups.add(egId);
-    }
+    const crossDivGroups = identifyCrossDivElectiveGroups(assignments);
 
     // Query timetable slots for this teacher to get per-assignment timetable counts.
     // Count distinct (workingDayId, slotId) per division_assignment_id.

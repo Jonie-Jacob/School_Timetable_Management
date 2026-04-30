@@ -27,6 +27,11 @@ export {
   isTeacherBusyInRanges,
   type TimeConflictResult,
   type BusyRange,
+  identifyCrossDivElectiveGroups,
+  buildElectiveGroupDivisionMap,
+  buildElectiveGroupClassName,
+  computeTeacherLoads,
+  type TeacherLoadResult,
 } from './helpers';
 
 // Middleware

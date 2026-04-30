@@ -13,3 +13,12 @@ export {
   type TimeConflictResult,
   type BusyRange,
 } from './conflictDetectionHelper';
+export {
+  identifyCrossDivElectiveGroups,
+  buildElectiveGroupDivisionMap,
+  buildElectiveGroupClassName,
+} from './electiveGroupHelper';
+export {
+  computeTeacherLoads,
+  type TeacherLoadResult,
+} from './teacherLoadHelper';
