@@ -4,7 +4,7 @@ import {
   softDelete,
   AppError,
   NotFoundError,
-  ConflictError,
+  checkDuplicateName,
   type CreateAcademicYearDto,
   type UpdateAcademicYearDto,
   type PaginationParams,
@@ -14,13 +14,7 @@ export class AcademicYearService {
   async create(schoolId: string, input: CreateAcademicYearDto) {
     this.validateDateRange(input.startDate, input.endDate);
 
-    // Check for duplicate label within school
-    const existing = await prisma.academicYear.findFirst({
-      where: { schoolId, label: input.label, deletedAt: null },
-    });
-    if (existing) {
-      throw new ConflictError(`Academic year with label '${input.label}' already exists`);
-    }
+    await checkDuplicateName({ model: 'academicYear', name: input.label, schoolId, entityLabel: 'Academic year with label' });
 
     const academicYear = await prisma.academicYear.create({
       data: {
@@ -89,14 +83,8 @@ export class AcademicYearService {
       this.validateDateRange(startDate, endDate);
     }
 
-    // Check for duplicate label if label is being changed
     if (input.label) {
-      const existing = await prisma.academicYear.findFirst({
-        where: { schoolId, label: input.label, deletedAt: null, id: { not: id } },
-      });
-      if (existing) {
-        throw new ConflictError(`Academic year with label '${input.label}' already exists`);
-      }
+      await checkDuplicateName({ model: 'academicYear', name: input.label, schoolId, excludeId: id, entityLabel: 'Academic year with label' });
     }
 
     const data: Record<string, unknown> = {};

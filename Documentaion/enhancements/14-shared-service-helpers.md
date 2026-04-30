@@ -310,9 +310,9 @@ export async function computeTeacherLoads(
 
 ---
 
-### Phase 4: Period Structure & Duplicate Check Helpers
+### Phase 4: Period Structure & Duplicate Check Helpers -- IMPLEMENTED
 
-#### 4.1 Create `periodStructureHelper.ts`
+#### 4.1 Create `periodStructureHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/periodStructureHelper.ts` (NEW)
 
@@ -362,7 +362,7 @@ export async function loadDivisionPeriodSlots(
 ): Promise<ReturnType<typeof loadPeriodSlots> & { periodStructureId: string }>
 ```
 
-#### 4.2 Create `duplicateCheckHelper.ts`
+#### 4.2 Create `duplicateCheckHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/duplicateCheckHelper.ts` (NEW)
 
@@ -387,16 +387,16 @@ export async function checkDuplicateName(
 ): Promise<void>  // throws ConflictError if duplicate exists
 ```
 
-#### 4.3 Refactor all services using duplicate checks
+#### 4.3 Refactor all services using duplicate checks -- DONE (10 call sites across 5 services)
 
-**Files to modify:**
-- `services/teacher/src/service.ts` -- `create()`, `update()`
-- `services/class/src/service.ts` -- `create()`, `update()`
-- `services/subject/src/service.ts` -- `create()`, `update()`
-- `services/school-config/src/service.ts` -- `createPeriodStructure()`, `updatePeriodStructure()`
-- `services/academic-year/src/service.ts` -- `create()`, `update()`
+- teacher: `create()`, `update()` -- 2 sites
+- class: `create()`, `update()` -- 2 sites
+- subject: `create()`, `update()` -- 2 sites
+- school-config: `createPeriodStructure()`, `updatePeriodStructure()` -- 2 sites
+- academic-year: `create()`, `update()` -- 2 sites
+- Removed unused `ConflictError` imports from teacher, subject, academic-year
 
-#### 4.4 Deploy
+#### 4.4 Deploy -- PENDING (batching with other phases)
 
 - Rebuild shared layer
 - Redeploy: teacher, class, subject, school-config, academic-year, export, timetable services

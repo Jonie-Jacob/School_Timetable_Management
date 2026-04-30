@@ -2,12 +2,12 @@ import {
   prisma,
   softDelete,
   NotFoundError,
-  ConflictError,
   AppError,
   flagTimetables,
   findTeachersAtTime,
   computeTeacherLoads,
   identifyCrossDivElectiveGroups,
+  checkDuplicateName,
   type CreateTeacherDto,
   type UpdateTeacherDto,
   type SetTeacherSubjectsDto,
@@ -17,17 +17,7 @@ import {
 
 export class TeacherService {
   async create(schoolId: string, academicYearId: string, input: CreateTeacherDto) {
-    const existing = await prisma.teacher.findFirst({
-      where: {
-        schoolId,
-        academicYearId,
-        name: { equals: input.name, mode: 'insensitive' },
-        deletedAt: null,
-      },
-    });
-    if (existing) {
-      throw new ConflictError(`Teacher '${input.name}' already exists`);
-    }
+    await checkDuplicateName({ model: 'teacher', name: input.name, schoolId, academicYearId });
 
     return prisma.teacher.create({
       data: {
@@ -340,18 +330,7 @@ export class TeacherService {
     await this.getById(schoolId, academicYearId, id);
 
     if (input.name) {
-      const existing = await prisma.teacher.findFirst({
-        where: {
-          schoolId,
-          academicYearId,
-          name: { equals: input.name, mode: 'insensitive' },
-          deletedAt: null,
-          id: { not: id },
-        },
-      });
-      if (existing) {
-        throw new ConflictError(`Teacher '${input.name}' already exists`);
-      }
+      await checkDuplicateName({ model: 'teacher', name: input.name, schoolId, academicYearId, excludeId: id });
     }
 
     const data: Record<string, unknown> = {};

@@ -32,6 +32,11 @@ export {
   buildElectiveGroupClassName,
   computeTeacherLoads,
   type TeacherLoadResult,
+  loadPeriodSlots,
+  loadDivisionPeriodSlots,
+  type PeriodSlot,
+  type PeriodSlotResult,
+  checkDuplicateName,
 } from './helpers';
 
 // Middleware

@@ -13,6 +13,7 @@ import {
   type SlotEntry,
   DayOfWeek,
   flagTimetables,
+  checkDuplicateName,
 } from '@timetable/shared';
 
 const DAY_MAP: Record<string, { dayOfWeek: number; label: string }> = {
@@ -59,12 +60,7 @@ export class SchoolConfigService {
   // ── Period Structures ──────────────────────────────────────
 
   async createPeriodStructure(schoolId: string, academicYearId: string, input: CreatePeriodStructureDto) {
-    const existing = await prisma.periodStructure.findFirst({
-      where: { schoolId, academicYearId, name: input.name, deletedAt: null },
-    });
-    if (existing) {
-      throw new ConflictError(`Period structure '${input.name}' already exists`);
-    }
+    await checkDuplicateName({ model: 'periodStructure', name: input.name, schoolId, academicYearId });
 
     this.validatePeriods(input.periods);
 
@@ -156,12 +152,7 @@ export class SchoolConfigService {
     }
 
     if (input.name) {
-      const duplicate = await prisma.periodStructure.findFirst({
-        where: { schoolId, academicYearId, name: input.name, deletedAt: null, id: { not: id } },
-      });
-      if (duplicate) {
-        throw new ConflictError(`Period structure '${input.name}' already exists`);
-      }
+      await checkDuplicateName({ model: 'periodStructure', name: input.name, schoolId, academicYearId, excludeId: id });
     }
 
     if (input.periods) {

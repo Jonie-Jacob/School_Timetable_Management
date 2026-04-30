@@ -22,3 +22,10 @@ export {
   computeTeacherLoads,
   type TeacherLoadResult,
 } from './teacherLoadHelper';
+export {
+  loadPeriodSlots,
+  loadDivisionPeriodSlots,
+  type PeriodSlot,
+  type PeriodSlotResult,
+} from './periodStructureHelper';
+export { checkDuplicateName } from './duplicateCheckHelper';
