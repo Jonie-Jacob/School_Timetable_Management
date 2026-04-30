@@ -138,7 +138,7 @@ divisionLabel?: string;
 
 ---
 
-### Phase 2: Backend -- `previewTeacherSwap()` Endpoint
+### Phase 2: Backend -- `previewTeacherSwap()` Endpoint -- IMPLEMENTED
 
 **Goal:** Return a detailed preview of what will happen when two slots are swapped, including all affected divisions and teachers.
 

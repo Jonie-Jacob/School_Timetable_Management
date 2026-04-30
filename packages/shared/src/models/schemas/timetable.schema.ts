@@ -48,3 +48,10 @@ export type AutoResolveDto = z.infer<typeof autoResolveSchema>;
 export type CreateEmptySlotDto = z.infer<typeof createEmptySlotSchema>;
 export type SwapElectiveSlotsDto = z.infer<typeof swapElectiveSlotsSchema>;
 export type PreviewElectiveSwapDto = z.infer<typeof previewElectiveSwapSchema>;
+
+export const previewTeacherSwapSchema = z.object({
+  sourceSlotId: z.string().uuid(),
+  targetSlotId: z.string().uuid(),
+});
+
+export type PreviewTeacherSwapDto = z.infer<typeof previewTeacherSwapSchema>;

@@ -3,7 +3,7 @@ import {
   success, accepted,
   parseBody, authMiddleware, academicYearMiddleware,
   triggerGenerationSchema, overrideSlotSchema, swapSlotsSchema, autoResolveSchema, createEmptySlotSchema,
-  swapElectiveSlotsSchema, previewElectiveSwapSchema,
+  swapElectiveSlotsSchema, previewElectiveSwapSchema, previewTeacherSwapSchema,
 } from '@timetable/shared';
 import { TimetableService } from './service';
 
@@ -95,6 +95,13 @@ export class TimetableController {
     const auth = await authMiddleware(event);
     const body = parseBody(event, swapElectiveSlotsSchema);
     const result = await service.swapElectiveSlots(auth.schoolId!, body);
+    return success(result);
+  }
+
+  async previewTeacherSwap(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const body = parseBody(event, previewTeacherSwapSchema);
+    const result = await service.previewTeacherSwap(auth.schoolId!, body);
     return success(result);
   }
 

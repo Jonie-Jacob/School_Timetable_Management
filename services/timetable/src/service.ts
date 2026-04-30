@@ -2,7 +2,7 @@ import {
   prisma, AppError, NotFoundError,
   isTeacherBusyAt,
   TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto, CreateEmptySlotDto,
-  SwapElectiveSlotsDto, PreviewElectiveSwapDto,
+  SwapElectiveSlotsDto, PreviewElectiveSwapDto, PreviewTeacherSwapDto,
 } from '@timetable/shared';
 import { JobStatus, TimetableStatus, SlotType } from '@prisma/client';
 import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs';
@@ -1993,6 +1993,317 @@ export class TimetableService {
       electiveGroupName: block.electiveGroupName,
       divisionsAffected: groups.length + targetElectiveExtraGroups.length,
       conflicts: force ? conflicts : [],
+    };
+  }
+
+  // ── Preview Teacher Swap ──
+
+  async previewTeacherSwap(schoolId: string, dto: PreviewTeacherSwapDto) {
+    const { sourceSlotId, targetSlotId } = dto;
+
+    if (sourceSlotId === targetSlotId) {
+      throw new AppError('Source and target slots are the same', 400, 'SAME_SLOT');
+    }
+
+    // Load both slots with full includes
+    const includeAssignment = {
+      include: {
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { id: true, name: true } },
+        assistantTeacher: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true } },
+      },
+    };
+    const [sourceSlot, targetSlot] = await Promise.all([
+      prisma.timetableSlot.findFirst({
+        where: { id: sourceSlotId, schoolId },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+          divisionAssignment: includeAssignment,
+          workingDay: true,
+          slot: true,
+        },
+      }),
+      prisma.timetableSlot.findFirst({
+        where: { id: targetSlotId, schoolId },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+          divisionAssignment: includeAssignment,
+          workingDay: true,
+          slot: true,
+        },
+      }),
+    ]);
+
+    if (!sourceSlot) throw new NotFoundError('TimetableSlot', sourceSlotId);
+    if (!targetSlot) throw new NotFoundError('TimetableSlot', targetSlotId);
+
+    // If either slot is elective, delegate to elective preview
+    const sourceIsElective = !!sourceSlot.divisionAssignment?.electiveGroup;
+    const targetIsElective = !!targetSlot.divisionAssignment?.electiveGroup;
+    if (sourceIsElective || targetIsElective) {
+      const electiveSlot = sourceIsElective ? sourceSlot : targetSlot;
+      const otherSlot = electiveSlot === sourceSlot ? targetSlot : sourceSlot;
+      return {
+        swapType: 'elective' as const,
+        delegateToElective: true,
+        electiveSourceSlotId: electiveSlot.id,
+        targetDayOfWeek: otherSlot.workingDay.dayOfWeek,
+        targetSlotSortOrder: otherSlot.slot.sortOrder,
+      };
+    }
+
+    const isCrossDivision = sourceSlot.timetableId !== targetSlot.timetableId;
+    const swapType = isCrossDivision ? 'cross_division' as const : 'same_division' as const;
+
+    const sourceSummary = {
+      className: sourceSlot.timetable.division?.class?.name ?? '',
+      divisionLabel: sourceSlot.timetable.division?.label ?? '',
+      dayLabel: sourceSlot.workingDay.label,
+      periodNumber: sourceSlot.slot.slotNumber,
+      sortOrder: sourceSlot.slot.sortOrder,
+      subjectName: sourceSlot.divisionAssignment?.subject?.name ?? null,
+      teacherName: sourceSlot.divisionAssignment?.teacher?.name ?? null,
+    };
+    const targetSummary = {
+      className: targetSlot.timetable.division?.class?.name ?? '',
+      divisionLabel: targetSlot.timetable.division?.label ?? '',
+      dayLabel: targetSlot.workingDay.label,
+      periodNumber: targetSlot.slot.slotNumber,
+      sortOrder: targetSlot.slot.sortOrder,
+      subjectName: targetSlot.divisionAssignment?.subject?.name ?? null,
+      teacherName: targetSlot.divisionAssignment?.teacher?.name ?? null,
+    };
+
+    // Build affected cells — for same-division it's 2 cells, for cross-division it's 4
+    type AffectedCell = {
+      timetableId: string;
+      className: string;
+      divisionLabel: string;
+      dayLabel: string;
+      periodNumber: number | null;
+      currentSubject: string | null;
+      currentTeacher: string | null;
+      newSubject: string | null;
+      newTeacher: string | null;
+    };
+    const affectedCells: AffectedCell[] = [];
+
+    if (!isCrossDivision) {
+      // Same-division: source and target swap contents
+      affectedCells.push({
+        timetableId: sourceSlot.timetableId,
+        className: sourceSummary.className,
+        divisionLabel: sourceSummary.divisionLabel,
+        dayLabel: sourceSummary.dayLabel,
+        periodNumber: sourceSummary.periodNumber,
+        currentSubject: sourceSummary.subjectName,
+        currentTeacher: sourceSummary.teacherName,
+        newSubject: targetSummary.subjectName,
+        newTeacher: targetSummary.teacherName,
+      });
+      affectedCells.push({
+        timetableId: targetSlot.timetableId,
+        className: targetSummary.className,
+        divisionLabel: targetSummary.divisionLabel,
+        dayLabel: targetSummary.dayLabel,
+        periodNumber: targetSummary.periodNumber,
+        currentSubject: targetSummary.subjectName,
+        currentTeacher: targetSummary.teacherName,
+        newSubject: sourceSummary.subjectName,
+        newTeacher: sourceSummary.teacherName,
+      });
+    } else {
+      // Cross-division: identify the 4 cells
+      // Cell A: source timetable, source time → gets target timetable's content at target time
+      // Cell B: source timetable, target time → gets source timetable's content at source time
+      // Cell C: target timetable, target time → gets source timetable's content at source time
+      // Cell D: target timetable, source time → gets target timetable's content at target time
+
+      // Find cell B: source timetable at target's (day, slot) coordinates
+      const cellB = await prisma.timetableSlot.findFirst({
+        where: {
+          timetableId: sourceSlot.timetableId,
+          workingDay: { dayOfWeek: targetSlot.workingDay.dayOfWeek },
+          slot: { sortOrder: targetSlot.slot.sortOrder },
+          schoolId,
+        },
+        include: {
+          divisionAssignment: includeAssignment,
+          workingDay: true,
+          slot: true,
+        },
+      });
+
+      // Find cell D: target timetable at source's (day, slot) coordinates
+      const cellD = await prisma.timetableSlot.findFirst({
+        where: {
+          timetableId: targetSlot.timetableId,
+          workingDay: { dayOfWeek: sourceSlot.workingDay.dayOfWeek },
+          slot: { sortOrder: sourceSlot.slot.sortOrder },
+          schoolId,
+        },
+        include: {
+          divisionAssignment: includeAssignment,
+          workingDay: true,
+          slot: true,
+        },
+      });
+
+      // Cell A (source timetable, source time): swaps with cell B
+      affectedCells.push({
+        timetableId: sourceSlot.timetableId,
+        className: sourceSummary.className,
+        divisionLabel: sourceSummary.divisionLabel,
+        dayLabel: sourceSlot.workingDay.label,
+        periodNumber: sourceSlot.slot.slotNumber,
+        currentSubject: sourceSummary.subjectName,
+        currentTeacher: sourceSummary.teacherName,
+        newSubject: cellB?.divisionAssignment?.subject?.name ?? null,
+        newTeacher: cellB?.divisionAssignment?.teacher?.name ?? null,
+      });
+      // Cell B (source timetable, target time): gets cell A's content
+      if (cellB) {
+        affectedCells.push({
+          timetableId: sourceSlot.timetableId,
+          className: sourceSummary.className,
+          divisionLabel: sourceSummary.divisionLabel,
+          dayLabel: cellB.workingDay.label,
+          periodNumber: cellB.slot.slotNumber,
+          currentSubject: cellB.divisionAssignment?.subject?.name ?? null,
+          currentTeacher: cellB.divisionAssignment?.teacher?.name ?? null,
+          newSubject: sourceSummary.subjectName,
+          newTeacher: sourceSummary.teacherName,
+        });
+      }
+      // Cell C (target timetable, target time): swaps with cell D
+      affectedCells.push({
+        timetableId: targetSlot.timetableId,
+        className: targetSummary.className,
+        divisionLabel: targetSummary.divisionLabel,
+        dayLabel: targetSlot.workingDay.label,
+        periodNumber: targetSlot.slot.slotNumber,
+        currentSubject: targetSummary.subjectName,
+        currentTeacher: targetSummary.teacherName,
+        newSubject: cellD?.divisionAssignment?.subject?.name ?? null,
+        newTeacher: cellD?.divisionAssignment?.teacher?.name ?? null,
+      });
+      // Cell D (target timetable, source time): gets cell C's content
+      if (cellD) {
+        affectedCells.push({
+          timetableId: targetSlot.timetableId,
+          className: targetSummary.className,
+          divisionLabel: targetSummary.divisionLabel,
+          dayLabel: cellD.workingDay.label,
+          periodNumber: cellD.slot.slotNumber,
+          currentSubject: cellD.divisionAssignment?.subject?.name ?? null,
+          currentTeacher: cellD.divisionAssignment?.teacher?.name ?? null,
+          newSubject: targetSummary.subjectName,
+          newTeacher: targetSummary.teacherName,
+        });
+      }
+    }
+
+    // ── Conflict detection ──
+    type TeacherSwapConflict = {
+      teacherName: string;
+      teacherId: string;
+      className: string;
+      divisionLabel: string;
+      divisionId: string;
+      conflictedSlotId: string;
+      reason: string;
+    };
+    const conflicts: TeacherSwapConflict[] = [];
+
+    // Collect all slot IDs involved to exclude from conflict checks
+    const allInvolvedSlotIds = [sourceSlotId, targetSlotId];
+    if (isCrossDivision) {
+      // Also find cell B and D IDs if they exist
+      const cellBSlot = await prisma.timetableSlot.findFirst({
+        where: {
+          timetableId: sourceSlot.timetableId,
+          workingDay: { dayOfWeek: targetSlot.workingDay.dayOfWeek },
+          slot: { sortOrder: targetSlot.slot.sortOrder },
+          schoolId,
+        },
+        select: { id: true },
+      });
+      const cellDSlot = await prisma.timetableSlot.findFirst({
+        where: {
+          timetableId: targetSlot.timetableId,
+          workingDay: { dayOfWeek: sourceSlot.workingDay.dayOfWeek },
+          slot: { sortOrder: sourceSlot.slot.sortOrder },
+          schoolId,
+        },
+        select: { id: true },
+      });
+      if (cellBSlot) allInvolvedSlotIds.push(cellBSlot.id);
+      if (cellDSlot) allInvolvedSlotIds.push(cellDSlot.id);
+    }
+
+    // Check source teacher(s) at target's time
+    const sourceTeacherIds: string[] = [];
+    if (sourceSlot.divisionAssignment?.teacher?.id) sourceTeacherIds.push(sourceSlot.divisionAssignment.teacher.id);
+    if (sourceSlot.divisionAssignment?.assistantTeacher?.id) sourceTeacherIds.push(sourceSlot.divisionAssignment.assistantTeacher.id);
+
+    for (const teacherId of sourceTeacherIds) {
+      const conflict = await this.findTeacherTimeConflict(
+        schoolId, allInvolvedSlotIds,
+        targetSlot.workingDay.dayOfWeek,
+        targetSlot.slot.startTime, targetSlot.slot.endTime,
+        teacherId,
+      );
+      if (conflict) {
+        const teacherName = teacherId === sourceSlot.divisionAssignment?.teacher?.id
+          ? sourceSlot.divisionAssignment!.teacher!.name
+          : sourceSlot.divisionAssignment!.assistantTeacher!.name;
+        conflicts.push({
+          teacherName,
+          teacherId,
+          className: conflict.timetable.division?.class?.name ?? '',
+          divisionLabel: conflict.timetable.division?.label ?? '',
+          divisionId: conflict.timetable.divisionId,
+          conflictedSlotId: conflict.id,
+          reason: `${teacherName} is already teaching ${conflict.timetable.division?.class?.name ?? ''} ${conflict.timetable.division?.label ?? ''} at this time`,
+        });
+      }
+    }
+
+    // Check target teacher(s) at source's time
+    const targetTeacherIds: string[] = [];
+    if (targetSlot.divisionAssignment?.teacher?.id) targetTeacherIds.push(targetSlot.divisionAssignment.teacher.id);
+    if (targetSlot.divisionAssignment?.assistantTeacher?.id) targetTeacherIds.push(targetSlot.divisionAssignment.assistantTeacher.id);
+
+    for (const teacherId of targetTeacherIds) {
+      const conflict = await this.findTeacherTimeConflict(
+        schoolId, allInvolvedSlotIds,
+        sourceSlot.workingDay.dayOfWeek,
+        sourceSlot.slot.startTime, sourceSlot.slot.endTime,
+        teacherId,
+      );
+      if (conflict) {
+        const teacherName = teacherId === targetSlot.divisionAssignment?.teacher?.id
+          ? targetSlot.divisionAssignment!.teacher!.name
+          : targetSlot.divisionAssignment!.assistantTeacher!.name;
+        conflicts.push({
+          teacherName,
+          teacherId,
+          className: conflict.timetable.division?.class?.name ?? '',
+          divisionLabel: conflict.timetable.division?.label ?? '',
+          divisionId: conflict.timetable.divisionId,
+          conflictedSlotId: conflict.id,
+          reason: `${teacherName} is already teaching ${conflict.timetable.division?.class?.name ?? ''} ${conflict.timetable.division?.label ?? ''} at this time`,
+        });
+      }
+    }
+
+    return {
+      swapType,
+      sourceSummary,
+      targetSummary,
+      affectedCells,
+      conflicts,
     };
   }
 

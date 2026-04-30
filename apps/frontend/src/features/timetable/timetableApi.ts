@@ -197,6 +197,64 @@ export interface ResolutionCandidatesResponse {
   candidates: ResolutionCandidate[];
 }
 
+// ── Teacher swap preview types ──
+
+export interface TeacherSwapAffectedCell {
+  timetableId: string;
+  className: string;
+  divisionLabel: string;
+  dayLabel: string;
+  periodNumber: number | null;
+  currentSubject: string | null;
+  currentTeacher: string | null;
+  newSubject: string | null;
+  newTeacher: string | null;
+}
+
+export interface TeacherSwapConflict {
+  teacherName: string;
+  teacherId: string;
+  className: string;
+  divisionLabel: string;
+  divisionId: string;
+  conflictedSlotId: string;
+  reason: string;
+}
+
+export interface PreviewTeacherSwapResponse {
+  swapType: 'same_division' | 'cross_division' | 'elective';
+  sourceSummary?: {
+    className: string;
+    divisionLabel: string;
+    dayLabel: string;
+    periodNumber: number | null;
+    sortOrder: number;
+    subjectName: string | null;
+    teacherName: string | null;
+  };
+  targetSummary?: {
+    className: string;
+    divisionLabel: string;
+    dayLabel: string;
+    periodNumber: number | null;
+    sortOrder: number;
+    subjectName: string | null;
+    teacherName: string | null;
+  };
+  affectedCells?: TeacherSwapAffectedCell[];
+  conflicts?: TeacherSwapConflict[];
+  // When swapType === 'elective', frontend should delegate to elective swap flow
+  delegateToElective?: boolean;
+  electiveSourceSlotId?: string;
+  targetDayOfWeek?: number;
+  targetSlotSortOrder?: number;
+}
+
+interface PreviewTeacherSwapRequest {
+  sourceSlotId: string;
+  targetSlotId: string;
+}
+
 export interface PreviewElectiveSwapResponse {
   sourceElectiveGroup: { id: string; name: string };
   sourceCoordinates: { dayLabel: string; slotSortOrder: number };
@@ -312,6 +370,15 @@ export const timetableApi = createApi({
       invalidatesTags: ['Timetable'],
     }),
 
+    previewTeacherSwap: builder.mutation<PreviewTeacherSwapResponse, PreviewTeacherSwapRequest>({
+      query: (body) => ({
+        url: 'timetables/slots/preview-teacher-swap',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: PreviewTeacherSwapResponse }) => response.data,
+    }),
+
     previewElectiveSwap: builder.mutation<PreviewElectiveSwapResponse, PreviewElectiveSwapRequest>({
       query: (body) => ({
         url: 'timetables/slots/preview-elective-swap',
@@ -337,5 +404,6 @@ export const {
   useLazyGetValidElectiveSwapTargetsQuery,
   useSwapElectiveSlotsMutation,
   usePreviewElectiveSwapMutation,
+  usePreviewTeacherSwapMutation,
   useLazyGetResolutionCandidatesQuery,
 } = timetableApi;
