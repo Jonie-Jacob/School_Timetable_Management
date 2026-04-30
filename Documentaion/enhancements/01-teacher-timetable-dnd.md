@@ -87,11 +87,11 @@ All four need bidirectional conflict checking against ALL their other divisions.
 
 ## Implementation Phases
 
-### Phase 1: Backend -- Update Teacher Timetable API Response
+### Phase 1: Backend -- Update Teacher Timetable API Response -- IMPLEMENTED
 
 **Goal:** Add explicit `timetableId`, `divisionId`, `className`, `divisionLabel` to each period in the teacher timetable response. Currently these are hacked into the `teacher` field.
 
-#### 1.1 Update `TeacherPeriodDto` type
+#### 1.1 Update `TeacherPeriodDto` type -- DONE
 
 **File:** `services/timetable/src/service.ts`
 
@@ -112,7 +112,7 @@ type TeacherPeriodDto = {
 };
 ```
 
-#### 1.2 Populate new fields in the overlay loop
+#### 1.2 Populate new fields in the overlay loop -- DONE
 
 In the `getTeacherTimetable()` method, where `slots` are overlaid onto the grid skeleton, set:
 - `period.timetableId = s.timetableId`
@@ -124,7 +124,7 @@ For empty cells (no assignment), these remain empty strings (no timetable associ
 
 For elective cells with multiple assignments from different divisions, use the first division's info (the swap logic handles all divisions atomically).
 
-#### 1.3 Update frontend type `TimetablePeriod`
+#### 1.3 Update frontend type `TimetablePeriod` -- DONE
 
 **File:** `apps/frontend/src/features/timetable/timetableApi.ts`
 

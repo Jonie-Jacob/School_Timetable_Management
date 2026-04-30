@@ -1403,6 +1403,10 @@ export class TimetableService {
       slot: { id: string; slotType: string; slotNumber: number | null; startTime: Date; endTime: Date; sortOrder: number };
       assignments: TeacherAssignmentDto[];
       isElective: boolean;
+      timetableId: string;
+      divisionId: string;
+      className: string;
+      divisionLabel: string;
     };
     const grid: Record<number, {
       workingDay: { id: string; dayOfWeek: number; label: string; sortOrder: number };
@@ -1439,6 +1443,10 @@ export class TimetableService {
           },
           assignments: [],
           isElective: false,
+          timetableId: '',
+          divisionId: '',
+          className: '',
+          divisionLabel: '',
         });
       }
       dayBucket.periods.sort((a, b) => a.slot.sortOrder - b.slot.sortOrder);
@@ -1462,9 +1470,13 @@ export class TimetableService {
       const da = s.divisionAssignment;
       if (!da) continue;
       const period = dayBucket.periods[idx];
-      // Replace the empty placeholder with the real slot id
+      // Replace the empty placeholder with the real slot id + division info
       period.timetableSlotId = s.id;
       period.slotIds = [s.id];
+      period.timetableId = s.timetableId;
+      period.divisionId = s.timetable.division.id;
+      period.className = className;
+      period.divisionLabel = s.timetable.division.label;
       const role = da.assistantTeacherId === teacherId ? 'assistant' as const : 'primary' as const;
       // For teacher timetable: show who the OTHER teacher is.
       // If current teacher is primary → show assistant teacher name.

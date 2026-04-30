@@ -44,6 +44,12 @@ export interface TimetablePeriod {
   // disable click-to-edit (electives must be regenerated, not single-cell
   // edited).
   isElective: boolean;
+  // Teacher timetable fields: identify which division/timetable this cell belongs to.
+  // Empty strings for skeleton cells (no assignment). Used by teacher DnD for cross-division swaps.
+  timetableId?: string;
+  divisionId?: string;
+  className?: string;
+  divisionLabel?: string;
 }
 
 export interface TimetableDay {
