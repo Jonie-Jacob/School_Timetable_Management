@@ -49,9 +49,9 @@ Extract duplicated logic from individual services into `packages/shared/src/help
 
 ## Implementation Phases
 
-### Phase 1: Conflict Detection Helper
+### Phase 1: Conflict Detection Helper -- IMPLEMENTED
 
-#### 1.1 Create `conflictDetectionHelper.ts`
+#### 1.1 Create `conflictDetectionHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/conflictDetectionHelper.ts` (NEW)
 
@@ -118,7 +118,7 @@ export async function buildTeacherBusyRanges(
 ): Promise<Map<string, Array<{ dayOfWeek: number; startTime: number; endTime: number }>>>
 ```
 
-#### 1.2 Refactor teacher service
+#### 1.2 Refactor teacher service -- DONE
 
 **File:** `services/teacher/src/service.ts`
 
@@ -148,7 +148,7 @@ async getSlotConflicts(schoolId, academicYearId, workingDayId, slotId, excludeDi
 }
 ```
 
-#### 1.3 Refactor timetable service
+#### 1.3 Refactor timetable service -- DONE
 
 **File:** `services/timetable/src/service.ts`
 
@@ -156,22 +156,19 @@ Replace `findTeacherTimeConflict()` (lines ~502-540) to use `isTeacherBusyAt()`.
 
 The timetable service's version takes `excludeSlotIds` to ignore the source/target slots during swap. The shared function supports this parameter.
 
-#### 1.4 Refactor export service
+#### 1.4 Refactor export service -- DONE
 
 **File:** `services/export/src/service.ts`
 
 Replace inline `isTeacherBusy()` function and `busyRanges` map building (lines 648-671) to use `buildTeacherBusyRanges()`.
 
-#### 1.5 Deploy
-
-- Rebuild shared layer
-- Redeploy: teacher, timetable, export services
+#### 1.5 Deploy -- PENDING (batching with other phases)
 
 ---
 
-### Phase 2: Timetable Flagging Helper (Merge & Enhance)
+### Phase 2: Timetable Flagging Helper (Merge & Enhance) -- IMPLEMENTED
 
-#### 2.1 Enhance existing `notificationHelper.ts`
+#### 2.1 Create unified `timetableFlagHelper.ts` -- DONE
 
 **File:** `packages/shared/src/helpers/notificationHelper.ts` (MODIFY)
 
@@ -207,7 +204,7 @@ export async function flagTimetables(
 ): Promise<{ flaggedCount: number }>
 ```
 
-#### 2.2 Refactor all callers
+#### 2.2 Refactor all callers -- DONE (school-config 4 sites, class 1 site, teacher 3 sites, subject 1 site, division-assignment 6 sites = 15 total)
 
 **Files to modify:**
 - `services/teacher/src/service.ts` -- replace inline flagging in `delete()` 
@@ -216,16 +213,13 @@ export async function flagTimetables(
 - `services/subject/src/service.ts` -- ensure using shared function
 - `services/division-assignment/src/service.ts` -- ensure using shared function
 
-#### 2.3 Remove old functions
+#### 2.3 Remove old functions -- DONE (deprecated export kept, private method deleted, all imports switched)
 
 - Delete `school-config/service.ts :: flagAndBackfillTimetables()` (lines 803-878)
 - Delete inline flagging code in teacher and class services
 - Keep old `flagAffectedTimetables()` as deprecated alias pointing to new `flagTimetables()`
 
-#### 2.4 Deploy
-
-- Rebuild shared layer
-- Redeploy: teacher, class, school-config, subject, division-assignment services
+#### 2.4 Deploy -- PENDING (batching with other phases)
 
 ---
 

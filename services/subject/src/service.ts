@@ -4,7 +4,7 @@ import {
   NotFoundError,
   ConflictError,
   AppError,
-  flagAffectedTimetables,
+  flagTimetables,
   type CreateSubjectDto,
   type UpdateSubjectDto,
   type PaginationParams,
@@ -98,11 +98,12 @@ export class SubjectService {
     });
 
     if (input.name) {
-      await flagAffectedTimetables({
+      await flagTimetables({
         schoolId,
         academicYearId,
         entityType: 'SUBJECT',
         entityId: id,
+        conflictType: 'SUBJECT_CHANGED',
         changeDescription: `Subject name changed to '${input.name}'`,
       });
     }

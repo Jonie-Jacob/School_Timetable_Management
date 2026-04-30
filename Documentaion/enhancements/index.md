@@ -24,25 +24,22 @@
 ## Implementation Order
 
 ```
-Enhancement 3 (Status Flags) -- foundation, changes status model everywhere
-     |
-Enhancement 4 (Timetable-Aware Assignments) -- resolution wizard pattern
-     |
-Enhancement 5 (Elective Edit Modal) -- applies pattern to electives
-     |
-Enhancement 11 (Period Structure Changes) -- reuses resolution wizard for structure changes
-     |
-Enhancement 6 (Audit Log UI) -- repurpose notifications after status flags
-     |
-Enhancement 7 (Role-Based Access) -- independent, can be parallel
-     |
-Enhancement 9 (All-Class View) -- independent
-     |
-Enhancement 8 (UI Fixes) -- throughout
-     |
-Enhancement 10 (Mobile Responsive) -- throughout
+ 1. Enhancement 14 Phases 1-4  -- shared helpers (fix existing duplication)
+ 2. Enhancement 1              -- teacher timetable DnD (independent, parallel with above)
+ 3. Enhancement 3              -- status flags (foundation for many others)
+ 4. Enhancement 14 Phase 7     -- timetable status helper (uses Enh 3 types)
+ 5. Enhancement 4              -- resolution wizard (uses status flags)
+ 6. Enhancement 14 Phase 8     -- assignment impact helper (uses Phase 7 types)
+ 7. Enhancement 11             -- period structure changes (reuses wizard)
+ 8. Enhancement 9              -- all-class view (benefits from status flags)
+ 9. Enhancement 14 Phases 5-6  -- audit log + permission infrastructure
+10. Enhancement 6              -- audit log UI (uses Phase 5 helper)
+11. Enhancement 7              -- RBAC (uses Phase 6 helper)
+12. Enhancement 12             -- dashboard redesign (needs Enh 3 + 7)
+13. Enhancement 14 Phases 9-10 -- email + subscription helpers
+14. Enhancement 13             -- super admin portal (needs Enh 7 + helpers)
 
-Enhancement 1 (Teacher Timetable DnD) is independent and can be implemented in parallel with 3-5.
+Ongoing: Enhancement 8 (UI Fixes) -- items added as discovered
 ```
 
-Enhancement 2 is already fixed and deployed.
+Enhancement 2, 5 (modal), 8 (partial), 10 are already implemented and deployed.

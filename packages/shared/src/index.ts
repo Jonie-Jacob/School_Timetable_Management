@@ -20,6 +20,13 @@ export {
   parseBody,
   invokeLambda,
   flagAffectedTimetables,
+  flagTimetables,
+  findTeachersAtTime,
+  isTeacherBusyAt,
+  buildTeacherBusyRanges,
+  isTeacherBusyInRanges,
+  type TimeConflictResult,
+  type BusyRange,
 } from './helpers';
 
 // Middleware

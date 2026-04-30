@@ -1,5 +1,6 @@
 import {
   prisma, AppError, NotFoundError,
+  isTeacherBusyAt,
   TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto, CreateEmptySlotDto,
   SwapElectiveSlotsDto, PreviewElectiveSwapDto,
 } from '@timetable/shared';
@@ -507,24 +508,13 @@ export class TimetableService {
     endTime: Date,
     teacherId: string,
   ) {
-    return prisma.timetableSlot.findFirst({
-      where: {
-        id: { notIn: excludeSlotIds },
-        schoolId,
-        workingDay: { dayOfWeek },
-        slot: {
-          slotType: 'PERIOD',
-          startTime: { lt: endTime },
-          endTime: { gt: startTime },
-        },
-        divisionAssignment: { teacherId, deletedAt: null },
-      },
-      include: {
-        timetable: { include: { division: { include: { class: true } } } },
-        divisionAssignment: { include: { teacher: { select: { id: true, name: true } } } },
-        workingDay: true,
-        slot: true,
-      },
+    return isTeacherBusyAt({
+      schoolId,
+      teacherId,
+      dayOfWeek,
+      startTime,
+      endTime,
+      excludeSlotIds,
     });
   }
 

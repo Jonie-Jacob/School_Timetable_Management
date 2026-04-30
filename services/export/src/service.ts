@@ -1,5 +1,6 @@
 import {
   prisma, AppError, NotFoundError,
+  buildTeacherBusyRanges, isTeacherBusyInRanges,
 } from '@timetable/shared';
 import { SlotType } from '@prisma/client';
 import ExcelJS from 'exceljs';
@@ -624,51 +625,8 @@ export class ExportService {
       daySlots.push({ dayLabel: wd.label, dayOfWeek: wd.dayOfWeek, periods });
     }
 
-    // Get ALL timetable slots for ALL teachers (primary + assistant)
-    const timetableSlots = await prisma.timetableSlot.findMany({
-      where: {
-        schoolId,
-        timetable: { academicYearId, status: { in: ['GENERATED', 'OUTDATED'] } },
-        divisionAssignment: {
-          deletedAt: null,
-          OR: [{ teacherId: { not: null } }, { assistantTeacherId: { not: null } }],
-        },
-      },
-      select: {
-        slot: { select: { startTime: true, endTime: true } },
-        workingDay: { select: { dayOfWeek: true } },
-        divisionAssignment: { select: { teacherId: true, assistantTeacherId: true } },
-      },
-    });
-
-    // Build busy ranges: teacher_id → list of (dayOfWeek, startMs, endMs)
-    // Use time-range overlap to handle different period structures with
-    // overlapping but non-identical times.
-    const busyRanges = new Map<string, { day: number; start: number; end: number }[]>();
-    for (const ts of timetableSlots) {
-      const da = ts.divisionAssignment;
-      if (!da) continue;
-      const range = {
-        day: ts.workingDay.dayOfWeek,
-        start: ts.slot.startTime.getTime(),
-        end: ts.slot.endTime.getTime(),
-      };
-      for (const tid of [da.teacherId, da.assistantTeacherId]) {
-        if (tid) {
-          if (!busyRanges.has(tid)) busyRanges.set(tid, []);
-          busyRanges.get(tid)!.push(range);
-        }
-      }
-    }
-
-    // Helper: is teacher busy during a canonical period? (time-range overlap)
-    function isTeacherBusy(teacherId: string, dayOfWeek: number, periodStart: Date, periodEnd: Date): boolean {
-      const ranges = busyRanges.get(teacherId);
-      if (!ranges) return false;
-      const pStart = periodStart.getTime();
-      const pEnd = periodEnd.getTime();
-      return ranges.some(r => r.day === dayOfWeek && r.start < pEnd && pStart < r.end);
-    }
+    // Build busy ranges using shared helper
+    const busyRanges = await buildTeacherBusyRanges({ schoolId, academicYearId });
 
     // Build HTML: one page per day
     const pages = daySlots.map((day, dayIdx) => {
@@ -680,7 +638,7 @@ export class ExportService {
       // For each period, find free teachers
       const freeByPeriod = day.periods.map(p =>
         teachers
-          .filter(t => !isTeacherBusy(t.id, day.dayOfWeek, p.startTime, p.endTime))
+          .filter(t => !isTeacherBusyInRanges(busyRanges, t.id, day.dayOfWeek, p.startTime, p.endTime))
           .map(t => t.name)
       );
 

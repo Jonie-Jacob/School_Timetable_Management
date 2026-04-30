@@ -4,7 +4,8 @@ import {
   NotFoundError,
   ConflictError,
   AppError,
-  flagAffectedTimetables,
+  flagTimetables,
+  findTeachersAtTime,
   type CreateTeacherDto,
   type UpdateTeacherDto,
   type SetTeacherSubjectsDto,
@@ -418,76 +419,26 @@ export class TeacherService {
     slotId: string,
     excludeDivisionId: string | null,
   ) {
-    // Look up the source slot's time range so we can find overlapping slots
-    // across all period structures (different divisions may have different slots)
     const sourceSlot = await prisma.slot.findUnique({
       where: { id: slotId },
       select: { startTime: true, endTime: true },
     });
     if (!sourceSlot) return [];
 
-    // Find the working day's dayOfWeek so we can match all working days on the same day
     const sourceDay = await prisma.workingDay.findUnique({
       where: { id: workingDayId },
-      select: { dayOfWeek: true, periodStructureId: true },
+      select: { dayOfWeek: true },
     });
     if (!sourceDay) return [];
 
-    // Find all timetable slots on the same dayOfWeek with overlapping time ranges
-    const slots = await prisma.timetableSlot.findMany({
-      where: {
-        schoolId,
-        timetable: {
-          academicYearId,
-          ...(excludeDivisionId ? { divisionId: { not: excludeDivisionId } } : {}),
-        },
-        workingDay: { dayOfWeek: sourceDay.dayOfWeek },
-        slot: {
-          startTime: { lt: sourceSlot.endTime },
-          endTime: { gt: sourceSlot.startTime },
-        },
-        divisionAssignmentId: { not: null },
-        divisionAssignment: { deletedAt: null },
-      },
-      include: {
-        timetable: {
-          include: { division: { select: { label: true, class: { select: { name: true } } } } },
-        },
-        divisionAssignment: {
-          include: {
-            teacher: { select: { id: true, name: true } },
-            assistantTeacher: { select: { id: true, name: true } },
-            subject: { select: { id: true, name: true } },
-          },
-        },
-      },
+    return findTeachersAtTime({
+      schoolId,
+      academicYearId,
+      dayOfWeek: sourceDay.dayOfWeek,
+      startTime: sourceSlot.startTime,
+      endTime: sourceSlot.endTime,
+      excludeDivisionId: excludeDivisionId ?? undefined,
     });
-
-    // Deduplicate by teacherId+divisionId (a teacher may appear in multiple overlapping slots)
-    const seen = new Set<string>();
-    const results: Array<{ teacherId: string; teacherName: string; subjectName: string; className: string; divisionLabel: string }> = [];
-    for (const s of slots) {
-      const da = s.divisionAssignment;
-      if (!da) continue;
-      const divInfo = { subjectName: da.subject.name, className: s.timetable.division.class.name, divisionLabel: s.timetable.division.label };
-      // Primary teacher
-      if (da.teacher) {
-        const key = `${da.teacher.id}-${s.timetable.divisionId}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          results.push({ teacherId: da.teacher.id, teacherName: da.teacher.name, ...divInfo });
-        }
-      }
-      // Assistant teacher
-      if (da.assistantTeacher) {
-        const key = `${da.assistantTeacher.id}-${s.timetable.divisionId}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          results.push({ teacherId: da.assistantTeacher.id, teacherName: da.assistantTeacher.name, ...divInfo });
-        }
-      }
-    }
-    return results;
   }
 
   async getById(schoolId: string, academicYearId: string, id: string) {
@@ -541,11 +492,12 @@ export class TeacherService {
       if (input.name !== undefined) changes.push(`name changed to '${input.name}'`);
       if (input.contact !== undefined) changes.push(`contact updated`);
 
-      await flagAffectedTimetables({
+      await flagTimetables({
         schoolId,
         academicYearId,
         entityType: 'TEACHER',
         entityId: id,
+        conflictType: 'TEACHER_CHANGED',
         changeDescription: `Teacher ${changes.join(', ')}`,
       });
     }
@@ -671,11 +623,12 @@ export class TeacherService {
         : []),
     ]);
 
-    await flagAffectedTimetables({
+    await flagTimetables({
       schoolId,
       academicYearId,
       entityType: 'TEACHER',
       entityId: teacherId,
+      conflictType: 'TEACHER_CHANGED',
       changeDescription: `Teacher qualifications updated (${input.subjectIds.length} subject(s))`,
     });
 
@@ -722,11 +675,12 @@ export class TeacherService {
         : []),
     ]);
 
-    await flagAffectedTimetables({
+    await flagTimetables({
       schoolId,
       academicYearId,
       entityType: 'AVAILABILITY',
       entityId: teacherId,
+      conflictType: 'AVAILABILITY_CHANGED',
       changeDescription: `Teacher availability updated (${input.unavailableSlots.length} unavailable slot(s))`,
     });
 

@@ -1,6 +1,6 @@
 import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
-  flagAffectedTimetables,
+  flagTimetables,
   type CreateAssignmentDto, type UpdateAssignmentDto,
   type CreateElectiveGroupDto, type UpdateElectiveGroupDto,
   type AddElectiveSubjectDto, type UpdateElectiveSubjectDto,
@@ -136,11 +136,12 @@ export class AssignmentService {
       }
     }
 
-    await flagAffectedTimetables({
+    await flagTimetables({
       schoolId,
       academicYearId,
       entityType: 'ASSIGNMENT',
       entityId: id,
+      conflictType: 'ASSIGNMENT_CHANGED',
       changeDescription: `Assignment updated (${Object.keys(data).join(', ')} changed)`,
     });
 
@@ -161,13 +162,13 @@ export class AssignmentService {
       throw new AppError('Cannot delete assignment with active timetable slots. Remove timetable data first.', 400, 'BAD_REQUEST');
     }
 
-    await flagAffectedTimetables({
+    await flagTimetables({
       schoolId,
       academicYearId,
       entityType: 'ASSIGNMENT',
       entityId: id,
+      conflictType: 'ASSIGNMENT_CHANGED',
       changeDescription: `Assignment deleted`,
-      isDeleted: true,
     });
 
     await softDelete('divisionAssignment', id, schoolId);
@@ -702,11 +703,12 @@ export class AssignmentService {
       },
     });
 
-    await flagAffectedTimetables({
+    await flagTimetables({
       schoolId,
       academicYearId,
       entityType: 'ELECTIVE_GROUP',
       entityId: id,
+      conflictType: 'ELECTIVE_GROUP_CHANGED',
       changeDescription: `Elective group updated${input.name ? ` (name changed to '${input.name}')` : ''}${input.periodsPerWeek !== undefined ? ` (periods/week changed to ${input.periodsPerWeek})` : ''}`,
     });
 
@@ -723,13 +725,13 @@ export class AssignmentService {
       throw new AppError('Cannot delete elective group with active assignments. Remove assignments first.', 400, 'BAD_REQUEST');
     }
 
-    await flagAffectedTimetables({
+    await flagTimetables({
       schoolId,
       academicYearId,
       entityType: 'ELECTIVE_GROUP',
       entityId: id,
+      conflictType: 'ELECTIVE_GROUP_CHANGED',
       changeDescription: `Elective group deleted`,
-      isDeleted: true,
     });
 
     await softDelete('electiveGroup', id, schoolId);
@@ -807,11 +809,12 @@ export class AssignmentService {
       include: { subject: { select: { id: true, name: true } } },
     });
 
-    await flagAffectedTimetables({
+    await flagTimetables({
       schoolId,
       academicYearId,
       entityType: 'ELECTIVE_GROUP',
       entityId: groupId,
+      conflictType: 'ELECTIVE_GROUP_CHANGED',
       changeDescription: `Elective subject parallel sections updated to ${input.parallelSections}`,
     });
 
@@ -1172,10 +1175,11 @@ export class AssignmentService {
         const gId = groupIdByDivision.get(dId) ?? existingGroupIds[0];
         if (gId && !flaggedGroupIds.has(gId)) {
           flaggedGroupIds.add(gId);
-          await flagAffectedTimetables({
+          await flagTimetables({
             schoolId, academicYearId,
             entityType: 'ELECTIVE_GROUP',
             entityId: gId,
+            conflictType: 'ELECTIVE_GROUP_CHANGED',
             changeDescription: 'Elective group updated via bulk save',
           });
         }

@@ -12,6 +12,7 @@ import {
   type ReorderSlotsDto,
   type SlotEntry,
   DayOfWeek,
+  flagTimetables,
 } from '@timetable/shared';
 
 const DAY_MAP: Record<string, { dayOfWeek: number; label: string }> = {
@@ -498,11 +499,13 @@ export class SchoolConfigService {
 
     // Flag timetables + backfill empty timetable_slot rows for new period
     if (input.slotType === 'PERIOD') {
-      await this.flagAndBackfillTimetables(
-        schoolId, periodStructureId,
-        `Period P${slotNumber} added to structure`,
-        [slot.id],
-      );
+      await flagTimetables({
+        schoolId,
+        periodStructureId,
+        conflictType: 'STRUCTURE_CHANGED',
+        changeDescription: `Period P${slotNumber} added to structure`,
+        backfillSlotIds: [slot.id],
+      });
     }
 
     return slot;
@@ -536,12 +539,13 @@ export class SchoolConfigService {
     // If slot type changed, recalculate period numbers for all slots in this day
     if (input.slotType && input.slotType !== existing.slotType) {
       await this.recalculatePeriodNumbers(dayId, schoolId);
-      await this.flagAndBackfillTimetables(
-        schoolId, periodStructureId,
-        `Slot type changed in period structure`,
-        // If changed TO a PERIOD type, backfill timetable_slots for it
-        input.slotType === 'PERIOD' ? [slotId] : undefined,
-      );
+      await flagTimetables({
+        schoolId,
+        periodStructureId,
+        conflictType: 'STRUCTURE_CHANGED',
+        changeDescription: 'Slot type changed in period structure',
+        backfillSlotIds: input.slotType === 'PERIOD' ? [slotId] : undefined,
+      });
     }
 
     return updated;
@@ -591,10 +595,12 @@ export class SchoolConfigService {
 
     // Flag timetables as OUTDATED if a PERIOD slot was removed
     if (wasPeriod) {
-      await this.flagAndBackfillTimetables(
-        schoolId, periodStructureId,
-        `Period removed from structure`,
-      );
+      await flagTimetables({
+        schoolId,
+        periodStructureId,
+        conflictType: 'STRUCTURE_CHANGED',
+        changeDescription: 'Period removed from structure',
+      });
     }
   }
 
@@ -788,11 +794,13 @@ export class SchoolConfigService {
       select: { id: true },
     });
 
-    await this.flagAndBackfillTimetables(
-      schoolId, periodStructureId,
-      'Period structure updated',
-      newPeriodSlots.map(s => s.id),
-    );
+    await flagTimetables({
+      schoolId,
+      periodStructureId,
+      conflictType: 'STRUCTURE_CHANGED',
+      changeDescription: 'Period structure updated',
+      backfillSlotIds: newPeriodSlots.map(s => s.id),
+    });
   }
 
   /**
@@ -800,82 +808,6 @@ export class SchoolConfigService {
    * STRUCTURE_CHANGED notifications. Also backfill empty timetable_slot rows
    * for any newly created slot IDs.
    */
-  private async flagAndBackfillTimetables(
-    schoolId: string,
-    periodStructureId: string,
-    description: string,
-    newSlotIds?: string[],
-  ) {
-    const divisions = await prisma.division.findMany({
-      where: { periodStructureId, deletedAt: null },
-      select: { id: true },
-    });
-    if (divisions.length === 0) return;
-
-    const divisionIds = divisions.map((d) => d.id);
-    const timetables = await prisma.timetable.findMany({
-      where: { divisionId: { in: divisionIds } },
-      select: { id: true, schoolId: true, divisionId: true },
-    });
-    if (timetables.length === 0) return;
-
-    const ttIds = timetables.map((t) => t.id);
-
-    // Flag OUTDATED + create notifications
-    await prisma.$transaction([
-      prisma.timetableNotification.createMany({
-        data: timetables.map((tt) => ({
-          schoolId: tt.schoolId,
-          timetableId: tt.id,
-          divisionId: tt.divisionId,
-          conflictType: 'STRUCTURE_CHANGED' as const,
-          changeDescription: description,
-        })),
-      }),
-      prisma.timetable.updateMany({
-        where: { id: { in: ttIds } },
-        data: { status: 'OUTDATED' },
-      }),
-    ]);
-
-    // Backfill empty timetable_slot rows for new period slots
-    if (newSlotIds && newSlotIds.length > 0) {
-      // Get all working days for this structure
-      const workingDays = await prisma.workingDay.findMany({
-        where: { periodStructureId },
-        select: { id: true },
-      });
-
-      const backfillRows: Array<{
-        schoolId: string;
-        timetableId: string;
-        workingDayId: string;
-        slotId: string;
-        divisionAssignmentId: null;
-      }> = [];
-
-      for (const tt of timetables) {
-        for (const wd of workingDays) {
-          for (const slotId of newSlotIds) {
-            backfillRows.push({
-              schoolId: tt.schoolId,
-              timetableId: tt.id,
-              workingDayId: wd.id,
-              slotId,
-              divisionAssignmentId: null,
-            });
-          }
-        }
-      }
-
-      if (backfillRows.length > 0) {
-        await prisma.timetableSlot.createMany({
-          data: backfillRows,
-          skipDuplicates: true,
-        });
-      }
-    }
-  }
 
   private parseTime(timeStr: string): Date {
     const [hours, minutes] = timeStr.split(':').map(Number);

@@ -1,5 +1,6 @@
 import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
+  flagTimetables,
   type CreateClassDto, type UpdateClassDto,
   type CreateDivisionDto, type UpdateDivisionDto,
   type UpdateSortOrderDto,
@@ -330,34 +331,20 @@ export class ClassService {
 
     // Flag affected timetables as OUTDATED
     const affectedDivisionIds = [divisionId, fromAssignment.divisionId];
-    const affectedTimetables = await prisma.timetable.findMany({
-      where: { divisionId: { in: affectedDivisionIds }, schoolId },
+    const result = await flagTimetables({
+      schoolId,
+      divisionIds: affectedDivisionIds,
+      conflictType: 'ASSIGNMENT_CHANGED',
+      changeDescription: 'Teacher assignment swapped due to class teacher assignment.',
     });
 
-    if (affectedTimetables.length > 0) {
-      await prisma.timetable.updateMany({
-        where: { id: { in: affectedTimetables.map(t => t.id) } },
-        data: { status: 'OUTDATED' },
-      });
-
-      for (const tt of affectedTimetables) {
-        await prisma.timetableNotification.create({
-          data: {
-            schoolId,
-            timetableId: tt.id,
-            divisionId: tt.divisionId,
-            conflictType: 'ASSIGNMENT_CHANGED',
-            changeDescription: 'Teacher assignment swapped due to class teacher assignment.',
-          },
-        });
-      }
-
-      warnings.push(`${affectedTimetables.length} timetable(s) flagged as outdated.`);
+    if (result.affectedCount > 0) {
+      warnings.push(`${result.affectedCount} timetable(s) flagged as outdated.`);
     }
 
     return {
       swapped: true,
-      affectedTimetables: affectedTimetables.map(t => ({ id: t.id, divisionId: t.divisionId })),
+      affectedDivisionIds,
       warnings,
     };
   }

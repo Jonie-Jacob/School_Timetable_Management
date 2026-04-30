@@ -2,4 +2,14 @@ export { success, paginated, created, accepted, noContent, errorResponse } from 
 export { parsePagination, type PaginationParams } from './pagination';
 export { parseBody } from './validate';
 export { invokeLambda } from './lambdaInvoke';
+/** @deprecated Use flagTimetables() instead */
 export { flagAffectedTimetables } from './notificationHelper';
+export { flagTimetables } from './timetableFlagHelper';
+export {
+  findTeachersAtTime,
+  isTeacherBusyAt,
+  buildTeacherBusyRanges,
+  isTeacherBusyInRanges,
+  type TimeConflictResult,
+  type BusyRange,
+} from './conflictDetectionHelper';
