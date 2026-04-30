@@ -217,45 +217,47 @@ export function Component() {
   const renderCard = (teacher: Teacher) => {
     const subjects = teacher.teacherSubjects ?? [];
     return (
-      <div key={teacher.id} className="rounded-lg border bg-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold">{teacher.name}</span>
+      <div key={teacher.id} className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4 space-y-2.5 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold truncate">{teacher.name}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={() => navigate(`/teachers/${teacher.id}/edit`)}
+              disabled={isReadOnly}
+              title={t('edit')}
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteTarget(teacher);
+              }}
+              disabled={isReadOnly}
+              title={t('delete')}
+            >
+              <Trash2 className="size-3.5 text-destructive" />
+            </Button>
+          </div>
         </div>
         {subjects.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {subjects.map((ts) => (
-              <Badge key={ts.subjectId} variant="secondary" className="text-xs">
+              <Badge key={ts.subjectId} variant="secondary" className="text-[10px] px-1.5 py-0">
                 {ts.subject.name}
               </Badge>
             ))}
           </div>
         )}
         {teacher.contact && (
-          <p className="text-xs text-muted-foreground">{teacher.contact}</p>
+          <p className="text-[11px] text-muted-foreground">{teacher.contact}</p>
         )}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/teachers/${teacher.id}/edit`)}
-            disabled={isReadOnly}
-          >
-            <Pencil className="size-3 mr-1" />
-            {t('edit')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setDeleteError(null);
-              setDeleteTarget(teacher);
-            }}
-            disabled={isReadOnly}
-          >
-            <Trash2 className="size-3 mr-1 text-destructive" />
-            {t('delete')}
-          </Button>
-        </div>
       </div>
     );
   };

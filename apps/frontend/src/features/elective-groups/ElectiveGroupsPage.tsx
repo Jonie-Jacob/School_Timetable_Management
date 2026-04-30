@@ -190,6 +190,41 @@ export function Component() {
           </Button>
         }
         storageKey="elective-groups"
+        renderCard={(group) => {
+          const subjectNames = group.subjects.map(s => s.subjectAbbreviation || s.subjectName).join(', ');
+          const teacherNames = Array.from(new Set(group.subjects.flatMap(s => s.teachers.map(t => t.teacherName).filter(Boolean)))).join(', ');
+          return (
+            <div key={group.underlyingGroupIds[0]} className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4 space-y-2.5 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold truncate">{group.displayName}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Badge
+                    variant="secondary"
+                    className={group.type === 'cross-division'
+                      ? 'bg-blue-100 text-blue-800 text-[10px]'
+                      : 'bg-amber-100 text-amber-800 text-[10px]'}
+                  >
+                    {group.type === 'cross-division' ? 'Cross-Div' : 'Per-Div'}
+                  </Badge>
+                </div>
+              </div>
+              <div className="space-y-1 text-[11px] text-muted-foreground">
+                <div><span className="font-medium text-foreground/70">Subjects:</span> {subjectNames || '--'}</div>
+                <div><span className="font-medium text-foreground/70">Teachers:</span> {teacherNames || '--'}</div>
+                <div><span className="font-medium text-foreground/70">P/W:</span> {group.config.periodsPerWeek}</div>
+                <div><span className="font-medium text-foreground/70">Divisions:</span> {group.divisions.length > 0 ? formatDivisions(group.divisions) : '--'}</div>
+              </div>
+              <div className="flex items-center justify-end gap-1">
+                <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditTarget(group)} disabled={isReadOnly} title="Edit">
+                  <Pencil className="size-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="size-7" onClick={() => setDeleteTarget(group)} disabled={isReadOnly} title="Delete">
+                  <Trash2 className="size-3.5 text-destructive" />
+                </Button>
+              </div>
+            </div>
+          );
+        }}
       />
 
       {/* Unified editor modal -- create */}

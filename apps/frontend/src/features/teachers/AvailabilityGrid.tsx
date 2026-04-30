@@ -124,7 +124,7 @@ function DesktopGrid({
               .map((day: any) => {
                 const daySlots = (day.slots ?? [])
                   .filter((s: any) => s.slotType === 'PERIOD')
-                  .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+                  .slice().sort((a: any, b: any) => a.sortOrder - b.sortOrder);
 
                 return (
                   <tr key={day.id}>
@@ -191,7 +191,7 @@ function MobileGrid({
       <p className="text-sm font-medium">{structure.name}</p>
       <Accordion type="single" collapsible className="w-full">
         {workingDays
-          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .slice().sort((a, b) => a.sortOrder - b.sortOrder)
           .map((day: any) => {
             const daySlots = (day.slots ?? [])
               .filter((s: Slot) => s.slotType === 'PERIOD')

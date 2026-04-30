@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Trash2 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared';
 import { useGetClassesQuery } from '@/features/classes/classApi';
@@ -228,12 +228,16 @@ export function ElectiveGroupEditorModal({ open, onOpenChange, initialData }: Pr
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{isEdit ? 'Edit Elective Group' : 'Create Elective Group'}</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+          {/* Dark gradient header */}
+          <div className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 px-6 py-4 text-white shrink-0">
+            <DialogHeader className="p-0 space-y-0">
+              <DialogTitle className="text-white text-lg font-bold">{isEdit ? 'Edit Elective Group' : 'Create Elective Group'}</DialogTitle>
+            </DialogHeader>
+          </div>
 
-          <div className="space-y-6 py-2">
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
             <GroupConfigSection config={form.config} onChange={updateConfig} isEdit={isEdit} />
 
             <SubjectsSection
@@ -264,28 +268,43 @@ export function ElectiveGroupEditorModal({ open, onOpenChange, initialData }: Pr
             />
           </div>
 
-          <DialogFooter className="flex justify-between sm:justify-between">
-            {isEdit && (
+          {/* Dark gradient footer */}
+          <div className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 px-6 py-3.5 flex items-center justify-between shrink-0">
+            {isEdit ? (
               <Button
                 type="button"
-                variant="destructive"
+                variant="outline"
                 size="sm"
+                className="text-red-400 border-red-400/40 hover:bg-red-500/20 hover:text-red-300 gap-1"
                 onClick={() => setDeleteConfirmOpen(true)}
                 disabled={saving || deleting}
               >
-                <Trash2 className="size-3.5 mr-1" />
+                <Trash2 className="size-3.5" />
                 Delete
               </Button>
-            )}
-            <div className="flex gap-2 ml-auto">
-              <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
+            ) : <div />}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-white/80 border-white/20 hover:bg-white/10 hover:text-white"
+                onClick={() => onOpenChange(false)}
+                disabled={saving}
+              >
                 Cancel
               </Button>
-              <Button type="button" size="sm" onClick={handleSave} disabled={saving || deleting}>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={handleSave}
+                disabled={saving || deleting}
+              >
                 {saving ? 'Saving...' : 'Save'}
               </Button>
             </div>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

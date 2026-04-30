@@ -517,7 +517,7 @@ export class TimetableService {
           startTime: { lt: endTime },
           endTime: { gt: startTime },
         },
-        divisionAssignment: { teacherId },
+        divisionAssignment: { teacherId, deletedAt: null },
       },
       include: {
         timetable: { include: { division: { include: { class: true } } } },
@@ -1324,6 +1324,7 @@ export class TimetableService {
         schoolId,
         timetable: { academicYearId },
         divisionAssignment: {
+          deletedAt: null,
           OR: [{ teacherId }, { assistantTeacherId: teacherId }],
         },
       },

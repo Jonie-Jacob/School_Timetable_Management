@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/cn';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 
 type GenerateScope = 'all' | 'outdated' | 'pending';
 
@@ -46,6 +47,7 @@ export function Component() {
   useTranslation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const isDesktop = useBreakpoint('sm');
 
   const { data: classes, isLoading } = useGetClassesQuery(undefined, { refetchOnMountOrArgChange: true });
   const [generateMutation, { isLoading: isGeneratingAll }] = useGenerateTimetableMutation();
@@ -59,6 +61,7 @@ export function Component() {
 
   // ── WebSocket-driven generation progress ──
   // Restore last completed generation result from localStorage
+  // Only restore if the result was saved AFTER the last dismissal
   const [genState, setGenState] = useState<GenerationState>(() => {
     try {
       const saved = localStorage.getItem('last-generation-result');
@@ -66,6 +69,10 @@ export function Component() {
         const parsed = JSON.parse(saved);
         // Only restore if it has a summary (completed generation)
         if (parsed.summary) {
+          const dismissedAt = parseInt(localStorage.getItem('generation-result-dismissed-at') ?? '0', 10);
+          const savedAt = parsed.savedAt ?? 0;
+          // Don't restore if the user already dismissed this result
+          if (dismissedAt >= savedAt) return INITIAL_GENERATION_STATE;
           return {
             ...INITIAL_GENERATION_STATE,
             summary: parsed.summary,
@@ -77,6 +84,12 @@ export function Component() {
     } catch { /* ignore */ }
     return INITIAL_GENERATION_STATE;
   });
+
+  // Track whether user dismissed the result -- persists across refresh via localStorage
+  const dismissedRef = useRef(
+    !localStorage.getItem('last-generation-result') &&
+    parseInt(localStorage.getItem('generation-result-dismissed-at') ?? '0', 10) > 0
+  );
 
   // Check for active generation on mount + poll every 5s while active
   const { data: activeGen, refetch: refetchActive } = useGetActiveGenerationQuery(undefined, {
@@ -151,8 +164,8 @@ export function Component() {
           next.divisionCompleted = newCompleted;
         }
 
-        // Check if all done
-        if (!activeGen.active && completed >= total) {
+        // Check if all done -- skip if user already dismissed this result
+        if (!activeGen.active && completed >= total && !dismissedRef.current) {
           // If WS is active (we've received phase events), don't build summary
           // from polling -- wait for the richer generation_summary WS event
           // which includes failureAnalysis
@@ -186,6 +199,7 @@ export function Component() {
               localStorage.setItem('last-generation-result', JSON.stringify({
                 summary,
                 divisionCompleted: Object.fromEntries(next.divisionCompleted),
+                savedAt: Date.now(),
               }));
             } catch { /* ignore */ }
           }
@@ -205,8 +219,10 @@ export function Component() {
         switch (event.type) {
           case 'generation_phase': {
             const p = event.payload as unknown as PhaseState;
-            // New generation starting -- clear old results
+            // New generation starting -- clear old results and reset dismiss flag
             if (p.phase === 'loading') {
+              dismissedRef.current = false;
+              localStorage.removeItem('generation-result-dismissed-at');
               next.summary = null;
               next.divisionCompleted = new Map();
               next.divisionProgress = new Map();
@@ -255,6 +271,7 @@ export function Component() {
               const toSave = {
                 summary: next.summary,
                 divisionCompleted: Object.fromEntries(next.divisionCompleted),
+                savedAt: Date.now(),
               };
               localStorage.setItem('last-generation-result', JSON.stringify(toSave));
             } catch { /* ignore quota errors */ }
@@ -300,7 +317,9 @@ export function Component() {
     }
 
     // Clear old results and show progress immediately
+    dismissedRef.current = false;
     localStorage.removeItem('last-generation-result');
+    localStorage.removeItem('generation-result-dismissed-at');
     setGenState({
       ...INITIAL_GENERATION_STATE,
       active: true,
@@ -397,7 +416,9 @@ export function Component() {
         state={genState}
         onDismiss={() => {
           setGenState(INITIAL_GENERATION_STATE);
+          dismissedRef.current = true;
           localStorage.removeItem('last-generation-result');
+          localStorage.setItem('generation-result-dismissed-at', String(Date.now()));
         }}
       />
 
@@ -418,7 +439,63 @@ export function Component() {
         </div>
       )}
 
-      {!isLoading && allDivisions.length > 0 && (
+      {!isLoading && allDivisions.length > 0 && !isDesktop && (
+        <div className="space-y-2">
+          {allDivisions.map((div) => {
+            const status = div.timetable?.status;
+            return (
+              <div key={div.id} className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-3.5 space-y-2.5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <span className="text-sm font-semibold">{div.className}</span>
+                    <span className="text-sm text-muted-foreground"> -- Div {div.label}</span>
+                    {div.streamName && <span className="text-xs text-muted-foreground"> ({div.streamName})</span>}
+                  </div>
+                  <Badge
+                    variant={status === 'GENERATED' ? 'success' : status === 'OUTDATED' ? 'warning' : 'outline'}
+                    className="text-[10px] shrink-0"
+                  >
+                    {status === 'GENERATED' ? 'Generated' : status === 'OUTDATED' ? 'Outdated' : 'Pending'}
+                  </Badge>
+                </div>
+                <div className="text-[11px] text-muted-foreground">{div.periodStructure?.name ?? '--'}</div>
+                <div className="flex items-center gap-1.5">
+                  {div.timetable && (
+                    <>
+                      <Button variant="outline" size="xs" className="text-[11px] gap-1" onClick={() => navigate(`/classes/${div.classId}/divisions/${div.id}/timetable`)}>
+                        <Eye className="size-3" /> View
+                      </Button>
+                      <ExportButton
+                        size="xs"
+                        label=""
+                        onExportPdf={async () => {
+                          try {
+                            const result = await exportDivPdf({ divisionId: div.id }).unwrap();
+                            downloadHtmlAsPdf(result.html, result.filename);
+                            toast.success('Export ready');
+                          } catch { toast.error('Export failed'); }
+                        }}
+                        onExportExcel={async () => {
+                          try {
+                            const result = await exportDivExcel({ divisionId: div.id }).unwrap();
+                            downloadExcel(result.base64, result.filename);
+                            toast.success('Excel downloaded');
+                          } catch { toast.error('Export failed'); }
+                        }}
+                      />
+                    </>
+                  )}
+                  <Button variant={status ? 'outline' : 'default'} size="xs" className="text-[11px] gap-1" onClick={() => navigate(`/classes/${div.classId}/divisions/${div.id}/generate`)}>
+                    <Zap className="size-3" /> {status ? 'Regenerate' : 'Generate'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!isLoading && allDivisions.length > 0 && isDesktop && (
         <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden shadow-sm">
           <table className="w-full text-sm">
             <thead>
@@ -456,7 +533,7 @@ export function Component() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
-                        {(status === 'GENERATED' || status === 'OUTDATED') && (
+                        {div.timetable && (
                           <>
                             <Button
                               variant="outline"

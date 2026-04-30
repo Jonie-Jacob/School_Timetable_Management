@@ -264,6 +264,7 @@ export class TeacherService {
         schoolId,
         timetable: { academicYearId, status: { in: ['GENERATED', 'OUTDATED'] } },
         divisionAssignment: {
+          deletedAt: null,
           OR: [{ teacherId }, { assistantTeacherId: teacherId }],
         },
       },
@@ -329,11 +330,14 @@ export class TeacherService {
           .map((x) => `${x.division.class.name} ${x.division.label}`)
           .filter((v, i, arr) => arr.indexOf(v) === i)
           .sort();
+        // Mark ALL related assignment IDs as used (must happen before any break)
+        for (const ra of relatedAssignments) {
+          assignmentIdsUsed.add(ra.id);
+        }
         // For cross-div, count distinct time slots across any one division's assignment
         // (they all share the same slots)
         let ttCount: number | null = null;
         for (const ra of relatedAssignments) {
-          assignmentIdsUsed.add(ra.id);
           const c = ttCountByAssignment.get(ra.id);
           if (c) { ttCount = c.size; break; }
         }
@@ -414,16 +418,36 @@ export class TeacherService {
     slotId: string,
     excludeDivisionId: string | null,
   ) {
+    // Look up the source slot's time range so we can find overlapping slots
+    // across all period structures (different divisions may have different slots)
+    const sourceSlot = await prisma.slot.findUnique({
+      where: { id: slotId },
+      select: { startTime: true, endTime: true },
+    });
+    if (!sourceSlot) return [];
+
+    // Find the working day's dayOfWeek so we can match all working days on the same day
+    const sourceDay = await prisma.workingDay.findUnique({
+      where: { id: workingDayId },
+      select: { dayOfWeek: true, periodStructureId: true },
+    });
+    if (!sourceDay) return [];
+
+    // Find all timetable slots on the same dayOfWeek with overlapping time ranges
     const slots = await prisma.timetableSlot.findMany({
       where: {
         schoolId,
-        workingDayId,
-        slotId,
         timetable: {
           academicYearId,
           ...(excludeDivisionId ? { divisionId: { not: excludeDivisionId } } : {}),
         },
-        divisionAssignment: { teacherId: { not: null } },
+        workingDay: { dayOfWeek: sourceDay.dayOfWeek },
+        slot: {
+          startTime: { lt: sourceSlot.endTime },
+          endTime: { gt: sourceSlot.startTime },
+        },
+        divisionAssignmentId: { not: null },
+        divisionAssignment: { deletedAt: null },
       },
       include: {
         timetable: {
@@ -432,23 +456,38 @@ export class TeacherService {
         divisionAssignment: {
           include: {
             teacher: { select: { id: true, name: true } },
+            assistantTeacher: { select: { id: true, name: true } },
             subject: { select: { id: true, name: true } },
           },
         },
       },
     });
 
-    return slots.flatMap((s) => {
+    // Deduplicate by teacherId+divisionId (a teacher may appear in multiple overlapping slots)
+    const seen = new Set<string>();
+    const results: Array<{ teacherId: string; teacherName: string; subjectName: string; className: string; divisionLabel: string }> = [];
+    for (const s of slots) {
       const da = s.divisionAssignment;
-      if (!da || !da.teacher) return [];
-      return [{
-        teacherId: da.teacher.id,
-        teacherName: da.teacher.name,
-        subjectName: da.subject.name,
-        className: s.timetable.division.class.name,
-        divisionLabel: s.timetable.division.label,
-      }];
-    });
+      if (!da) continue;
+      const divInfo = { subjectName: da.subject.name, className: s.timetable.division.class.name, divisionLabel: s.timetable.division.label };
+      // Primary teacher
+      if (da.teacher) {
+        const key = `${da.teacher.id}-${s.timetable.divisionId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push({ teacherId: da.teacher.id, teacherName: da.teacher.name, ...divInfo });
+        }
+      }
+      // Assistant teacher
+      if (da.assistantTeacher) {
+        const key = `${da.assistantTeacher.id}-${s.timetable.divisionId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push({ teacherId: da.assistantTeacher.id, teacherName: da.assistantTeacher.name, ...divInfo });
+        }
+      }
+    }
+    return results;
   }
 
   async getById(schoolId: string, academicYearId: string, id: string) {

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/shared';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
 import {
   useGetTeachersQuery,
   useGetTeachersLoadQuery,
@@ -27,6 +28,7 @@ type SortKey = 'name' | 'load-asc' | 'load-desc';
 
 export function Component() {
   const navigate = useNavigate();
+  const isDesktop = useBreakpoint('sm');
 
   const { data: teachersData, isLoading: teachersLoading } = useGetTeachersQuery({ pageSize: 200 });
   const { data: teacherLoads, isLoading: loadsLoading } = useGetTeachersLoadQuery();
@@ -201,89 +203,122 @@ export function Component() {
             {search ? 'Try a different search term.' : 'Add teachers from the Teachers page first.'}
           </p>
         </div>
-      ) : (
-        <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white/90">
-                <th className="text-left text-[11px] uppercase tracking-wider font-semibold px-4 py-3">Teacher</th>
-                <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-36">Assigned</th>
-                <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-36">Timetable</th>
-                <th className="text-right text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-72">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, idx) => {
-                const max = row.maxPeriodsPerWeek;
-                const over = max != null && row.assignedPeriods > max;
-                return (
-                  <tr
-                    key={row.id}
-                    className={`border-t border-border/30 hover:bg-amber-500/5 transition-colors ${idx % 2 === 1 ? 'bg-muted/20' : ''}`}
-                  >
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/teacher-timetable/${row.id}`)}
-                        className="text-sm font-medium hover:text-amber-600 transition-colors"
-                      >
-                        {row.name}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <Badge variant={over ? 'destructive' : 'outline'} className="text-[10px]">
-                        {row.assignedPeriods}{max != null ? ` / ${max}` : ''}
+      ) : !isDesktop ? (
+          /* Mobile card view */
+          <div className="space-y-3">
+            {rows.map((row) => {
+              const max = row.maxPeriodsPerWeek;
+              const over = max != null && row.assignedPeriods > max;
+              const mismatch = row.timetablePeriods != null && row.timetablePeriods !== row.assignedPeriods;
+              return (
+                <div
+                  key={row.id}
+                  className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4 space-y-3 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/teacher-timetable/${row.id}`)}
+                      className="text-sm font-semibold hover:text-amber-600 transition-colors"
+                    >
+                      {row.name}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={over ? 'destructive' : 'outline'} className="text-[10px]">
+                      {row.assignedPeriods}{max != null ? ` / ${max}` : ''} assigned
+                    </Badge>
+                    {row.timetablePeriods != null ? (
+                      <Badge variant={mismatch ? 'destructive' : 'outline'} className="text-[10px]">
+                        {row.timetablePeriods} in TT
                       </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {row.timetablePeriods != null ? (
-                        <Badge
-                          variant={row.timetablePeriods !== row.assignedPeriods ? 'destructive' : 'outline'}
-                          className="text-[10px]"
-                        >
-                          {row.timetablePeriods}
-                        </Badge>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="xs"
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">No TT</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button variant="outline" size="xs" onClick={() => navigate(`/teacher-timetable/${row.id}`)}>
+                      <Eye className="size-3" /> View
+                    </Button>
+                    <Button variant="outline" size="xs" disabled={exportingId === row.id} onClick={() => handleExportRowPdf(row.id)}>
+                      <FileText className="size-3" /> PDF
+                    </Button>
+                    <Button variant="outline" size="xs" disabled={exportingId === row.id} onClick={() => handleExportRowExcel(row.id)}>
+                      <FileSpreadsheet className="size-3" /> Excel
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Desktop table view */
+          <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm overflow-hidden shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white/90">
+                  <th className="text-left text-[11px] uppercase tracking-wider font-semibold px-4 py-3">Teacher</th>
+                  <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-36">Assigned</th>
+                  <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-36">Timetable</th>
+                  <th className="text-right text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-72">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, idx) => {
+                  const max = row.maxPeriodsPerWeek;
+                  const over = max != null && row.assignedPeriods > max;
+                  return (
+                    <tr
+                      key={row.id}
+                      className={`border-t border-border/30 hover:bg-amber-500/5 transition-colors ${idx % 2 === 1 ? 'bg-muted/20' : ''}`}
+                    >
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
                           onClick={() => navigate(`/teacher-timetable/${row.id}`)}
+                          className="text-sm font-medium hover:text-amber-600 transition-colors"
                         >
-                          <Eye className="size-3" />
-                          View
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          disabled={exportingId === row.id}
-                          onClick={() => handleExportRowPdf(row.id)}
-                        >
-                          <FileText className="size-3" />
-                          PDF
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          disabled={exportingId === row.id}
-                          onClick={() => handleExportRowExcel(row.id)}
-                        >
-                          <FileSpreadsheet className="size-3" />
-                          Excel
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                          {row.name}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant={over ? 'destructive' : 'outline'} className="text-[10px]">
+                          {row.assignedPeriods}{max != null ? ` / ${max}` : ''}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {row.timetablePeriods != null ? (
+                          <Badge
+                            variant={row.timetablePeriods !== row.assignedPeriods ? 'destructive' : 'outline'}
+                            className="text-[10px]"
+                          >
+                            {row.timetablePeriods}
+                          </Badge>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">--</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button variant="outline" size="xs" onClick={() => navigate(`/teacher-timetable/${row.id}`)}>
+                            <Eye className="size-3" /> View
+                          </Button>
+                          <Button variant="outline" size="xs" disabled={exportingId === row.id} onClick={() => handleExportRowPdf(row.id)}>
+                            <FileText className="size-3" /> PDF
+                          </Button>
+                          <Button variant="outline" size="xs" disabled={exportingId === row.id} onClick={() => handleExportRowExcel(row.id)}>
+                            <FileSpreadsheet className="size-3" /> Excel
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
     </div>
   );
 }

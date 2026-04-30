@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -44,10 +45,12 @@ export function GroupConfigSection({ config, onChange }: Props) {
             }}
             className="justify-start"
           >
-            <ToggleGroupItem value="per-division" className="text-xs px-3 py-1 data-[state=on]:bg-amber-100 data-[state=on]:text-amber-900">
+            <ToggleGroupItem value="per-division" className="text-xs px-3 py-1 gap-1 data-[state=on]:bg-amber-100 data-[state=on]:text-amber-900">
+              {config.type === 'per-division' && <Check className="size-3.5 text-emerald-600" />}
               Per-Division
             </ToggleGroupItem>
-            <ToggleGroupItem value="cross-division" className="text-xs px-3 py-1 data-[state=on]:bg-blue-100 data-[state=on]:text-blue-900">
+            <ToggleGroupItem value="cross-division" className="text-xs px-3 py-1 gap-1 data-[state=on]:bg-blue-100 data-[state=on]:text-blue-900">
+              {config.type === 'cross-division' && <Check className="size-3.5 text-emerald-600" />}
               Cross-Division
             </ToggleGroupItem>
           </ToggleGroup>

@@ -134,6 +134,7 @@ export function Component() {
     currentTeacherName: string | null;
   } | null>(null);
   const [sheetSelectedTeacherId, setSheetSelectedTeacherId] = useState<string>('');
+  const [sheetSelectedAssistantId, setSheetSelectedAssistantId] = useState<string>('');
   const [sheetSubjectId, setSheetSubjectId] = useState<string>('');
   // Filter / sort controls for the teacher picker.
   // teacherPool -- which teachers are eligible for the picker:
@@ -524,6 +525,7 @@ export function Component() {
                       });
                       setSheetSubjectId(fullAssignment?.subjectId ?? firstAssignment?.subject.id ?? '');
                       setSheetSelectedTeacherId(fullAssignment?.teacherId ?? '');
+                      setSheetSelectedAssistantId(fullAssignment?.assistantTeacherId ?? '');
                       setTeacherPool('relevant');
                       setHideConflicts(false);
                       setTeacherSort('name');
@@ -647,7 +649,7 @@ export function Component() {
                             <button
                               key={s.id}
                               type="button"
-                              onClick={() => { setSheetSubjectId(s.id); setSheetSelectedTeacherId(''); }}
+                              onClick={() => { setSheetSubjectId(s.id); setSheetSelectedTeacherId(''); setSheetSelectedAssistantId(''); }}
                               className={cn(
                                 'px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all',
                                 active
@@ -703,163 +705,223 @@ export function Component() {
                     subjectAssignments.map((a) => a.teacherId).filter(Boolean) as string[],
                   );
 
+                  // Assistant teacher dropdown options: all teachers except the selected primary
+                  const assistantOptions = allTeachers
+                    .filter((t) => t.id !== sheetSelectedTeacherId)
+                    .sort((a, b) => a.name.localeCompare(b.name));
+
                   return (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
-                          Teacher · {visibleTeachers.length}
-                          {visibleConflictCount > 0 && (
-                            <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 gap-0.5">
-                              <AlertTriangle className="size-2.5" />
-                              {visibleConflictCount} conflict{visibleConflictCount === 1 ? '' : 's'}
-                            </Badge>
-                          )}
+                    <div className="space-y-4">
+                      {/* Primary Teacher */}
+                      <div className="rounded-xl border border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border/40">
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+                            Primary Teacher · {visibleTeachers.length}
+                            {visibleConflictCount > 0 && (
+                              <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 gap-0.5">
+                                <AlertTriangle className="size-2.5" />
+                                {visibleConflictCount} conflict{visibleConflictCount === 1 ? '' : 's'}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Filter + sort controls */}
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        {/* Pool toggle: Relevant / All */}
-                        <div className="flex items-center gap-1">
-                          {(['relevant', 'all'] as const).map((p) => {
-                            const active = teacherPool === p;
-                            return (
-                              <button
-                                key={p}
-                                type="button"
-                                onClick={() => setTeacherPool(p)}
-                                className={cn(
-                                  'px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all capitalize',
-                                  active
-                                    ? 'bg-amber-500 border-amber-500 text-white'
-                                    : 'bg-card border-border/60 text-foreground/70 hover:border-amber-500/40',
-                                )}
-                              >
-                                {p}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {/* Independent: Hide-conflicts toggle */}
-                        <button
-                          type="button"
-                          onClick={() => setHideConflicts((v) => !v)}
-                          className={cn(
-                            'px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all',
-                            hideConflicts
-                              ? 'bg-amber-500 border-amber-500 text-white'
-                              : 'bg-card border-border/60 text-foreground/70 hover:border-amber-500/40',
-                          )}
-                          title="Hide teachers already booked in this slot in another division"
-                        >
-                          Hide conflicts
-                        </button>
-                        <div className="flex-1" />
-                        <select
-                          value={teacherSort}
-                          onChange={(e) => setTeacherSort(e.target.value as typeof teacherSort)}
-                          className="text-[10px] rounded-md border border-border/60 bg-card px-1.5 py-0.5 text-foreground/80 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
-                        >
-                          <option value="name">Sort: Name</option>
-                          <option value="load-asc">Sort: Load ↑</option>
-                          <option value="load-desc">Sort: Load ↓</option>
-                        </select>
-                      </div>
-
-                      {visibleTeachers.length === 0 ? (
-                        <div className="rounded-lg border border-dashed border-border/40 p-3 text-xs text-muted-foreground italic text-center">
-                          No teachers match the current filter.
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5 max-h-[40vh] overflow-y-auto pr-1">
-                          {visibleTeachers.map((tch) => {
-                            const assigned = tch.assignedPeriods;
-                            const max = tch.maxPeriodsPerWeek;
-                            const over = max != null && assigned > max;
-                            const conflict = slotConflicts?.find((c) => c.teacherId === tch.id);
-                            const selected = sheetSelectedTeacherId === tch.id;
-                            const isQualified = tch.qualifiedSubjectIds.includes(sheetSubjectId);
-                            const hasExisting = teacherIdsWithAssignment.has(tch.id);
-                            return (
-                              <button
-                                key={tch.id}
-                                type="button"
-                                onClick={() => setSheetSelectedTeacherId(tch.id)}
-                                className={cn(
-                                  'w-full text-left rounded-lg border p-3 transition-all flex items-start gap-3',
-                                  selected
-                                    ? 'border-amber-500/60 bg-amber-500/10 shadow-sm'
-                                    : 'border-border/60 bg-card hover:border-amber-500/30 hover:bg-amber-500/5',
-                                )}
-                              >
-                                <div
+                        {/* Filter + sort controls */}
+                        <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border/30">
+                          {/* Pool toggle: Relevant / All */}
+                          <div className="flex items-center gap-1">
+                            {(['relevant', 'all'] as const).map((p) => {
+                              const active = teacherPool === p;
+                              return (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setTeacherPool(p)}
                                   className={cn(
-                                    'mt-0.5 size-4 rounded-full border-2 shrink-0 flex items-center justify-center',
-                                    selected ? 'border-amber-500 bg-amber-500' : 'border-border',
+                                    'px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all capitalize',
+                                    active
+                                      ? 'bg-amber-500 border-amber-500 text-white'
+                                      : 'bg-card border-border/60 text-foreground/70 hover:border-amber-500/40',
                                   )}
                                 >
-                                  {selected && <Check className="size-2.5 text-white" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium">{tch.name}</div>
-                                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                    <Badge
-                                      variant={over ? 'destructive' : 'outline'}
-                                      className="text-[9px] px-1.5 py-0 h-4"
+                                  {p}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {/* Independent: Hide-conflicts toggle */}
+                          <button
+                            type="button"
+                            onClick={() => setHideConflicts((v) => !v)}
+                            className={cn(
+                              'px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all',
+                              hideConflicts
+                                ? 'bg-amber-500 border-amber-500 text-white'
+                                : 'bg-card border-border/60 text-foreground/70 hover:border-amber-500/40',
+                            )}
+                            title="Hide teachers already booked in this slot in another division"
+                          >
+                            Hide conflicts
+                          </button>
+                          <div className="flex-1" />
+                          <select
+                            value={teacherSort}
+                            onChange={(e) => setTeacherSort(e.target.value as typeof teacherSort)}
+                            className="text-[10px] rounded-md border border-border/60 bg-card px-1.5 py-0.5 text-foreground/80 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+                          >
+                            <option value="name">Sort: Name</option>
+                            <option value="load-asc">Sort: Load ↑</option>
+                            <option value="load-desc">Sort: Load ↓</option>
+                          </select>
+                        </div>
+
+                        <div className="p-2">
+                          {visibleTeachers.length === 0 ? (
+                            <div className="rounded-lg border border-dashed border-border/40 p-3 text-xs text-muted-foreground italic text-center">
+                              No teachers match the current filter.
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-[32vh] overflow-y-auto pr-1 rounded-lg bg-muted/30 p-1.5 border border-border/30">
+                              {visibleTeachers.map((tch) => {
+                                const assigned = tch.assignedPeriods;
+                                const conflict = slotConflicts?.find((c) => c.teacherId === tch.id);
+                                const selected = sheetSelectedTeacherId === tch.id;
+                                const isQualified = tch.qualifiedSubjectIds.includes(sheetSubjectId);
+                                const hasExisting = teacherIdsWithAssignment.has(tch.id);
+                                return (
+                                  <button
+                                    key={tch.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSheetSelectedTeacherId(tch.id);
+                                      // Clear assistant if it matches the new primary
+                                      if (sheetSelectedAssistantId === tch.id) setSheetSelectedAssistantId('');
+                                    }}
+                                    className={cn(
+                                      'w-full text-left rounded-lg border p-3 transition-all flex items-start gap-3',
+                                      selected
+                                        ? 'border-amber-500/60 bg-amber-500/10 shadow-sm'
+                                        : 'border-border/60 bg-card hover:border-amber-500/30 hover:bg-amber-500/5',
+                                    )}
+                                  >
+                                    <div
+                                      className={cn(
+                                        'mt-0.5 size-4 rounded-full border-2 shrink-0 flex items-center justify-center',
+                                        selected ? 'border-amber-500 bg-amber-500' : 'border-border',
+                                      )}
                                     >
-                                      {assigned}{max != null ? `/${max}` : ''} pds/wk
+                                      {selected && <Check className="size-2.5 text-white" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium">{tch.name}</div>
+                                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[9px] px-1.5 py-0 h-4"
+                                        >
+                                          {assigned} periods/wk
+                                        </Badge>
+                                        {hasExisting && (
+                                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
+                                            Already teaches this
+                                          </Badge>
+                                        )}
+                                        {!isQualified && (
+                                          <Badge variant="warning" className="text-[9px] px-1.5 py-0 h-4">
+                                            Unqualified
+                                          </Badge>
+                                        )}
+                                        {conflict && (
+                                          <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 gap-0.5">
+                                            <AlertTriangle className="size-2.5" />
+                                            Conflict: {conflict.className}-{conflict.divisionLabel}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Assistant Teacher */}
+                      <div className="rounded-xl border border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border/40">
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                            Assistant Teacher (optional)
+                          </div>
+                          {sheetSelectedAssistantId && (
+                            <button
+                              type="button"
+                              onClick={() => setSheetSelectedAssistantId('')}
+                              className="text-[10px] text-destructive/80 hover:text-destructive font-medium"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <div className="p-2">
+                          <div className="space-y-1 max-h-[20vh] overflow-y-auto pr-1 rounded-lg bg-muted/30 p-1.5 border border-border/30">
+                            {assistantOptions.map((tch) => {
+                              const conflict = slotConflicts?.find((c) => c.teacherId === tch.id);
+                              const selected = sheetSelectedAssistantId === tch.id;
+                              return (
+                                <button
+                                  key={tch.id}
+                                  type="button"
+                                  onClick={() => setSheetSelectedAssistantId(selected ? '' : tch.id)}
+                                  className={cn(
+                                    'w-full text-left rounded-lg border px-3 py-2 transition-all flex items-center gap-2',
+                                    selected
+                                      ? 'border-blue-500/60 bg-blue-500/10 shadow-sm'
+                                      : 'border-border/60 bg-card hover:border-blue-500/30 hover:bg-blue-500/5',
+                                  )}
+                                >
+                                  <div
+                                    className={cn(
+                                      'size-3.5 rounded-full border-2 shrink-0 flex items-center justify-center',
+                                      selected ? 'border-blue-500 bg-blue-500' : 'border-border',
+                                    )}
+                                  >
+                                    {selected && <Check className="size-2 text-white" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium truncate">{tch.name}</div>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                                      {tch.assignedPeriods} p/wk
                                     </Badge>
-                                    {hasExisting && (
-                                      <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
-                                        Already teaches this
-                                      </Badge>
-                                    )}
-                                    {!isQualified && (
-                                      <Badge variant="warning" className="text-[9px] px-1.5 py-0 h-4">
-                                        Unqualified
-                                      </Badge>
-                                    )}
                                     {conflict && (
                                       <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 gap-0.5">
                                         <AlertTriangle className="size-2.5" />
-                                        Conflict: {conflict.className}-{conflict.divisionLabel}
+                                        {conflict.className}-{conflict.divisionLabel}
                                       </Badge>
                                     )}
                                   </div>
-                                </div>
-                              </button>
-                            );
-                          })}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   );
                 })()}
 
-                {/* Cross-division conflict warning block */}
-                {slotConflicts && slotConflicts.length > 0 && (
-                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 backdrop-blur-sm p-3 space-y-1">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-destructive">
-                      <AlertTriangle className="size-3.5" />
-                      Teachers already booked in this slot
-                    </div>
-                    {slotConflicts.map((c) => (
-                      <div key={`${c.teacherId}-${c.className}-${c.divisionLabel}`} className="text-[11px] text-muted-foreground pl-5">
-                        {c.teacherName} -- {c.className}-{c.divisionLabel} ({c.subjectName})
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
-              {/* Footer: Clear / Cancel / Save */}
-              <div className="border-t border-border/40 bg-card/40 backdrop-blur-sm px-5 py-4 flex items-center gap-2">
+              {/* Dark gradient footer: Clear / Cancel / Save */}
+              <div className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 px-5 py-3.5 flex items-center gap-2">
                 {editSlot.currentAssignmentId && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1.5"
+                    className="text-red-400 border-red-400/40 hover:bg-red-500/20 hover:text-red-300 gap-1.5"
                     disabled={savingOverride}
                     onClick={async () => {
                       if (!editSlot) return;
@@ -884,6 +946,7 @@ export function Component() {
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="text-white/80 border-white/20 hover:bg-white/10 hover:text-white"
                   onClick={() => setEditSlot(null)}
                   disabled={savingOverride}
                 >
@@ -892,6 +955,7 @@ export function Component() {
                 <Button
                   type="button"
                   size="sm"
+                  className="bg-amber-500 hover:bg-amber-600 text-white"
                   disabled={
                     savingOverride ||
                     !sheetSubjectId ||
@@ -914,7 +978,11 @@ export function Component() {
                       } else if (subjectAssignments.length === 1) {
                         // Path 2: exactly one assignment for this subject -- update its teacher
                         const a = subjectAssignments[0];
-                        await updateAssignment({ id: a.id, teacherId: sheetSelectedTeacherId }).unwrap();
+                        await updateAssignment({
+                          id: a.id,
+                          teacherId: sheetSelectedTeacherId,
+                          assistantTeacherId: sheetSelectedAssistantId || null,
+                        }).unwrap();
                         targetAssignmentId = a.id;
                       } else if (subjectAssignments.length === 0) {
                         toast.error('No assignment exists for this subject in this division. Add it from the Assignments page first.');
@@ -924,6 +992,18 @@ export function Component() {
                         toast.error('Multiple assignments exist for this subject. Use the Assignments page to manage which teacher is used.');
                         setSavingOverride(false);
                         return;
+                      }
+
+                      // Update assistant teacher on the assignment if changed
+                      if (exactMatch) {
+                        const currentAssistant = exactMatch.assistantTeacherId ?? '';
+                        const newAssistant = sheetSelectedAssistantId || null;
+                        if (currentAssistant !== (newAssistant ?? '')) {
+                          await updateAssignment({
+                            id: targetAssignmentId,
+                            assistantTeacherId: newAssistant,
+                          }).unwrap();
+                        }
                       }
 
                       await overrideSlot({

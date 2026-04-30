@@ -1,7 +1,12 @@
 # Elective Slot Swap -- Implementation Plan
 
 > Created: April 27, 2026
-> Status: IN PROGRESS -- Phases 1-6 complete, Phase 7 (testing) remaining
+> Status: IMPLEMENTED AND DEPLOYED -- Phases 1-6 complete + conflict resolution table revamp
+> Note: This plan is separate from the enhancements/ folder. It was completed before the enhancements planning session.
+
+## Key Reference
+
+**Elective logic**: See `Documentaion/Engine_Algorithm.md` section "Elective Groups -- Two Types" (line ~675) for per-division vs cross-division, symmetric vs asymmetric, parallel vs split mode, and teacher busy-marking rules. All swap logic in this plan respects these mechanics.
 
 ## Overview
 

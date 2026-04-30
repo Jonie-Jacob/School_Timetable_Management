@@ -206,6 +206,7 @@ export class ExportService {
         schoolId,
         timetable: { academicYearId },
         divisionAssignment: {
+          deletedAt: null,
           OR: [{ teacherId }, { assistantTeacherId: teacherId }],
         },
       },
