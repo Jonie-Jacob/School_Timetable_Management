@@ -42,6 +42,12 @@ export {
   writeAuditLog,
   computeChanges,
   type AuditLogEntry,
+  hasPermission,
+  requirePermission,
+  getPermissionsForRole,
+  PERMISSION_MATRIX,
+  type Permission,
+  type PermissionUserRole,
 } from './helpers';
 
 // Middleware
@@ -51,6 +57,7 @@ export {
   academicYearMiddleware,
   requestLogger,
   errorHandler,
+  checkPermission,
   type RequestContext,
 } from './middleware';
 

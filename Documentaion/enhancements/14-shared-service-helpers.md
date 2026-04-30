@@ -490,11 +490,11 @@ GSI3 (Division): divisionId (PK), timestamp (SK)
 
 ---
 
-### Phase 6: Permission Helper
+### Phase 6: Permission Helper -- IMPLEMENTED
 
 > Aligns with Enhancement 7 (RBAC)
 
-#### 6.1 Create `permissionHelper.ts`
+#### 6.1 Create `permissionHelper.ts` -- DONE (30 permissions, 4 roles, full matrix)
 
 **File:** `packages/shared/src/helpers/permissionHelper.ts` (NEW)
 
@@ -540,7 +540,7 @@ export function requirePermission(
 ): void
 ```
 
-#### 6.2 Create `permissionMiddleware.ts`
+#### 6.2 Create `permissionMiddleware.ts` -- DONE (checkPermission with audit log on denied access)
 
 **File:** `packages/shared/src/middleware/permissionMiddleware.ts` (NEW)
 
@@ -554,10 +554,7 @@ export function checkPermission(
 ): void  // throws ForbiddenError
 ```
 
-#### 6.3 Deploy
-
-- Rebuild shared layer
-- No service redeploys needed yet -- services adopt when implementing Enhancement 7
+#### 6.3 Deploy -- PENDING (batching with other phases)
 
 ---
 

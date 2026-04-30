@@ -38,3 +38,11 @@ export {
   computeChanges,
   type AuditLogEntry,
 } from './auditLogHelper';
+export {
+  hasPermission,
+  requirePermission,
+  getPermissionsForRole,
+  PERMISSION_MATRIX,
+  type Permission,
+  type UserRole as PermissionUserRole,
+} from './permissionHelper';
