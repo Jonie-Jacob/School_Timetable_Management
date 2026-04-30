@@ -34,7 +34,7 @@ Before deploying any backend service, set these environment variables in your Po
 $env:LAMBDA_SG_ID = "sg-023ec7ce6f103470a"
 $env:PRIVATE_SUBNET_IDS = "subnet-00a02f0f32ba8fc7b,subnet-0bad413134e1811e2"
 $env:LAMBDA_ROLE_ARN = "arn:aws:iam::648485682362:role/timetable-prod-lambda-role"
-$env:SHARED_LAYER_ARN = "arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:8"
+$env:SHARED_LAYER_ARN = "arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:15"
 $env:DATABASE_URL = "postgresql://timetable_admin:Zyphr2026Prod!@timetable-prod-postgres.c186gu8203df.ap-south-1.rds.amazonaws.com:5432/timetable_prod"
 $env:COGNITO_USER_POOL_ID = "ap-south-1_rlYNHNPRZ"
 $env:COGNITO_CLIENT_ID = "42r2ih2m9c3l26lb4u1mrrl5sb"
@@ -128,22 +128,73 @@ foreach ($svc in $services) {
 **When**: You've modified files in `packages/shared/`
 
 The shared package is deployed as a Lambda Layer. All services reference this layer.
+The layer includes: `@timetable/shared` compiled output + Prisma client (Linux engine only) + AWS SDK deps + all npm dependencies.
 
-```powershell
+### Step-by-step (Git Bash)
+
+```bash
 # 1. Build shared package
-npm run build:shared
+cd packages/shared && npm run build && cd ../..
 
-# 2. Build layer ZIP (using Git Bash for the shell script)
-& "C:\Program Files\Git\bin\bash.exe" scripts/build-layer.sh
+# 2. Create layer directory structure
+rm -rf layers/shared/.build
+mkdir -p layers/shared/.build/nodejs
 
-# 3. Create ZIP manually if build-layer.sh fails on Windows
-cd layers\shared
+# 3. Install runtime dependencies in the layer
+cd layers/shared/.build/nodejs
+echo '{"dependencies":{}}' > package.json
+npm install @prisma/client @aws-sdk/client-lambda @aws-sdk/client-dynamodb \
+  @aws-sdk/lib-dynamodb @aws-sdk/client-ses jsonwebtoken zod
+
+# 4. Copy shared package compiled output
+mkdir -p node_modules/@timetable/shared
+cp -r ../../../../packages/shared/dist/* node_modules/@timetable/shared/
+cp ../../../../packages/shared/package.json node_modules/@timetable/shared/
+
+# 5. Copy Prisma client (generated)
+cp -r ../../../../node_modules/.prisma node_modules/
+
+# 6. Remove non-Linux engine files (critical for size limit)
+rm -f node_modules/.prisma/client/query_engine-windows.dll.node
+rm -f node_modules/.prisma/client/query_engine_bg.wasm
+rm -f node_modules/.prisma/client/query_engine_bg.js
+
+# 7. Check size (must be < 250MB unzipped)
+du -sh node_modules/
+cd ../..
+
+# 8. Create ZIP
 powershell -Command "Compress-Archive -Path '.build\nodejs' -DestinationPath 'shared-layer.zip' -Force"
 
-# 4. Upload to S3 (layer is too large for direct upload)
+# 9. Upload to S3
+aws s3 cp shared-layer.zip s3://zyphr-timetable-terraform-state/layers/shared-layer.zip --region ap-south-1
+
+# 10. Publish new layer version
+MSYS_NO_PATHCONV=1 aws lambda publish-layer-version \
+  --layer-name timetable-shared \
+  --content S3Bucket=zyphr-timetable-terraform-state,S3Key=layers/shared-layer.zip \
+  --compatible-runtimes nodejs22.x \
+  --region ap-south-1 \
+  --query "LayerVersionArn" \
+  --output text
+# Note the new version ARN (e.g., arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:15)
+
+# 11. Update SHARED_LAYER_ARN and redeploy all services
+export SHARED_LAYER_ARN="<new-layer-arn-from-step-10>"
+# Then run section 3 (Deploy All Backend Services)
+```
+
+### PowerShell equivalent
+
+```powershell
+# Steps 1-7 same as above but use PowerShell syntax
+# Step 8: ZIP
+Compress-Archive -Path 'layers\shared\.build\nodejs' -DestinationPath 'layers\shared\shared-layer.zip' -Force
+
+# Step 9: Upload
 aws s3 cp "layers\shared\shared-layer.zip" "s3://zyphr-timetable-terraform-state/layers/shared-layer.zip"
 
-# 5. Publish new layer version
+# Step 10: Publish
 $LAYER_ARN = aws lambda publish-layer-version `
   --layer-name timetable-shared `
   --content S3Bucket=zyphr-timetable-terraform-state,S3Key=layers/shared-layer.zip `
@@ -154,17 +205,15 @@ $LAYER_ARN = aws lambda publish-layer-version `
 
 Write-Host "New Layer ARN: $LAYER_ARN"
 
-# 6. Update SSM parameter
-aws ssm put-parameter `
-  --name "/timetable/prod/shared-layer-arn" `
-  --value $LAYER_ARN `
-  --type String `
-  --overwrite
-
-# 7. Update env var and redeploy all services
+# Step 11: Update env and redeploy
 $env:SHARED_LAYER_ARN = $LAYER_ARN
-# Then run "Deploy All Backend Services" (section 3)
+# Then run section 3
 ```
+
+> **Important**: After publishing a new layer version, update the `SHARED_LAYER_ARN` in:
+> - This document (Environment Variables section)
+> - `CLAUDE.md` (Lambda Layer section)
+> - Redeploy ALL backend services to pick up the new layer
 
 ---
 
@@ -337,7 +386,7 @@ MSYS_NO_PATHCONV=1 aws ssm get-parameters --names "/timetable/prod/database-url"
 | RDS Endpoint | `timetable-prod-postgres.c186gu8203df.ap-south-1.rds.amazonaws.com:5432` |
 | Frontend S3 Bucket | `timetable-prod-frontend` |
 | Export S3 Bucket | `timetable-prod-exports` |
-| Lambda Layer | `arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:8` |
+| Lambda Layer | `arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:15` |
 | Lambda Role | `arn:aws:iam::648485682362:role/timetable-prod-lambda-role` |
 | Lambda Security Group | `sg-023ec7ce6f103470a` |
 | VPC | `vpc-0f42582a0c0dd1f6e` |
@@ -348,4 +397,4 @@ MSYS_NO_PATHCONV=1 aws ssm get-parameters --names "/timetable/prod/database-url"
 
 ---
 
-*Last updated: April 2026*
+*Last updated: May 2026*

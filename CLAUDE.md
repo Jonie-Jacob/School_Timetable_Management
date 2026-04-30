@@ -222,9 +222,9 @@ cd services\teacher; npx serverless deploy --stage prod
 ## Lambda Layer
 
 - Layer name: `timetable-shared`
-- Current version: **8** (ARN: `arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:8`)
-- Contains: `@timetable/shared` compiled code + Prisma client + Linux engine binary (`libquery_engine-rhel-openssl-3.0.x.so.node`)
-- Must include only the Linux engine (remove Windows DLL, WASM, non-PostgreSQL engines to stay under 250MB unzipped limit)
+- Current version: **15** (ARN: `arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:15`)
+- Contains: `@timetable/shared` compiled code + Prisma client + Linux engine binary + AWS SDK deps (@aws-sdk/client-lambda, client-dynamodb, lib-dynamodb, client-ses, @smithy/*)
+- Must include only the Linux engine (remove Windows DLL, WASM engines to stay under 250MB unzipped limit)
 - Published via S3 upload (too large for direct upload): `s3://zyphr-timetable-terraform-state/layers/shared-layer.zip`
 
 ## CloudFront API Routing
