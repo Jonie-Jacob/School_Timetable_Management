@@ -21,6 +21,19 @@ export interface TimetableSlotAssignment {
   role?: 'primary' | 'assistant';
 }
 
+export interface SlotViolationDto {
+  type: 'TEACHER_CONFLICT' | 'AVAILABILITY_VIOLATION' | 'PREFERENCE_VIOLATION_HARD' | 'PREFERENCE_VIOLATION_SOFT' | 'ORPHANED_SLOT';
+  teacherName?: string;
+  subjectName?: string;
+  reason: string;
+}
+
+export interface TimetableStatusJsonDto {
+  statuses: string[];
+  details: Record<string, unknown>;
+  computedAt: string;
+}
+
 export interface TimetablePeriod {
   // The first underlying timetable_slot row id, used by drag-drop and the
   // legacy single-row override path. For elective cells, prefer slotIds[]
@@ -44,6 +57,8 @@ export interface TimetablePeriod {
   // disable click-to-edit (electives must be regenerated, not single-cell
   // edited).
   isElective: boolean;
+  // Per-slot violation annotations (teacher conflicts, availability, preference violations)
+  violations?: SlotViolationDto[];
   // Teacher timetable fields: identify which division/timetable this cell belongs to.
   // Empty strings for skeleton cells (no assignment). Used by teacher DnD for cross-division swaps.
   timetableId?: string;
@@ -67,6 +82,7 @@ export interface TimetableGrid {
     id: string;
     divisionId: string;
     status: string;
+    statusJson?: TimetableStatusJsonDto | null;
     adjacencyConstraintEnabled: boolean;
     generatedAt: string;
   };

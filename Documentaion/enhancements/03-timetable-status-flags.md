@@ -340,9 +340,9 @@ All swap endpoints (`swapSlots`, `swapElectiveSlots`, `swapTeacherSlots`) should
 
 ---
 
-### Phase 4: Update Timetable Grid APIs with Violations
+### Phase 4: Update Timetable Grid APIs with Violations -- IMPLEMENTED
 
-#### 4.1 Update `getDivisionTimetable()` response
+#### 4.1 Update `getDivisionTimetable()` response -- DONE
 
 **File:** `services/timetable/src/service.ts`
 
@@ -360,11 +360,11 @@ Add timetable-level status summary to the response:
 }
 ```
 
-#### 4.2 Update `getTeacherTimetable()` response
+#### 4.2 Update `getTeacherTimetable()` response -- DONE
 
 Same violation annotation for the teacher timetable view. Each slot shows violations relevant to the viewed teacher.
 
-#### 4.3 Update frontend `TimetableGrid` and `TimetablePeriod` types
+#### 4.3 Update frontend `TimetableGrid` and `TimetablePeriod` types -- DONE
 
 **File:** `apps/frontend/src/features/timetable/timetableApi.ts`
 

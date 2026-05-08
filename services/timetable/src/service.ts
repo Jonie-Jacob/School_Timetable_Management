@@ -2,6 +2,7 @@ import {
   prisma, AppError, NotFoundError,
   isTeacherBusyAt,
   recomputeTimetableStatus, recomputeMultipleTimetableStatuses,
+  annotateSlotViolations, type SlotViolation,
   TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto, CreateEmptySlotDto,
   SwapElectiveSlotsDto, PreviewElectiveSwapDto, PreviewTeacherSwapDto,
 } from '@timetable/shared';
@@ -416,6 +417,8 @@ export class TimetableService {
       // an elective group. The frontend uses this to render a stacked cell
       // and to disable the click-to-edit dialog.
       isElective: boolean;
+      // Per-slot violation annotations (teacher conflicts, availability, preferences)
+      violations: SlotViolation[];
     };
 
     const grid: Record<string, {
@@ -454,6 +457,7 @@ export class TimetableService {
           },
           assignments: [],
           isElective: false,
+          violations: [],
         };
         dayBucket.periodsByKey.set(periodKey, period);
       }
@@ -473,6 +477,17 @@ export class TimetableService {
       }
     }
 
+    // Annotate per-slot violations
+    const violationMap = await annotateSlotViolations(timetable.id, schoolId);
+    for (const bucket of Object.values(grid)) {
+      for (const period of bucket.periodsByKey.values()) {
+        for (const slotId of period.slotIds) {
+          const v = violationMap.get(slotId);
+          if (v) period.violations.push(...v);
+        }
+      }
+    }
+
     // Materialise the grid into the response shape (sorted lists, no Maps)
     const days = Object.values(grid)
       .sort((a, b) => a.workingDay.sortOrder - b.workingDay.sortOrder)
@@ -488,6 +503,7 @@ export class TimetableService {
         id: timetable.id,
         divisionId: timetable.divisionId,
         status: timetable.status,
+        statusJson: timetable.statusJson,
         adjacencyConstraintEnabled: timetable.adjacencyConstraintEnabled,
         generatedAt: timetable.generatedAt,
       },
@@ -1421,6 +1437,7 @@ export class TimetableService {
       divisionId: string;
       className: string;
       divisionLabel: string;
+      violations: SlotViolation[];
     };
     const grid: Record<number, {
       workingDay: { id: string; dayOfWeek: number; label: string; sortOrder: number };
@@ -1461,6 +1478,7 @@ export class TimetableService {
           divisionId: '',
           className: '',
           divisionLabel: '',
+          violations: [],
         });
       }
       dayBucket.periods.sort((a, b) => a.slot.sortOrder - b.slot.sortOrder);
@@ -1510,6 +1528,23 @@ export class TimetableService {
         assistantTeacher: otherTeacher,
       });
       if (da.electiveGroupId) period.isElective = true;
+    }
+
+    // Annotate per-slot violations for each timetable the teacher appears in
+    const teacherTimetableIds = [...new Set(slots.map(s => s.timetableId))];
+    const allViolations = new Map<string, SlotViolation[]>();
+    for (const ttId of teacherTimetableIds) {
+      const vm = await annotateSlotViolations(ttId, schoolId);
+      for (const [slotId, v] of vm) allViolations.set(slotId, v);
+    }
+    // Merge violations into grid periods
+    for (const day of Object.values(grid)) {
+      for (const period of day.periods) {
+        for (const slotId of period.slotIds) {
+          const v = allViolations.get(slotId);
+          if (v) period.violations.push(...v);
+        }
+      }
     }
 
     return {
