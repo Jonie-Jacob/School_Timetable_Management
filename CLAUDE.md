@@ -96,7 +96,7 @@ All services use `@timetable/shared` for: Prisma client, error classes (`AppErro
 - **20 tables**, all with `school_id` for multi-tenancy
 - **Soft deletes** via `deleted_at` column on most entities
 - **Period structures** assigned at the **division level** (not class level) — `divisions.period_structure_id`
-- **Timetable statuses**: only `GENERATED` and `OUTDATED` (no PUBLISHED/DRAFT)
+- **Timetable statuses**: Multi-status JSON model (`status_json JSONB` column) with tags: VALID, EMPTY_SLOTS, EXCESS_ASSIGNMENTS, TEACHER_CONFLICT, AVAILABILITY_VIOLATION, PREFERENCE_VIOLATION_HARD, PREFERENCE_VIOLATION_SOFT, ORPHANED_SLOTS. Old `status` enum column (GENERATED/OUTDATED) kept temporarily for backward compatibility. Status recomputed via `recomputeTimetableStatus()` after every data change. Per-slot violation annotations returned in timetable grid API responses.
 - **Prisma binaryTargets**: `["native", "rhel-openssl-3.0.x"]` — native for Windows dev, rhel for Lambda
 
 Run migrations: `npx prisma migrate dev --schema packages/shared/prisma/schema.prisma`
@@ -108,11 +108,12 @@ Run migrations: `npx prisma migrate dev --schema packages/shared/prisma/schema.p
 - **Academic year scoping** — all data is scoped to the active academic year. Only one active per school.
 - **Teacher maxPeriodsPerWeek** is a **soft cap** — engine tries to respect, may exceed, violations shown as warnings.
 - **Subjects** have an optional `abbreviation` field (max 10 chars) — short code shown in timetable grid (e.g., "Phy", "Maths", "CS").
-- **Subject deletion** cascades: timetable slots become empty, affected timetables flagged OUTDATED with conflict notifications.
+- **Subject deletion** cascades: timetable slots become empty, affected timetable statuses recomputed.
 - **Elective groups** — co-scheduled subjects. Cross-division electives co-schedule all participating divisions at the same time slot. Each subject has `parallel_sections` in `elective_group_subjects`: teachers <= ps = parallel mode (all teach every slot), teachers > ps = split mode (teachers take turns). Cross-div electives may be **asymmetric** — different divisions can have different subject subsets (e.g., XI B has only Maths, XI C has IP+Psy, XI D has all three). The output writer must use only each division's own assignments when writing timetable_slots.
 - **Scheduling preferences** — per-assignment JSONB field with preferred/excluded days, period ranges, adjacency, min/max per day. Constraint type: HARD or SOFT.
 - **Assistant teachers** — optional co-teacher per assignment. Treated identically to primary for scheduling (HARD constraint, same busy tracking). Shown as "Asst: Name" in timetable views.
-- **Timetable visibility** — both `GENERATED` and `OUTDATED` timetables are viewable, exportable, and included in teacher period counts.
+- **Timetable visibility** — all timetables (any status) are viewable, exportable, and included in teacher period counts.
+- **Teacher timetable DnD** — drag-and-drop swap across divisions. Same-division swaps execute directly, cross-division shows preview dialog with affected cells table + conflict resolution. Uses `previewTeacherSwap`, `swapTeacherSlots`, `getValidTeacherSwapTargets` endpoints.
 - **Unified Elective Modal** — single modal for creating/editing elective groups with subjects, teachers, division participation grid, and scheduling preferences. Opens from Elective Groups table page and Assignment Editor page. Per-division electives with matching name/teachers/weightage are grouped in UI (Approach A — separate DB records, visual consolidation). Cross-division electives are each their own entry.
 - **Export features** — PDF/Excel for divisions, classes, teachers. Teacher export includes summary table (class-wise period counts). Free Periods export (day-by-day teacher availability grid). Elective cells use compact format ("Subject - Teacher1, Teacher2"). Export uses time-range overlap for cross-structure free period detection.
 
