@@ -1,7 +1,6 @@
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { SchoolSelector } from './SchoolSelector';
 import { AcademicYearSelector } from './AcademicYearSelector';
-import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
 
 export function TopBar() {
@@ -24,7 +23,6 @@ export function TopBar() {
       <div className="flex items-center gap-2">
         <SchoolSelector />
         <AcademicYearSelector />
-        <NotificationBell />
         <UserMenu />
       </div>
     </header>

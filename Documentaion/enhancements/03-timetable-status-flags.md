@@ -409,17 +409,17 @@ Show per-slot violation indicators for the viewed teacher.
 
 ---
 
-### Phase 6: Frontend -- Remove FAB & Setup Wizard
+### Phase 6: Frontend -- Remove FAB & Setup Wizard — IMPLEMENTED
 
-#### 6.1 Remove FAB component
+#### 6.1 Remove FAB component — DONE
 
 Delete the FAB component and all references.
 
-#### 6.2 Remove Setup Wizard
+#### 6.2 Remove Setup Wizard — DONE
 
 Delete the setup wizard stepper, progress tracking, and all related components/API calls.
 
-#### 6.3 Remove notification-related UI
+#### 6.3 Remove notification-related UI — DONE
 
 - Remove notification count badges
 - Remove notification list/dismiss functionality

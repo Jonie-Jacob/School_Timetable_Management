@@ -32,7 +32,7 @@ const MORE_ITEMS = [
   { key: 'teacherTimetable', to: '/teacher-timetable', icon: Eye },
   { key: 'settings', to: '/settings', icon: Settings },
 ] as const;
-// Note: Mobile BottomTabBar has: Dashboard, Classes, Timetable, Notifications, More
+// Note: Mobile BottomTabBar has: Dashboard, Classes, Timetables, Teacher TT, More
 // "More" sheet shows the rest. Order follows the user data-entry flow.
 
 export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {

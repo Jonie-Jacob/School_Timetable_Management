@@ -14,7 +14,6 @@ import { configApi } from '@/features/period-structures/configApi';
 import { subjectApi } from '@/features/subjects/subjectApi';
 import { teacherApi } from '@/features/teachers/teacherApi';
 import { dashboardApi } from '@/features/dashboard/dashboardApi';
-import { notificationApi } from '@/features/notifications/notificationApi';
 import { timetableApi } from '@/features/timetable/timetableApi';
 
 export function SchoolSelector() {
@@ -41,7 +40,6 @@ export function SchoolSelector() {
     dispatch(subjectApi.util.resetApiState());
     dispatch(teacherApi.util.resetApiState());
     dispatch(dashboardApi.util.resetApiState());
-    dispatch(notificationApi.util.resetApiState());
     dispatch(timetableApi.util.resetApiState());
   };
 

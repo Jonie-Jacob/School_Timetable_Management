@@ -5,7 +5,6 @@ import { Breadcrumb } from './Breadcrumb';
 import { ReadOnlyBanner } from './ReadOnlyBanner';
 import { MobileHeader } from './MobileHeader';
 import { BottomTabBar } from './BottomTabBar';
-import { FloatingActionButton } from './FloatingActionButton';
 import { FeatureErrorBoundary } from '@/components/shared';
 
 export function AppShell() {
@@ -51,9 +50,6 @@ export function AppShell() {
 
       {/* Mobile Bottom Tab Bar -- visible at sm/md */}
       <BottomTabBar />
-
-      {/* Floating Action Button -- setup wizard / conflict notifications */}
-      <FloatingActionButton />
     </div>
   );
 }

@@ -10,7 +10,6 @@ const SEGMENT_LABELS: Record<string, string> = {
   subjects: 'Subjects',
   teachers: 'Teachers',
   'elective-groups': 'Elective Groups',
-  notifications: 'Notifications',
   'teacher-timetable': 'Teacher Timetable',
   'unassigned-subjects': 'Unassigned Subjects',
   settings: 'Settings',

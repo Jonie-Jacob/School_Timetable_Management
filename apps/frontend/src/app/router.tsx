@@ -98,11 +98,6 @@ export const router = createBrowserRouter([
         errorElement: <RouteErrorBoundary />,
       },
       {
-        path: 'notifications',
-        lazy: () => import('@/features/notifications/NotificationsPage'),
-        errorElement: <RouteErrorBoundary />,
-      },
-      {
         path: 'teacher-timetable',
         lazy: () => import('@/features/teacher-timetable/TeacherTimetablePage'),
         errorElement: <RouteErrorBoundary />,

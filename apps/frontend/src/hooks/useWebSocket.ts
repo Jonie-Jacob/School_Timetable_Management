@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
 import { setWsConnected } from '@/slices/wsSlice';
 import { dashboardApi } from '@/features/dashboard/dashboardApi';
-import { notificationApi } from '@/features/notifications/notificationApi';
 
 const WS_URL = import.meta.env.VITE_WS_URL as string | undefined;
 const MAX_RETRIES = 5;
@@ -66,20 +65,17 @@ export function useWebSocket() {
           switch (msg.type) {
             case 'GENERATION_COMPLETE':
             case 'generation_completed':
-              dispatch(dashboardApi.util.invalidateTags(['DashboardStats', 'SetupWizard']));
-              dispatch(notificationApi.util.invalidateTags(['NotificationCount']));
+              dispatch(dashboardApi.util.invalidateTags(['DashboardStats']));
               break;
             case 'GENERATION_FAILED':
             case 'generation_failed':
               toast.error(`Generation failed: ${msg.payload?.error ?? 'Unknown error'}`);
               break;
             case 'TIMETABLE_OUTDATED':
-              dispatch(notificationApi.util.invalidateTags(['NotificationCount']));
               dispatch(dashboardApi.util.invalidateTags(['DashboardStats']));
               break;
             case 'generation_summary':
-              dispatch(dashboardApi.util.invalidateTags(['DashboardStats', 'SetupWizard']));
-              dispatch(notificationApi.util.invalidateTags(['NotificationCount']));
+              dispatch(dashboardApi.util.invalidateTags(['DashboardStats']));
               break;
           }
         } catch {
