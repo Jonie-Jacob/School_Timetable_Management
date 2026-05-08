@@ -98,6 +98,13 @@ export class TimetableController {
     return success(result);
   }
 
+  async swapTeacherSlots(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const body = parseBody(event, swapSlotsSchema);
+    const result = await service.swapTeacherSlots(auth.schoolId!, body);
+    return success(result);
+  }
+
   async previewTeacherSwap(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
     const auth = await authMiddleware(event);
     const body = parseBody(event, previewTeacherSwapSchema);

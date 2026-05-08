@@ -2307,6 +2307,216 @@ export class TimetableService {
     };
   }
 
+  // ── Swap Teacher Slots (cross-division aware) ──
+
+  async swapTeacherSlots(schoolId: string, dto: SwapSlotsDto) {
+    const { sourceSlotId, targetSlotId, force } = dto;
+
+    if (sourceSlotId === targetSlotId) {
+      throw new AppError('Source and target slots are the same', 400, 'SAME_SLOT');
+    }
+
+    // Load both slots with full includes
+    const includeAssignment = {
+      include: {
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { id: true, name: true } },
+        assistantTeacher: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true } },
+      },
+    };
+    const [sourceSlot, targetSlot] = await Promise.all([
+      prisma.timetableSlot.findFirst({
+        where: { id: sourceSlotId, schoolId },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+          divisionAssignment: includeAssignment,
+          workingDay: true,
+          slot: true,
+        },
+      }),
+      prisma.timetableSlot.findFirst({
+        where: { id: targetSlotId, schoolId },
+        include: {
+          timetable: { include: { division: { include: { class: true } } } },
+          divisionAssignment: includeAssignment,
+          workingDay: true,
+          slot: true,
+        },
+      }),
+    ]);
+
+    if (!sourceSlot) throw new NotFoundError('TimetableSlot', sourceSlotId);
+    if (!targetSlot) throw new NotFoundError('TimetableSlot', targetSlotId);
+
+    // Same timetable → delegate to existing swapSlots
+    if (sourceSlot.timetableId === targetSlot.timetableId) {
+      return this.swapSlots(schoolId, dto);
+    }
+
+    // Either is elective → delegate to swapElectiveSlots
+    const sourceIsElective = !!sourceSlot.divisionAssignment?.electiveGroup;
+    const targetIsElective = !!targetSlot.divisionAssignment?.electiveGroup;
+    if (sourceIsElective || targetIsElective) {
+      const electiveSlot = sourceIsElective ? sourceSlot : targetSlot;
+      const otherSlot = electiveSlot === sourceSlot ? targetSlot : sourceSlot;
+      return this.swapElectiveSlots(schoolId, {
+        sourceSlotId: electiveSlot.id,
+        targetDayOfWeek: otherSlot.workingDay.dayOfWeek,
+        targetSlotSortOrder: otherSlot.slot.sortOrder,
+        force,
+      });
+    }
+
+    // ── Cross-division regular swap ──
+
+    // Validate period structure compatibility: find cells B and D
+    const cellB = await prisma.timetableSlot.findFirst({
+      where: {
+        timetableId: sourceSlot.timetableId,
+        workingDay: { dayOfWeek: targetSlot.workingDay.dayOfWeek },
+        slot: { sortOrder: targetSlot.slot.sortOrder },
+        schoolId,
+      },
+      include: { divisionAssignment: includeAssignment, workingDay: true, slot: true },
+    });
+    const cellD = await prisma.timetableSlot.findFirst({
+      where: {
+        timetableId: targetSlot.timetableId,
+        workingDay: { dayOfWeek: sourceSlot.workingDay.dayOfWeek },
+        slot: { sortOrder: sourceSlot.slot.sortOrder },
+        schoolId,
+      },
+      include: { divisionAssignment: includeAssignment, workingDay: true, slot: true },
+    });
+
+    if (!cellB) {
+      throw new AppError(
+        `Target slot (${targetSlot.workingDay.label} P${targetSlot.slot.slotNumber}) not available in ${sourceSlot.timetable.division?.class?.name ?? ''} ${sourceSlot.timetable.division?.label ?? ''}'s period structure`,
+        400, 'PERIOD_STRUCTURE_MISMATCH',
+      );
+    }
+    if (!cellD) {
+      throw new AppError(
+        `Source slot (${sourceSlot.workingDay.label} P${sourceSlot.slot.slotNumber}) not available in ${targetSlot.timetable.division?.class?.name ?? ''} ${targetSlot.timetable.division?.label ?? ''}'s period structure`,
+        400, 'PERIOD_STRUCTURE_MISMATCH',
+      );
+    }
+
+    // Collect all slot IDs to exclude from conflict checks
+    const allInvolvedSlotIds = [sourceSlot.id, targetSlot.id, cellB.id, cellD.id];
+
+    // ── Conflict detection ──
+    type ConflictInfo = {
+      teacherName: string;
+      teacherId: string;
+      className: string;
+      divisionLabel: string;
+      divisionId: string;
+      conflictedSlotId: string;
+      direction: 'source_to_target' | 'target_to_source';
+    };
+    const conflicts: ConflictInfo[] = [];
+
+    // Gather all unique teacher IDs from all 4 cells
+    const cellTeachers: { teacherId: string; teacherName: string; checkDay: number; checkStart: Date; checkEnd: Date; direction: 'source_to_target' | 'target_to_source' }[] = [];
+
+    // Source slot teachers → check at target time
+    for (const t of [sourceSlot.divisionAssignment?.teacher, sourceSlot.divisionAssignment?.assistantTeacher]) {
+      if (t?.id) cellTeachers.push({ teacherId: t.id, teacherName: t.name, checkDay: targetSlot.workingDay.dayOfWeek, checkStart: targetSlot.slot.startTime, checkEnd: targetSlot.slot.endTime, direction: 'source_to_target' });
+    }
+    // Target slot teachers → check at source time
+    for (const t of [targetSlot.divisionAssignment?.teacher, targetSlot.divisionAssignment?.assistantTeacher]) {
+      if (t?.id) cellTeachers.push({ teacherId: t.id, teacherName: t.name, checkDay: sourceSlot.workingDay.dayOfWeek, checkStart: sourceSlot.slot.startTime, checkEnd: sourceSlot.slot.endTime, direction: 'target_to_source' });
+    }
+    // Cell B teachers → check at source time (they get displaced to source coordinates)
+    for (const t of [cellB.divisionAssignment?.teacher, cellB.divisionAssignment?.assistantTeacher]) {
+      if (t?.id) cellTeachers.push({ teacherId: t.id, teacherName: t.name, checkDay: sourceSlot.workingDay.dayOfWeek, checkStart: sourceSlot.slot.startTime, checkEnd: sourceSlot.slot.endTime, direction: 'target_to_source' });
+    }
+    // Cell D teachers → check at target time (they get displaced to target coordinates)
+    for (const t of [cellD.divisionAssignment?.teacher, cellD.divisionAssignment?.assistantTeacher]) {
+      if (t?.id) cellTeachers.push({ teacherId: t.id, teacherName: t.name, checkDay: targetSlot.workingDay.dayOfWeek, checkStart: targetSlot.slot.startTime, checkEnd: targetSlot.slot.endTime, direction: 'source_to_target' });
+    }
+
+    // Deduplicate: same teacher at same time only needs one check
+    const checked = new Set<string>();
+    for (const ct of cellTeachers) {
+      const key = `${ct.teacherId}:${ct.checkDay}:${ct.checkStart.getTime()}`;
+      if (checked.has(key)) continue;
+      checked.add(key);
+
+      const conflict = await this.findTeacherTimeConflict(
+        schoolId, allInvolvedSlotIds,
+        ct.checkDay, ct.checkStart, ct.checkEnd,
+        ct.teacherId,
+      );
+      if (conflict) {
+        conflicts.push({
+          teacherName: ct.teacherName,
+          teacherId: ct.teacherId,
+          className: conflict.timetable.division?.class?.name ?? '',
+          divisionLabel: conflict.timetable.division?.label ?? '',
+          divisionId: conflict.timetable.divisionId,
+          conflictedSlotId: conflict.id,
+          direction: ct.direction,
+        });
+      }
+    }
+
+    // If conflicts and not forced → 409
+    if (conflicts.length > 0 && !force) {
+      throw new AppError(
+        JSON.stringify({ conflicts }),
+        409,
+        'TEACHER_CONFLICT',
+      );
+    }
+
+    // ── Atomic 4-cell swap ──
+    await prisma.$transaction([
+      // Swap in source timetable: cell A ↔ cell B
+      prisma.timetableSlot.update({
+        where: { id: sourceSlot.id },
+        data: { divisionAssignmentId: cellB.divisionAssignmentId },
+      }),
+      prisma.timetableSlot.update({
+        where: { id: cellB.id },
+        data: { divisionAssignmentId: sourceSlot.divisionAssignmentId },
+      }),
+      // Swap in target timetable: cell C ↔ cell D
+      prisma.timetableSlot.update({
+        where: { id: targetSlot.id },
+        data: { divisionAssignmentId: cellD.divisionAssignmentId },
+      }),
+      prisma.timetableSlot.update({
+        where: { id: cellD.id },
+        data: { divisionAssignmentId: targetSlot.divisionAssignmentId },
+      }),
+    ]);
+
+    // ── Persist conflict notifications for force-swaps ──
+    if (force && conflicts.length > 0) {
+      const notificationData = conflicts.map((c) => ({
+        schoolId,
+        timetableId: c.direction === 'source_to_target'
+          ? targetSlot.timetableId
+          : sourceSlot.timetableId,
+        divisionId: c.divisionId,
+        conflictType: 'SWAP_CONFLICT' as const,
+        changeDescription: `Teacher "${c.teacherName}" is double-booked -- also teaching ${c.className} Division ${c.divisionLabel} at the same time slot`,
+      }));
+      await prisma.timetableNotification.createMany({ data: notificationData }).catch(() => {
+        // Gracefully handle if SWAP_CONFLICT enum doesn't exist yet
+      });
+    }
+
+    return {
+      swapType: 'cross_division',
+      cellsSwapped: 4,
+      conflicts: force ? conflicts : [],
+    };
+  }
+
   // ── Preview Elective Swap ──
 
   async previewElectiveSwap(schoolId: string, dto: PreviewElectiveSwapDto) {

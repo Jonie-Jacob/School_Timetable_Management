@@ -79,6 +79,11 @@ functions:
             name: cognitoAuthorizer
       - httpApi:
           method: POST
+          path: /api/timetables/slots/swap-teacher
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
           path: /api/timetables/slots/preview-teacher-swap
           authorizer:
             name: cognitoAuthorizer

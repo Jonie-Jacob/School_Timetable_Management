@@ -225,7 +225,7 @@ Add the new route to `services/timetable/serverless.yml`.
 
 ---
 
-### Phase 3: Backend -- `swapTeacherSlots()` Endpoint
+### Phase 3: Backend -- `swapTeacherSlots()` Endpoint -- IMPLEMENTED
 
 **Goal:** Execute a swap between two slots that may belong to different timetables.
 

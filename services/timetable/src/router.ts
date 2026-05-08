@@ -59,6 +59,11 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.swapElectiveSlots(event);
   }
 
+  // Swap teacher slots: POST /timetables/slots/swap-teacher
+  if (method === 'POST' && path === '/api/timetables/slots/swap-teacher') {
+    return controller.swapTeacherSlots(event);
+  }
+
   // Preview teacher swap: POST /timetables/slots/preview-teacher-swap
   if (method === 'POST' && path === '/api/timetables/slots/preview-teacher-swap') {
     return controller.previewTeacherSwap(event);

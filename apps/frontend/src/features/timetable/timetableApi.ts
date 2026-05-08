@@ -379,6 +379,16 @@ export const timetableApi = createApi({
       transformResponse: (response: { data: PreviewTeacherSwapResponse }) => response.data,
     }),
 
+    swapTeacherSlots: builder.mutation<{ swapType: string; cellsSwapped: number; conflicts: TeacherSwapConflict[] }, { sourceSlotId: string; targetSlotId: string; force?: boolean }>({
+      query: (body) => ({
+        url: 'timetables/slots/swap-teacher',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: { swapType: string; cellsSwapped: number; conflicts: TeacherSwapConflict[] } }) => response.data,
+      invalidatesTags: ['Timetable'],
+    }),
+
     previewElectiveSwap: builder.mutation<PreviewElectiveSwapResponse, PreviewElectiveSwapRequest>({
       query: (body) => ({
         url: 'timetables/slots/preview-elective-swap',
@@ -405,5 +415,6 @@ export const {
   useSwapElectiveSlotsMutation,
   usePreviewElectiveSwapMutation,
   usePreviewTeacherSwapMutation,
+  useSwapTeacherSlotsMutation,
   useLazyGetResolutionCandidatesQuery,
 } = timetableApi;
