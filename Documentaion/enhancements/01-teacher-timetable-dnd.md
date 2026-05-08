@@ -363,7 +363,7 @@ New method: `getValidTeacherSwapTargets(schoolId, sourceSlotId)`
 
 ---
 
-### Phase 5: Upgrade Class Timetable Conflict Dialog with Resolution Table
+### Phase 5: Upgrade Class Timetable Conflict Dialog with Resolution Table -- IMPLEMENTED
 
 **Goal:** Add the interactive resolution table (dropdown + Resolve button) to the EXISTING regular swap conflict dialog in `TimetableViewPage.tsx`.
 

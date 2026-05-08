@@ -50,6 +50,7 @@ import {
 } from './timetableApi';
 import { DraggableCell, DroppableCell, CellContent, ElectiveCellContent } from './TimetableCells';
 import { ElectiveSwapConfirmDialog } from './ElectiveSwapConfirmDialog';
+import { SwapConflictResolutionDialog } from './SwapConflictResolutionDialog';
 
 import { DAY_LABELS_FULL as DAY_LABELS } from '@/lib/days';
 
@@ -1143,67 +1144,27 @@ export function Component() {
         </SheetContent>
       </Sheet>
 
-      {/* ── Conflict confirmation dialog for drag-and-drop swaps ── */}
-      <Dialog
+      {/* ── Conflict resolution dialog for drag-and-drop swaps ── */}
+      <SwapConflictResolutionDialog
         open={!!swapConflictDialog}
-        onOpenChange={(v) => {
-          if (!v) {
-            setSwapConflictDialog(null);
-            setSwappingSlotIds(new Set());
+        conflicts={swapConflictDialog?.conflicts ?? []}
+        isSwapping={isSwapping}
+        onConfirm={async (force) => {
+          if (!swapConflictDialog) return;
+          const { sourceSlotId, targetSlotId } = swapConflictDialog;
+          setSwapConflictDialog(null);
+          if (force) {
+            await executeSwap(sourceSlotId, targetSlotId, true);
+          } else {
+            // All conflicts resolved — swap cleanly
+            await executeSwap(sourceSlotId, targetSlotId, false);
           }
         }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="size-5 text-amber-500" />
-              Teacher Conflict Detected
-            </DialogTitle>
-            <DialogDescription>
-              Swapping these periods will create a scheduling conflict in another division.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            {swapConflictDialog?.conflicts.map((c, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3"
-              >
-                <AlertTriangle className="size-4 text-amber-500 mt-0.5 shrink-0" />
-                <div className="text-sm">
-                  <span className="font-semibold">{c.teacherName}</span> is already teaching{' '}
-                  <span className="font-semibold">{c.className} {c.divisionLabel}</span> at this time slot.
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSwapConflictDialog(null);
-                setSwappingSlotIds(new Set());
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              loading={isSwapping}
-              onClick={async () => {
-                if (!swapConflictDialog) return;
-                const { sourceSlotId, targetSlotId } = swapConflictDialog;
-                setSwapConflictDialog(null);
-                await executeSwap(sourceSlotId, targetSlotId, true);
-              }}
-            >
-              Swap Anyway
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onCancel={() => {
+          setSwapConflictDialog(null);
+          setSwappingSlotIds(new Set());
+        }}
+      />
 
       {/* ── Elective swap confirmation dialog ── */}
       <ElectiveSwapConfirmDialog
