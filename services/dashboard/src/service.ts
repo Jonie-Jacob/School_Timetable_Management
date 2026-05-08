@@ -19,8 +19,7 @@ export class DashboardService {
       totalSubjects,
       totalAssignments,
       academicYear,
-      timetableCounts,
-      unresolvedConflicts,
+      timetables,
     ] = await Promise.all([
       prisma.class.count({ where: scope }),
       prisma.division.count({ where: scope }),
@@ -31,25 +30,45 @@ export class DashboardService {
         where: { id: academicYearId, schoolId },
         select: { id: true, label: true, startDate: true, endDate: true, status: true },
       }),
-      prisma.timetable.groupBy({
-        by: ['status'],
+      prisma.timetable.findMany({
         where: { schoolId, academicYearId },
-        _count: true,
-      }),
-      prisma.timetableNotification.count({
-        where: { schoolId, dismissed: false },
+        select: { statusJson: true },
       }),
     ]);
 
-    // Total divisions that have a generated timetable
-    const divisionsWithTimetable = await prisma.timetable.count({
-      where: { schoolId, academicYearId },
-    });
+    // Count timetables by status tag from status_json
+    const statusCounts = {
+      valid: 0,
+      emptySlots: 0,
+      excessAssignments: 0,
+      teacherConflict: 0,
+      availabilityViolation: 0,
+      preferenceViolationHard: 0,
+      preferenceViolationSoft: 0,
+      orphanedSlots: 0,
+    };
 
-    const timetableStatusMap: Record<string, number> = {};
-    for (const entry of timetableCounts) {
-      timetableStatusMap[entry.status] = entry._count;
+    const STATUS_KEY_MAP: Record<string, keyof typeof statusCounts> = {
+      VALID: 'valid',
+      EMPTY_SLOTS: 'emptySlots',
+      EXCESS_ASSIGNMENTS: 'excessAssignments',
+      TEACHER_CONFLICT: 'teacherConflict',
+      AVAILABILITY_VIOLATION: 'availabilityViolation',
+      PREFERENCE_VIOLATION_HARD: 'preferenceViolationHard',
+      PREFERENCE_VIOLATION_SOFT: 'preferenceViolationSoft',
+      ORPHANED_SLOTS: 'orphanedSlots',
+    };
+
+    for (const tt of timetables) {
+      const json = tt.statusJson as { statuses?: string[] } | null;
+      const statuses = json?.statuses ?? [];
+      for (const s of statuses) {
+        const key = STATUS_KEY_MAP[s];
+        if (key) statusCounts[key]++;
+      }
     }
+
+    const totalTimetables = timetables.length;
 
     return {
       academicYear,
@@ -61,11 +80,11 @@ export class DashboardService {
         assignments: totalAssignments,
       },
       timetables: {
-        total: divisionsWithTimetable,
-        divisionsWithoutTimetable: totalDivisions - divisionsWithTimetable,
-        byStatus: timetableStatusMap,
+        total: totalTimetables,
+        divisionsWithoutTimetable: totalDivisions - totalTimetables,
+        notGenerated: totalDivisions - totalTimetables,
+        ...statusCounts,
       },
-      unresolvedConflicts,
     };
   }
 

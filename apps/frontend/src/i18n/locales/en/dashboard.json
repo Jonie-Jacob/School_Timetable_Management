@@ -4,13 +4,21 @@
     "classes": "Classes",
     "divisions": "Divisions",
     "teachers": "Teachers",
-    "subjects": "Subjects",
-    "generated": "Generated",
-    "pending": "Pending"
+    "subjects": "Subjects"
   },
-  "conflictBanner": {
-    "message": "{{count}} timetable(s) have conflicts.",
-    "viewNotifications": "View Notifications \u2192"
+  "statusCards": {
+    "title": "Timetable Status",
+    "valid": "Valid",
+    "issues": "Issues",
+    "notGenerated": "Not Generated",
+    "breakdown": "Issue Breakdown",
+    "teacherConflict": "Teacher Conflict",
+    "availabilityViolation": "Availability Conflict",
+    "preferenceHard": "Hard Pref. Break",
+    "preferenceSoft": "Soft Pref. Break",
+    "emptySlots": "Incomplete",
+    "excessAssignments": "Excess Assignments",
+    "orphanedSlots": "Orphaned Slots"
   },
   "quickLinks": {
     "title": "Quick Links",
@@ -22,49 +30,5 @@
     "title": "Welcome to School Timetable Manager!",
     "description": "Get started by creating your first academic year. Then add classes, subjects, and teachers to begin generating timetables.",
     "cta": "Create Academic Year \u2192"
-  },
-  "setupWizard": {
-    "title": "Setup Guide",
-    "continue": "Continue",
-    "dismiss": "Dismiss Guide",
-    "complete": "Setup Complete!",
-    "stepsComplete": "{{count}}/{{total}} steps complete",
-    "stepCard": {
-      "step1": {
-        "title": "Create Academic Year",
-        "description": "Set up the active academic year with start and end dates."
-      },
-      "step2": {
-        "title": "Classes & Divisions",
-        "description": "Add your school's classes and create divisions within each class."
-      },
-      "step3": {
-        "title": "Period Structures",
-        "description": "Define period structures and assign them to divisions."
-      },
-      "step4": {
-        "title": "Subjects & Electives",
-        "description": "Add all subjects taught at your school and set up elective groups."
-      },
-      "step5": {
-        "title": "Teachers",
-        "description": "Add teachers with their qualified subjects and availability."
-      },
-      "step6": {
-        "title": "Assignments",
-        "description": "Assign subjects and teachers to each division with weekly periods."
-      },
-      "step7": {
-        "title": "Generate Timetable",
-        "description": "Generate timetables for your divisions using the scheduling engine."
-      }
-    }
-  },
-  "fab": {
-    "setupLabel": "Setup progress",
-    "conflictLabel": "Timetable conflicts",
-    "conflictsTitle": "Timetable Conflicts",
-    "conflictsMessage": "{{count}} timetable(s) need attention due to data changes.",
-    "viewAll": "View All Notifications"
   }
 }

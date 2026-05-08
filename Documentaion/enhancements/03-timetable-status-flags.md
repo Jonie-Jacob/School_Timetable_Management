@@ -427,9 +427,9 @@ Delete the setup wizard stepper, progress tracking, and all related components/A
 
 ---
 
-### Phase 7: Dashboard Update
+### Phase 7: Dashboard Update — IMPLEMENTED
 
-#### 7.1 Update dashboard API
+#### 7.1 Update dashboard API — DONE
 
 **File:** `services/dashboard/src/service.ts`
 
@@ -449,15 +449,15 @@ Replace `GENERATED` count with per-status-tag counts:
 }
 ```
 
-#### 7.2 Update dashboard frontend
+#### 7.2 Update dashboard frontend — DONE
 
 Replace notification counts with status summary cards. Color-coded counts matching the status severity scheme.
 
 ---
 
-### Phase 8: WebSocket Update
+### Phase 8: WebSocket Update — IMPLEMENTED
 
-#### 8.1 Rename WebSocket message
+#### 8.1 Rename WebSocket message — DONE
 
 Change `TIMETABLE_OUTDATED` to `TIMETABLE_STATUS_CHANGED`.
 
@@ -471,7 +471,7 @@ Include new status in payload:
 }
 ```
 
-#### 8.2 Update frontend WebSocket handler
+#### 8.2 Update frontend WebSocket handler — DONE
 
 **File:** `apps/frontend/src/hooks/useWebSocket.ts`
 

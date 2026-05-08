@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
 import { setWsConnected } from '@/slices/wsSlice';
 import { dashboardApi } from '@/features/dashboard/dashboardApi';
+import { timetableApi } from '@/features/timetable/timetableApi';
+import { classApi } from '@/features/classes/classApi';
 
 const WS_URL = import.meta.env.VITE_WS_URL as string | undefined;
 const MAX_RETRIES = 5;
@@ -66,13 +68,18 @@ export function useWebSocket() {
             case 'GENERATION_COMPLETE':
             case 'generation_completed':
               dispatch(dashboardApi.util.invalidateTags(['DashboardStats']));
+              dispatch(timetableApi.util.invalidateTags(['Timetable']));
+              dispatch(classApi.util.invalidateTags(['Class']));
               break;
             case 'GENERATION_FAILED':
             case 'generation_failed':
               toast.error(`Generation failed: ${msg.payload?.error ?? 'Unknown error'}`);
               break;
-            case 'TIMETABLE_OUTDATED':
+            case 'TIMETABLE_STATUS_CHANGED':
+            case 'TIMETABLE_OUTDATED': // backward compat
               dispatch(dashboardApi.util.invalidateTags(['DashboardStats']));
+              dispatch(timetableApi.util.invalidateTags(['Timetable']));
+              dispatch(classApi.util.invalidateTags(['Class']));
               break;
             case 'generation_summary':
               dispatch(dashboardApi.util.invalidateTags(['DashboardStats']));

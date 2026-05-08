@@ -19,7 +19,15 @@ export interface DashboardStats {
   timetables: {
     total: number;
     divisionsWithoutTimetable: number;
-    byStatus: Record<string, number>;
+    notGenerated: number;
+    valid: number;
+    emptySlots: number;
+    excessAssignments: number;
+    teacherConflict: number;
+    availabilityViolation: number;
+    preferenceViolationHard: number;
+    preferenceViolationSoft: number;
+    orphanedSlots: number;
   };
 }
 
