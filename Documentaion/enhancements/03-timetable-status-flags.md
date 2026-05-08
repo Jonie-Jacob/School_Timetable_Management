@@ -131,9 +131,9 @@ Frontend renders exclamation mark icon on slots with violations. Clicking shows 
 
 ## Implementation Phases
 
-### Phase 1: Database Schema Migration
+### Phase 1: Database Schema Migration -- IMPLEMENTED
 
-#### 1.1 Create new migration
+#### 1.1 Create new migration -- DONE
 
 **File:** `packages/shared/prisma/schema.prisma`
 
@@ -141,7 +141,7 @@ Frontend renders exclamation mark icon on slots with violations. Clicking shows 
 - Keep old `status` column temporarily for migration safety
 - Add `statusComputedAt DateTime? @map("status_computed_at")`
 
-#### 1.2 Migration SQL
+#### 1.2 Migration SQL -- DONE
 
 ```sql
 ALTER TABLE timetables ADD COLUMN status_json JSONB;
@@ -154,11 +154,11 @@ UPDATE timetables SET status_json = '{"statuses":[],"details":{}}'::jsonb
 -- Drop old column after all services are updated
 ```
 
-#### 1.3 Update Prisma client
+#### 1.3 Update Prisma client -- DONE
 
 Run `prisma generate` to update the client with new field.
 
-#### 1.4 Update `TimetableStatus` enum
+#### 1.4 Update `TimetableStatus` enum -- DONE (pre-built in Enhancement 14)
 
 **File:** `packages/shared/src/models/enums.ts`
 

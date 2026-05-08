@@ -445,6 +445,8 @@ model Timetable {
   divisionId                  String          @map("division_id")
   academicYearId              String          @map("academic_year_id")
   status                      TimetableStatus
+  statusJson                  Json?           @map("status_json")
+  statusComputedAt            DateTime?       @map("status_computed_at")
   adjacencyConstraintEnabled  Boolean         @default(false) @map("adjacency_constraint_enabled")
   generatedAt                 DateTime        @map("generated_at")
   createdAt                   DateTime        @default(now()) @map("created_at")
