@@ -109,7 +109,7 @@ export async function computeTeacherLoads(params: {
     const timetableSlots = await prisma.timetableSlot.findMany({
       where: {
         schoolId,
-        timetable: { academicYearId, status: { in: ['GENERATED', 'OUTDATED'] } },
+        timetable: { academicYearId },
         divisionAssignment: {
           deletedAt: null,
           OR: [{ teacherId: { not: null } }, { assistantTeacherId: { not: null } }],

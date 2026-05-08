@@ -296,16 +296,14 @@ export function Component() {
   const valid = allDivisions.filter((d) => d.timetable?.statusJson?.statuses?.includes('VALID')).length;
   const withIssues = allDivisions.filter((d) => d.timetable?.statusJson && !d.timetable.statusJson.statuses?.includes('VALID') && d.timetable.statusJson.statuses?.length > 0).length;
   const pending = allDivisions.filter((d) => !d.timetable).length;
-  // Legacy compat
-  const generated = allDivisions.filter((d) => d.timetable?.status === 'GENERATED').length;
-  const outdated = allDivisions.filter((d) => d.timetable?.status === 'OUTDATED').length;
+  const hasAnyTimetable = allDivisions.filter((d) => !!d.timetable).length;
 
   const getDivisionIdsForScope = (scope: GenerateScope) => {
     switch (scope) {
       case 'all':
         return allDivisions.map((d) => d.id);
       case 'outdated':
-        return allDivisions.filter((d) => d.timetable?.status === 'OUTDATED').map((d) => d.id);
+        return allDivisions.filter((d) => d.timetable && !d.timetable.statusJson?.statuses?.includes('VALID')).map((d) => d.id);
       case 'pending':
         return allDivisions.filter((d) => !d.timetable).map((d) => d.id);
     }
@@ -358,11 +356,11 @@ export function Component() {
         description="View and manage timetables across all classes and divisions."
         actions={
           <div className="flex items-center gap-2">
-            {(generated > 0 || outdated > 0) && (
+            {hasAnyTimetable > 0 && (
               <ExportButton
                 label="Export All"
                 onExportPdf={async () => {
-                  const classIds = [...new Set(allDivisions.filter(d => d.timetable?.status === 'GENERATED' || d.timetable?.status === 'OUTDATED').map(d => d.classId))];
+                  const classIds = [...new Set(allDivisions.filter(d => !!d.timetable).map(d => d.classId))];
                   try {
                     const result = await exportClassesPdf({ classIds }).unwrap();
                     downloadHtmlAsPdf(result.html, result.filename);
@@ -370,7 +368,7 @@ export function Component() {
                   } catch { toast.error('Export failed'); }
                 }}
                 onExportExcel={async () => {
-                  const classIds = [...new Set(allDivisions.filter(d => d.timetable?.status === 'GENERATED' || d.timetable?.status === 'OUTDATED').map(d => d.classId))];
+                  const classIds = [...new Set(allDivisions.filter(d => !!d.timetable).map(d => d.classId))];
                   try {
                     const result = await exportClassesExcel({ classIds }).unwrap();
                     downloadExcel(result.base64, result.filename);
@@ -454,7 +452,7 @@ export function Component() {
                     <span className="text-sm text-muted-foreground"> -- Div {div.label}</span>
                     {div.streamName && <span className="text-xs text-muted-foreground"> ({div.streamName})</span>}
                   </div>
-                  <TimetableStatusBadge statusJson={div.timetable?.statusJson as any} legacyStatus={div.timetable?.status} size="sm" />
+                  <TimetableStatusBadge statusJson={div.timetable?.statusJson as any}  size="sm" />
                 </div>
                 <div className="text-[11px] text-muted-foreground">{div.periodStructure?.name ?? '--'}</div>
                 <div className="flex items-center gap-1.5">
@@ -507,7 +505,7 @@ export function Component() {
             </thead>
             <tbody>
               {allDivisions.map((div, idx) => {
-                const status = div.timetable?.status;
+                const hasTT = !!div.timetable;
                 return (
                   <tr
                     key={div.id}
@@ -522,7 +520,7 @@ export function Component() {
                       {div.periodStructure?.name ?? '--'}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <TimetableStatusBadge statusJson={div.timetable?.statusJson as any} legacyStatus={div.timetable?.status} size="sm" />
+                      <TimetableStatusBadge statusJson={div.timetable?.statusJson as any}  size="sm" />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">

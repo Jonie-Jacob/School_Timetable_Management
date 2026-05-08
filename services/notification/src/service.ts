@@ -43,7 +43,7 @@ export class NotificationService {
           timetable: {
             select: {
               id: true,
-              status: true,
+              statusJson: true,
               division: {
                 select: {
                   id: true,
@@ -136,21 +136,15 @@ export class NotificationService {
       select: { id: true, divisionId: true },
     });
 
-    await prisma.$transaction([
-      prisma.timetableNotification.createMany({
-        data: timetables.map((tt) => ({
-          schoolId,
-          timetableId: tt.id,
-          divisionId: tt.divisionId,
-          conflictType,
-          changeDescription,
-        })),
-      }),
-      prisma.timetable.updateMany({
-        where: { id: { in: timetableIds } },
-        data: { status: 'OUTDATED' },
-      }),
-    ]);
+    await prisma.timetableNotification.createMany({
+      data: timetables.map((tt) => ({
+        schoolId,
+        timetableId: tt.id,
+        divisionId: tt.divisionId,
+        conflictType,
+        changeDescription,
+      })),
+    });
 
     return { affectedCount: timetableIds.length };
   }

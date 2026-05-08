@@ -122,7 +122,7 @@ export function Component() {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-semibold">{t('generator.status')}</span>
-              <TimetableStatusBadge statusJson={timetable?.statusJson as any} legacyStatus={timetable?.status} />
+              <TimetableStatusBadge statusJson={timetable?.statusJson as any} />
             </div>
             {timetable?.generatedAt && (
               <p className="text-sm text-muted-foreground mt-0.5">

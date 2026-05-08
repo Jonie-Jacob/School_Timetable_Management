@@ -19,8 +19,6 @@ export {
   type PaginationParams,
   parseBody,
   invokeLambda,
-  flagAffectedTimetables,
-  flagTimetables,
   findTeachersAtTime,
   isTeacherBusyAt,
   buildTeacherBusyRanges,
@@ -95,7 +93,6 @@ export { prisma, tenantScope, softDelete } from './db';
 export {
   SlotType,
   JobStatus,
-  TimetableStatus,
   AcademicYearStatus,
   ConflictType,
   DayOfWeek,

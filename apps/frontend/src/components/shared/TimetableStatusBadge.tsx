@@ -24,22 +24,13 @@ const SEVERITY_ORDER = [
 interface TimetableStatusBadgeProps {
   /** The statusJson from the timetable record */
   statusJson?: TimetableStatusJsonDto | null;
-  /** Fallback to old enum status when statusJson is not available */
-  legacyStatus?: string;
   /** Size variant */
   size?: 'sm' | 'md';
 }
 
-export function TimetableStatusBadge({ statusJson, legacyStatus, size = 'md' }: TimetableStatusBadgeProps) {
-  // Fallback to legacy status if no statusJson
+export function TimetableStatusBadge({ statusJson, size = 'md' }: TimetableStatusBadgeProps) {
   if (!statusJson || !statusJson.statuses?.length) {
-    if (!legacyStatus) {
-      return <Badge variant="outline" className={size === 'sm' ? 'text-[10px]' : ''}>Pending</Badge>;
-    }
-    if (legacyStatus === 'GENERATED') {
-      return <Badge variant="success" className={size === 'sm' ? 'text-[10px]' : ''}>Generated</Badge>;
-    }
-    return <Badge variant="warning" className={size === 'sm' ? 'text-[10px]' : ''}>Outdated</Badge>;
+    return <Badge variant="outline" className={size === 'sm' ? 'text-[10px]' : ''}>Pending</Badge>;
   }
 
   // Find most severe status

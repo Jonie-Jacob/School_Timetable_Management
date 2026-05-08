@@ -30,11 +30,6 @@ enum JobStatus {
   FAILED
 }
 
-enum TimetableStatus {
-  GENERATED
-  OUTDATED
-}
-
 enum ConflictType {
   TEACHER_CHANGED
   TEACHER_DELETED
@@ -444,7 +439,6 @@ model Timetable {
   schoolId                    String          @map("school_id")
   divisionId                  String          @map("division_id")
   academicYearId              String          @map("academic_year_id")
-  status                      TimetableStatus
   statusJson                  Json?           @map("status_json")
   statusComputedAt            DateTime?       @map("status_computed_at")
   adjacencyConstraintEnabled  Boolean         @default(false) @map("adjacency_constraint_enabled")

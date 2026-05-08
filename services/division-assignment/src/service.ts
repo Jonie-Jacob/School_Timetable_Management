@@ -1,6 +1,5 @@
 import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
-  flagTimetables,
   findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
   type CreateAssignmentDto, type UpdateAssignmentDto,
   type CreateElectiveGroupDto, type UpdateElectiveGroupDto,
@@ -137,14 +136,6 @@ export class AssignmentService {
       }
     }
 
-    await flagTimetables({
-      schoolId,
-      academicYearId,
-      entityType: 'ASSIGNMENT',
-      entityId: id,
-      conflictType: 'ASSIGNMENT_CHANGED',
-      changeDescription: `Assignment updated (${Object.keys(data).join(', ')} changed)`,
-    });
     const affectedIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ASSIGNMENT', entityId: id });
     await recomputeMultipleTimetableStatuses(affectedIds);
 
@@ -165,14 +156,6 @@ export class AssignmentService {
       throw new AppError('Cannot delete assignment with active timetable slots. Remove timetable data first.', 400, 'BAD_REQUEST');
     }
 
-    await flagTimetables({
-      schoolId,
-      academicYearId,
-      entityType: 'ASSIGNMENT',
-      entityId: id,
-      conflictType: 'ASSIGNMENT_CHANGED',
-      changeDescription: `Assignment deleted`,
-    });
     const delAffectedIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ASSIGNMENT', entityId: id });
     await recomputeMultipleTimetableStatuses(delAffectedIds);
 
@@ -708,14 +691,6 @@ export class AssignmentService {
       },
     });
 
-    await flagTimetables({
-      schoolId,
-      academicYearId,
-      entityType: 'ELECTIVE_GROUP',
-      entityId: id,
-      conflictType: 'ELECTIVE_GROUP_CHANGED',
-      changeDescription: `Elective group updated${input.name ? ` (name changed to '${input.name}')` : ''}${input.periodsPerWeek !== undefined ? ` (periods/week changed to ${input.periodsPerWeek})` : ''}`,
-    });
     const egUpdateIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ELECTIVE_GROUP', entityId: id });
     await recomputeMultipleTimetableStatuses(egUpdateIds);
 
@@ -732,14 +707,6 @@ export class AssignmentService {
       throw new AppError('Cannot delete elective group with active assignments. Remove assignments first.', 400, 'BAD_REQUEST');
     }
 
-    await flagTimetables({
-      schoolId,
-      academicYearId,
-      entityType: 'ELECTIVE_GROUP',
-      entityId: id,
-      conflictType: 'ELECTIVE_GROUP_CHANGED',
-      changeDescription: `Elective group deleted`,
-    });
     const egDelIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ELECTIVE_GROUP', entityId: id });
     await recomputeMultipleTimetableStatuses(egDelIds);
 
@@ -818,14 +785,6 @@ export class AssignmentService {
       include: { subject: { select: { id: true, name: true } } },
     });
 
-    await flagTimetables({
-      schoolId,
-      academicYearId,
-      entityType: 'ELECTIVE_GROUP',
-      entityId: groupId,
-      conflictType: 'ELECTIVE_GROUP_CHANGED',
-      changeDescription: `Elective subject parallel sections updated to ${input.parallelSections}`,
-    });
     const egSubIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ELECTIVE_GROUP', entityId: groupId });
     await recomputeMultipleTimetableStatuses(egSubIds);
 
@@ -1186,13 +1145,6 @@ export class AssignmentService {
         const gId = groupIdByDivision.get(dId) ?? existingGroupIds[0];
         if (gId && !flaggedGroupIds.has(gId)) {
           flaggedGroupIds.add(gId);
-          await flagTimetables({
-            schoolId, academicYearId,
-            entityType: 'ELECTIVE_GROUP',
-            entityId: gId,
-            conflictType: 'ELECTIVE_GROUP_CHANGED',
-            changeDescription: 'Elective group updated via bulk save',
-          });
           const bulkIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ELECTIVE_GROUP', entityId: gId });
           await recomputeMultipleTimetableStatuses(bulkIds);
         }

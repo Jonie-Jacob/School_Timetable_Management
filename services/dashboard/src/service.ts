@@ -127,8 +127,8 @@ export class DashboardService {
       }),
       // Step 6: At least one assignment
       prisma.divisionAssignment.count({ where: scope }),
-      // Step 7: At least one generated timetable
-      prisma.timetable.count({ where: { schoolId, academicYearId, status: 'GENERATED' } }),
+      // Step 7: At least one timetable
+      prisma.timetable.count({ where: { schoolId, academicYearId } }),
     ]);
 
     const step3Complete = totalDivisions > 0 && divisionsWithStructure === totalDivisions;

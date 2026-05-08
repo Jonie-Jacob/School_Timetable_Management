@@ -340,7 +340,7 @@ export function Component() {
       <PageHeader title={t('editor.title')} description={divisionLabel}
         actions={
           <div className="flex items-center gap-2">
-            <TimetableStatusBadge statusJson={grid.timetable.statusJson as any} legacyStatus={grid.timetable.status} />
+            <TimetableStatusBadge statusJson={grid.timetable.statusJson as any} />
             <Button variant="outline" size="sm" onClick={() => navigate(-1)}><ArrowLeft className="size-3.5" />Back</Button>
           </div>
         }

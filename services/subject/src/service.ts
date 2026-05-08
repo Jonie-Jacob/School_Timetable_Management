@@ -3,7 +3,6 @@ import {
   softDelete,
   NotFoundError,
   AppError,
-  flagTimetables,
   findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
   checkDuplicateName,
   type CreateSubjectDto,
@@ -83,14 +82,6 @@ export class SubjectService {
     });
 
     if (input.name) {
-      await flagTimetables({
-        schoolId,
-        academicYearId,
-        entityType: 'SUBJECT',
-        entityId: id,
-        conflictType: 'SUBJECT_CHANGED',
-        changeDescription: `Subject name changed to '${input.name}'`,
-      });
       const subjIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'SUBJECT', entityId: id });
       await recomputeMultipleTimetableStatuses(subjIds);
     }
@@ -138,31 +129,15 @@ export class SubjectService {
         data: { divisionAssignmentId: null },
       });
 
-      // Flag affected timetables as OUTDATED
+      // Recompute affected timetable statuses
       const affectedDivisionIds = [...new Set(assignments.map(a => a.divisionId))];
       const affectedTimetables = await prisma.timetable.findMany({
         where: {
           divisionId: { in: affectedDivisionIds },
           schoolId,
         },
+        select: { id: true },
       });
-
-      for (const tt of affectedTimetables) {
-        await prisma.timetable.update({
-          where: { id: tt.id },
-          data: { status: 'OUTDATED' },
-        });
-
-        await prisma.timetableNotification.create({
-          data: {
-            schoolId,
-            timetableId: tt.id,
-            divisionId: tt.divisionId,
-            conflictType: 'SUBJECT_DELETED',
-            changeDescription: `Subject was deleted. ${assignmentIds.length} assignment(s) affected. Timetable slots set to empty.`,
-          },
-        });
-      }
       await recomputeMultipleTimetableStatuses(affectedTimetables.map(t => t.id));
 
       // Soft-delete the assignments

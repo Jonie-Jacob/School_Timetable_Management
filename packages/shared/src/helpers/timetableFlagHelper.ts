@@ -80,10 +80,10 @@ export async function flagTimetables(params: {
   // ── Step 2: Load timetable details for notifications ──
   const timetables = await prisma.timetable.findMany({
     where: { id: { in: affectedTimetableIds } },
-    select: { id: true, schoolId: true, divisionId: true, status: true },
+    select: { id: true, schoolId: true, divisionId: true },
   });
 
-  // ── Step 3: Flag OUTDATED + create notifications in a transaction ──
+  // ── Step 3: Create notifications (status is now managed by recomputeTimetableStatus) ──
   const notificationsToCreate = timetables.map(tt => ({
     schoolId: tt.schoolId,
     timetableId: tt.id,
@@ -92,32 +92,11 @@ export async function flagTimetables(params: {
     changeDescription,
   }));
 
-  const idsToFlag = timetables
-    .filter(tt => tt.status !== 'OUTDATED')
-    .map(tt => tt.id);
-
-  const txOps: any[] = [];
-
   if (notificationsToCreate.length > 0) {
-    txOps.push(
-      prisma.timetableNotification.createMany({
-        data: notificationsToCreate,
-        skipDuplicates: true,
-      }),
-    );
-  }
-
-  if (idsToFlag.length > 0) {
-    txOps.push(
-      prisma.timetable.updateMany({
-        where: { id: { in: idsToFlag } },
-        data: { status: 'OUTDATED' },
-      }),
-    );
-  }
-
-  if (txOps.length > 0) {
-    await prisma.$transaction(txOps);
+    await prisma.timetableNotification.createMany({
+      data: notificationsToCreate,
+      skipDuplicates: true,
+    });
   }
 
   // ── Step 4: Backfill empty timetable_slot rows for new slots ──

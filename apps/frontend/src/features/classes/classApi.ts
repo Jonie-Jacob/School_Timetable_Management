@@ -21,7 +21,6 @@ export interface Division {
   };
   timetable?: {
     id: string;
-    status: string;
     statusJson?: { statuses: string[]; details: Record<string, unknown>; computedAt: string } | null;
     generatedAt: string | null;
   } | null;

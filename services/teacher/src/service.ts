@@ -3,7 +3,6 @@ import {
   softDelete,
   NotFoundError,
   AppError,
-  flagTimetables,
   findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
   findTeachersAtTime,
   computeTeacherLoads,
@@ -128,7 +127,7 @@ export class TeacherService {
     const timetableSlots = await prisma.timetableSlot.findMany({
       where: {
         schoolId,
-        timetable: { academicYearId, status: { in: ['GENERATED', 'OUTDATED'] } },
+        timetable: { academicYearId },
         divisionAssignment: {
           deletedAt: null,
           OR: [{ teacherId }, { assistantTeacherId: teacherId }],
@@ -346,14 +345,6 @@ export class TeacherService {
       if (input.name !== undefined) changes.push(`name changed to '${input.name}'`);
       if (input.contact !== undefined) changes.push(`contact updated`);
 
-      await flagTimetables({
-        schoolId,
-        academicYearId,
-        entityType: 'TEACHER',
-        entityId: id,
-        conflictType: 'TEACHER_CHANGED',
-        changeDescription: `Teacher ${changes.join(', ')}`,
-      });
       const tchUpdIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'TEACHER', entityId: id });
       await recomputeMultipleTimetableStatuses(tchUpdIds);
     }
@@ -424,24 +415,8 @@ export class TeacherService {
       const affectedDivisionIds = [...new Set(assignments.map(a => a.divisionId))];
       const affectedTimetables = await prisma.timetable.findMany({
         where: { divisionId: { in: affectedDivisionIds }, schoolId },
+        select: { id: true },
       });
-
-      for (const tt of affectedTimetables) {
-        await prisma.timetable.update({
-          where: { id: tt.id },
-          data: { status: 'OUTDATED' },
-        });
-
-        await prisma.timetableNotification.create({
-          data: {
-            schoolId,
-            timetableId: tt.id,
-            divisionId: tt.divisionId,
-            conflictType: 'TEACHER_DELETED',
-            changeDescription: `Teacher was deleted. Affected assignments removed or updated. Timetable slots set to empty.`,
-          },
-        });
-      }
       await recomputeMultipleTimetableStatuses(affectedTimetables.map(t => t.id));
     }
 
@@ -480,14 +455,6 @@ export class TeacherService {
         : []),
     ]);
 
-    await flagTimetables({
-      schoolId,
-      academicYearId,
-      entityType: 'TEACHER',
-      entityId: teacherId,
-      conflictType: 'TEACHER_CHANGED',
-      changeDescription: `Teacher qualifications updated (${input.subjectIds.length} subject(s))`,
-    });
     const tchSubIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'TEACHER', entityId: teacherId });
     await recomputeMultipleTimetableStatuses(tchSubIds);
 
@@ -534,14 +501,6 @@ export class TeacherService {
         : []),
     ]);
 
-    await flagTimetables({
-      schoolId,
-      academicYearId,
-      entityType: 'AVAILABILITY',
-      entityId: teacherId,
-      conflictType: 'AVAILABILITY_CHANGED',
-      changeDescription: `Teacher availability updated (${input.unavailableSlots.length} unavailable slot(s))`,
-    });
     const tchAvailIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'AVAILABILITY', entityId: teacherId });
     await recomputeMultipleTimetableStatuses(tchAvailIds);
 

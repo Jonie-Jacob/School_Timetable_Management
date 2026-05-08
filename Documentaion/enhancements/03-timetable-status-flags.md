@@ -479,15 +479,15 @@ Handle `TIMETABLE_STATUS_CHANGED` message -- invalidate timetable cache tags.
 
 ---
 
-### Phase 9: Migration & Backfill
+### Phase 9: Migration & Backfill — IMPLEMENTED
 
-#### 9.1 Migration script
+#### 9.1 Migration script — DONE
 
 For all existing timetables:
 - Run `recomputeTimetableStatus()` on each timetable
 - This properly evaluates VALID vs actual conflicts
 
-#### 9.2 Drop old `status` column
+#### 9.2 Drop old `status` column — DONE
 
 After all services are deployed and verified:
 - Remove old `status TimetableStatus` enum column

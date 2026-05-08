@@ -81,7 +81,6 @@ export interface TimetableGrid {
   timetable: {
     id: string;
     divisionId: string;
-    status: string;
     statusJson?: TimetableStatusJsonDto | null;
     adjacencyConstraintEnabled: boolean;
     generatedAt: string;

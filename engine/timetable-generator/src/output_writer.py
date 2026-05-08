@@ -164,8 +164,7 @@ def _upsert_timetable(
         timetable_id = row[0]
         cur.execute("""
             UPDATE timetables
-            SET status = 'GENERATED',
-                status_json = %s::jsonb,
+            SET status_json = %s::jsonb,
                 status_computed_at = %s,
                 adjacency_constraint_enabled = %s,
                 generated_at = %s,
@@ -176,10 +175,10 @@ def _upsert_timetable(
         timetable_id = str(uuid.uuid4())
         cur.execute("""
             INSERT INTO timetables
-                (id, school_id, division_id, academic_year_id, status,
+                (id, school_id, division_id, academic_year_id,
                  status_json, status_computed_at,
                  adjacency_constraint_enabled, generated_at, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, 'GENERATED', %s::jsonb, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s)
         """, (
             timetable_id, data.school_id, data.division_id,
             data.academic_year_id, valid_status_json, now,

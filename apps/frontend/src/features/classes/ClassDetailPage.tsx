@@ -178,7 +178,7 @@ export function Component() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {divisions.map((div) => {
             const assignmentCount = div._count?.divisionAssignments ?? 0;
-            const ttStatus = div.timetable?.status;
+            const hasTimetable = !!div.timetable;
 
             return (
               <div
@@ -264,7 +264,7 @@ export function Component() {
                 {/* Stats row */}
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <span>{assignmentCount} {t('detail.subjects')}</span>
-                  <TimetableStatusBadge statusJson={div.timetable?.statusJson as any} legacyStatus={ttStatus} size="sm" />
+                  <TimetableStatusBadge statusJson={div.timetable?.statusJson as any} size="sm" />
                 </div>
 
                 {/* Action buttons */}

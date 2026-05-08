@@ -1,6 +1,5 @@
 import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
-  flagTimetables,
   findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
   checkDuplicateName,
   type CreateClassDto, type UpdateClassDto,
@@ -41,7 +40,7 @@ export class ClassService {
             periodStructure: { select: { id: true, name: true } },
             classTeacherId: true,
             classTeacher: { select: { id: true, name: true } },
-            timetables: { select: { id: true, status: true, statusJson: true, generatedAt: true }, take: 1 },
+            timetables: { select: { id: true, statusJson: true, generatedAt: true }, take: 1 },
             _count: { select: { divisionAssignments: { where: { deletedAt: null } } } },
           },
         },
@@ -59,7 +58,7 @@ export class ClassService {
           include: {
             periodStructure: { select: { id: true, name: true } },
             classTeacher: { select: { id: true, name: true } },
-            timetables: { select: { id: true, status: true, statusJson: true, generatedAt: true }, take: 1 },
+            timetables: { select: { id: true, statusJson: true, generatedAt: true }, take: 1 },
             _count: { select: { divisionAssignments: { where: { deletedAt: null } } } },
           },
         },
@@ -325,19 +324,13 @@ export class ClassService {
         : []),
     ]);
 
-    // Flag affected timetables as OUTDATED
+    // Recompute affected timetable statuses
     const affectedDivisionIds = [divisionId, fromAssignment.divisionId];
-    const result = await flagTimetables({
-      schoolId,
-      divisionIds: affectedDivisionIds,
-      conflictType: 'ASSIGNMENT_CHANGED',
-      changeDescription: 'Teacher assignment swapped due to class teacher assignment.',
-    });
     const classSwapTtIds = await findAffectedTimetableIds({ schoolId, divisionIds: affectedDivisionIds, entityType: 'DIVISION', entityId: '' });
     await recomputeMultipleTimetableStatuses(classSwapTtIds);
 
-    if (result.affectedCount > 0) {
-      warnings.push(`${result.affectedCount} timetable(s) flagged as outdated.`);
+    if (classSwapTtIds.length > 0) {
+      warnings.push(`${classSwapTtIds.length} timetable(s) affected — statuses recomputed.`);
     }
 
     return {

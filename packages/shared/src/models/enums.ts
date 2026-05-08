@@ -11,11 +11,6 @@ export enum JobStatus {
   FAILED = 'FAILED',
 }
 
-export enum TimetableStatus {
-  GENERATED = 'GENERATED',
-  OUTDATED = 'OUTDATED',
-}
-
 export enum AcademicYearStatus {
   ACTIVE = 'ACTIVE',
   ARCHIVED = 'ARCHIVED',

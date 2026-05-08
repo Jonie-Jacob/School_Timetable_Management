@@ -6,7 +6,7 @@ import {
   TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto, CreateEmptySlotDto,
   SwapElectiveSlotsDto, PreviewElectiveSwapDto, PreviewTeacherSwapDto,
 } from '@timetable/shared';
-import { JobStatus, TimetableStatus, SlotType } from '@prisma/client';
+import { JobStatus, SlotType } from '@prisma/client';
 import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs';
 
 // ── Fargate / GA engine config ────────────────────────────────────────────
@@ -232,7 +232,6 @@ export class TimetableService {
       timetable = await prisma.timetable.update({
         where: { id: existing.id },
         data: {
-          status: TimetableStatus.GENERATED,
           adjacencyConstraintEnabled,
           generatedAt: new Date(),
         },
@@ -243,7 +242,6 @@ export class TimetableService {
           schoolId,
           divisionId,
           academicYearId,
-          status: TimetableStatus.GENERATED,
           adjacencyConstraintEnabled,
           generatedAt: new Date(),
         },
@@ -502,7 +500,6 @@ export class TimetableService {
       timetable: {
         id: timetable.id,
         divisionId: timetable.divisionId,
-        status: timetable.status,
         statusJson: timetable.statusJson,
         adjacencyConstraintEnabled: timetable.adjacencyConstraintEnabled,
         generatedAt: timetable.generatedAt,
@@ -1322,7 +1319,7 @@ export class TimetableService {
 
     return {
       timetableId,
-      status: timetable.status,
+      statusJson: timetable.statusJson,
       total: notifications.length,
       undismissed: notifications.filter(n => !n.dismissed).length,
       conflicts: notifications,
