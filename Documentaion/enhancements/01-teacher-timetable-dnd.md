@@ -470,7 +470,7 @@ Show the dragged cell content (regular or elective) floating with the cursor.
 
 ---
 
-### Phase 7: Frontend -- Teacher Swap Confirmation Dialog
+### Phase 7: Frontend -- Teacher Swap Confirmation Dialog -- IMPLEMENTED
 
 **Goal:** Show preview + conflict resolution for teacher timetable swaps.
 

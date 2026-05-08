@@ -32,7 +32,7 @@ import type {
   InvalidTeacherSwapTarget,
   PreviewTeacherSwapResponse,
 } from '@/features/timetable/timetableApi';
-import { SwapConflictResolutionDialog } from '@/features/timetable/SwapConflictResolutionDialog';
+import { TeacherSwapConfirmDialog } from './TeacherSwapConfirmDialog';
 import { TeacherTimetableGrid } from './TeacherTimetableGrid';
 import { TeacherBreakdown } from './TeacherBreakdown';
 
@@ -52,10 +52,10 @@ export function Component() {
   const [activeDragSlotId, setActiveDragSlotId] = useState<string | null>(null);
   const [validTargets, setValidTargets] = useState<ValidTeacherSwapTarget[]>([]);
   const [invalidTargets, setInvalidTargets] = useState<InvalidTeacherSwapTarget[]>([]);
-  const [conflictDialog, setConflictDialog] = useState<{
+  const [swapDialog, setSwapDialog] = useState<{
     sourceSlotId: string;
     targetSlotId: string;
-    conflicts: PreviewTeacherSwapResponse['conflicts'];
+    preview: PreviewTeacherSwapResponse;
   } | null>(null);
   const [isSwapping, setIsSwapping] = useState(false);
 
@@ -116,12 +116,11 @@ export function Component() {
       } catch (err: unknown) {
         const error = err as { status?: number; data?: { error?: { code?: string; message?: string } } };
         if (error?.status === 409 && error?.data?.error?.code === 'TEACHER_CONFLICT') {
+          // Show preview dialog with conflicts
           try {
-            const parsed = JSON.parse(error.data!.error!.message!);
-            if (parsed.conflicts) {
-              setConflictDialog({ sourceSlotId, targetSlotId, conflicts: parsed.conflicts });
-              return;
-            }
+            const preview = await previewSwap({ sourceSlotId, targetSlotId }).unwrap();
+            setSwapDialog({ sourceSlotId, targetSlotId, preview });
+            return;
           } catch { /* fall through */ }
         }
         toast.error(error?.data?.error?.message ?? 'Swap failed.');
@@ -131,44 +130,34 @@ export function Component() {
       return;
     }
 
-    // Cross-division → preview first
+    // Cross-division → always show preview dialog
     try {
       const preview = await previewSwap({ sourceSlotId, targetSlotId }).unwrap();
 
       if (preview.swapType === 'elective' && preview.delegateToElective) {
-        // Elective swap — use existing class timetable flow
         toast.info('Elective swaps should be done from the class timetable view.');
         return;
       }
 
-      if (preview.conflicts && preview.conflicts.length > 0) {
-        setConflictDialog({ sourceSlotId, targetSlotId, conflicts: preview.conflicts });
-      } else {
-        // No conflicts → execute directly
-        setIsSwapping(true);
-        try {
-          await swapTeacherSlots({ sourceSlotId, targetSlotId }).unwrap();
-          toast.success('Cross-division swap completed.');
-        } catch (err: unknown) {
-          const error = err as { data?: { error?: { message?: string } } };
-          toast.error(error?.data?.error?.message ?? 'Swap failed.');
-        } finally {
-          setIsSwapping(false);
-        }
-      }
+      // Show confirmation dialog (with or without conflicts)
+      setSwapDialog({ sourceSlotId, targetSlotId, preview });
     } catch (err: unknown) {
       const error = err as { data?: { error?: { message?: string } } };
       toast.error(error?.data?.error?.message ?? 'Preview failed.');
     }
-  }, [validTargets, invalidTargets, swapSlots, previewSwap, swapTeacherSlots]);
+  }, [validTargets, invalidTargets, swapSlots, previewSwap]);
 
-  const handleConflictConfirm = useCallback(async (force: boolean) => {
-    if (!conflictDialog) return;
-    const { sourceSlotId, targetSlotId } = conflictDialog;
-    setConflictDialog(null);
+  const handleSwapConfirm = useCallback(async (force: boolean) => {
+    if (!swapDialog) return;
+    const { sourceSlotId, targetSlotId, preview } = swapDialog;
+    setSwapDialog(null);
     setIsSwapping(true);
     try {
-      await swapTeacherSlots({ sourceSlotId, targetSlotId, force }).unwrap();
+      if (preview.swapType === 'cross_division') {
+        await swapTeacherSlots({ sourceSlotId, targetSlotId, force }).unwrap();
+      } else {
+        await swapSlots({ sourceSlotId, targetSlotId, force }).unwrap();
+      }
       toast.success(force ? 'Swap forced — conflicts created.' : 'Swap completed.');
     } catch (err: unknown) {
       const error = err as { data?: { error?: { message?: string } } };
@@ -176,7 +165,7 @@ export function Component() {
     } finally {
       setIsSwapping(false);
     }
-  }, [conflictDialog, swapTeacherSlots]);
+  }, [swapDialog, swapTeacherSlots, swapSlots]);
 
   if (!teacherId) return null;
 
@@ -235,21 +224,13 @@ export function Component() {
         </DragOverlay>
       </DndContext>
 
-      {/* Conflict resolution dialog */}
-      <SwapConflictResolutionDialog
-        open={!!conflictDialog}
-        conflicts={(conflictDialog?.conflicts ?? []).map((c) => ({
-          teacherName: c.teacherName,
-          className: c.className,
-          divisionLabel: c.divisionLabel,
-          classId: '',
-          divisionId: c.divisionId,
-          conflictedSlotId: c.conflictedSlotId,
-          direction: 'source_to_target' as const,
-        }))}
+      {/* Teacher swap confirmation dialog */}
+      <TeacherSwapConfirmDialog
+        open={!!swapDialog}
+        preview={swapDialog?.preview ?? null}
         isSwapping={isSwapping}
-        onConfirm={handleConflictConfirm}
-        onCancel={() => setConflictDialog(null)}
+        onConfirm={handleSwapConfirm}
+        onCancel={() => setSwapDialog(null)}
       />
 
       <TeacherBreakdown teacherId={teacherId} />
