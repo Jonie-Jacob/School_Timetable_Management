@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
-import { CalendarDays, Coffee, UtensilsCrossed } from 'lucide-react';
+import { CalendarDays, Coffee, UtensilsCrossed, AlertTriangle } from 'lucide-react';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/cn';
 import { useGetTeacherTimetableQuery } from '@/features/timetable/timetableApi';
+import type { ValidTeacherSwapTarget, InvalidTeacherSwapTarget } from '@/features/timetable/timetableApi';
 import { DAY_LABELS_SHORT as DAY_LABELS } from '@/lib/days';
 
 const SUBJECT_COLORS = [
@@ -31,18 +34,95 @@ function parseTimeToMinutes(time: string): number {
   return parseInt(match[1]) * 60 + parseInt(match[2]);
 }
 
+// ── DnD cell wrappers ──
+
+function DraggableCell({ slotId, children }: { slotId: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: slotId });
+  return (
+    <div ref={setNodeRef} {...listeners} {...attributes} className={cn('transition-opacity cursor-grab', isDragging && 'opacity-30')}>
+      {children}
+    </div>
+  );
+}
+
+function DroppableCell({ slotId, children, validity }: { slotId: string; children: React.ReactNode; validity?: 'valid' | 'invalid' | 'valid-cross' }) {
+  const { isOver, setNodeRef } = useDroppable({ id: slotId });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'min-h-[40px] rounded-lg transition-all duration-150',
+        isOver && validity === 'valid' && 'bg-emerald-400/30 ring-2 ring-emerald-500 scale-[1.03]',
+        isOver && validity === 'valid-cross' && 'bg-emerald-400/30 ring-2 ring-emerald-500 scale-[1.03]',
+        isOver && validity === 'invalid' && 'bg-red-400/30 ring-2 ring-red-500 scale-[0.97]',
+        !isOver && validity === 'valid' && 'ring-2 ring-emerald-400 bg-emerald-400/15',
+        !isOver && validity === 'valid-cross' && 'ring-2 ring-blue-400 bg-blue-400/10',
+        !isOver && validity === 'invalid' && 'opacity-40',
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── Cell content renderers ──
+
+interface AssignmentData {
+  id: string;
+  subject: { id: string; name: string };
+  teacher: { id: string; name: string } | null;
+  electiveGroup?: { id: string; name: string } | null;
+  assistantTeacher?: { id: string; name: string } | null;
+  role?: string;
+}
+
+function CellContent({ assignment, isElective }: { assignment: AssignmentData; isElective: boolean }) {
+  const electiveName = isElective ? assignment.electiveGroup?.name : null;
+  const isAssistant = assignment.role === 'assistant';
+  const colorClass = isAssistant
+    ? 'bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200'
+    : getSubjectColor(electiveName ?? assignment.subject.name);
+
+  return (
+    <div className={`rounded-lg px-1.5 py-1 text-center relative ${colorClass}`}>
+      {isAssistant && (
+        <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[7px] font-bold px-1 rounded-full leading-tight">Asst</span>
+      )}
+      {electiveName && (
+        <div className="text-[8px] uppercase tracking-wider opacity-80 truncate">{electiveName}</div>
+      )}
+      <div className="text-[10px] font-bold truncate">{assignment.subject.name}</div>
+      <div className="text-[8px] opacity-75 truncate">{assignment.teacher?.name ?? '(Unassigned)'}</div>
+      {assignment.assistantTeacher && (
+        <div className="text-[7px] opacity-60 truncate italic">
+          {isAssistant ? `Primary: ${assignment.assistantTeacher.name}` : `Asst: ${assignment.assistantTeacher.name}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main grid ──
+
 interface Props {
   teacherId: string;
   teacherName?: string;
-  /** Assigned periods from the teacher load API (assignment-based, not timetable-based). */
   assignedPeriods?: number;
+  isDndEnabled?: boolean;
+  validTargets?: ValidTeacherSwapTarget[];
+  invalidTargets?: InvalidTeacherSwapTarget[];
+  activeDragSlotId?: string | null;
 }
 
-/**
- * Renders a single teacher's weekly timetable as a grid.
- * Used by the detail subroute and embedded by other surfaces if needed.
- */
-export function TeacherTimetableGrid({ teacherId, teacherName, assignedPeriods }: Props) {
+export function TeacherTimetableGrid({
+  teacherId,
+  teacherName,
+  assignedPeriods,
+  isDndEnabled = false,
+  validTargets = [],
+  invalidTargets = [],
+  activeDragSlotId,
+}: Props) {
   const { data: grid, isLoading } = useGetTeacherTimetableQuery(teacherId, { skip: !teacherId });
 
   const headerSlots = useMemo(() => {
@@ -73,13 +153,24 @@ export function TeacherTimetableGrid({ teacherId, teacherName, assignedPeriods }
     [grid],
   );
 
-  // Prefer the assignment-based count from the load API (consistent with list view).
-  // Fall back to counting occupied grid cells when load data isn't available.
   const gridPeriods = sortedDays.reduce(
     (sum, day) => sum + day.periods.filter((p) => p.assignments.length > 0).length,
     0,
   );
   const totalPeriods = assignedPeriods ?? gridPeriods;
+
+  // Build validity lookup: slotId → 'valid' | 'valid-cross' | 'invalid'
+  const validityMap = useMemo(() => {
+    if (!activeDragSlotId) return new Map<string, 'valid' | 'valid-cross' | 'invalid'>();
+    const map = new Map<string, 'valid' | 'valid-cross' | 'invalid'>();
+    for (const t of validTargets) {
+      map.set(t.slotId, t.isSameDivision ? 'valid' : 'valid-cross');
+    }
+    for (const t of invalidTargets) {
+      map.set(t.slotId, 'invalid');
+    }
+    return map;
+  }, [activeDragSlotId, validTargets, invalidTargets]);
 
   if (isLoading) return <Skeleton className="h-64 rounded-xl" />;
 
@@ -99,8 +190,11 @@ export function TeacherTimetableGrid({ teacherId, teacherName, assignedPeriods }
     <div className="space-y-4">
       {/* Summary bar */}
       <div className="flex items-center gap-4 rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm px-5 py-3">
-        <span className="text-sm font-medium">{teacherName ?? grid.timetable?.divisionId ?? 'Teacher'}</span>
+        <span className="text-sm font-medium">{teacherName ?? 'Teacher'}</span>
         <span className="text-xs text-muted-foreground">{totalPeriods} periods/week</span>
+        {isDndEnabled && (
+          <span className="text-[10px] text-muted-foreground/60 ml-auto">Drag cells to swap</span>
+        )}
       </div>
 
       {/* Grid */}
@@ -148,43 +242,90 @@ export function TeacherTimetableGrid({ teacherId, teacherName, assignedPeriods }
                       </td>
                     );
                   }
+
                   const period = day.periods.find((p) => p.slot.sortOrder === slot.sortOrder);
-                  const assignment = period?.assignments[0];
-                  if (!assignment) {
+                  const assignments = period?.assignments ?? [];
+                  const isElective = period?.isElective ?? false;
+                  const hasContent = assignments.length > 0;
+                  const isDoubleBooked = assignments.length > 1 && !isElective;
+                  const primarySlotId = period?.timetableSlotId || period?.slotIds?.[0] || '';
+
+                  // Non-DnD mode or no slot ID
+                  if (!isDndEnabled || !primarySlotId) {
+                    if (!hasContent) {
+                      return (
+                        <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40">
+                          <span className="text-[10px] text-muted-foreground/40">--</span>
+                        </td>
+                      );
+                    }
                     return (
-                      <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40">
-                        <span className="text-[10px] text-muted-foreground/40">--</span>
+                      <td key={slot.id} className="px-1 py-1 border-r border-border/40">
+                        {isDoubleBooked ? (
+                          <div className="space-y-0.5">
+                            {assignments.map((a, i) => (
+                              <div key={a.id} className={i > 0 ? 'ring-1 ring-red-500/60 rounded-lg' : ''}>
+                                <CellContent assignment={a} isElective={false} />
+                                {i > 0 && <AlertTriangle className="size-2.5 text-red-500 mx-auto -mt-0.5" />}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <CellContent assignment={assignments[0]} isElective={isElective} />
+                        )}
                       </td>
                     );
                   }
-                  const electiveName = period?.isElective ? assignment.electiveGroup?.name : null;
-                  const isAssistant = assignment.role === 'assistant';
-                  const colorClass = isAssistant
-                    ? 'bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200'
-                    : getSubjectColor(electiveName ?? assignment.subject.name);
-                  const allDivisions = period?.assignments.map(a => a.teacher?.name).filter(Boolean);
-                  const divisionLabel = allDivisions && allDivisions.length > 1
-                    ? allDivisions.join(', ')
-                    : assignment.teacher?.name ?? '(Unassigned)';
-                  return (
-                    <td key={slot.id} className="px-1 py-1 border-r border-border/40">
-                      <div className={`rounded-lg px-1.5 py-1 text-center relative ${colorClass}`}>
-                        {isAssistant && (
-                          <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[7px] font-bold px-1 rounded-full leading-tight">
-                            Asst
-                          </span>
-                        )}
-                        {electiveName && (
-                          <div className="text-[8px] uppercase tracking-wider opacity-80 truncate">{electiveName}</div>
-                        )}
-                        <div className="text-[10px] font-bold truncate">{assignment.subject.name}</div>
-                        <div className="text-[8px] opacity-75 truncate">{divisionLabel}</div>
-                        {assignment.assistantTeacher && (
-                          <div className="text-[7px] opacity-60 truncate italic">
-                            {isAssistant ? `Primary: ${assignment.assistantTeacher.name}` : `Asst: ${assignment.assistantTeacher.name}`}
+
+                  // DnD mode
+                  const validity = validityMap.get(primarySlotId);
+                  const isDragSource = activeDragSlotId === primarySlotId;
+
+                  if (!hasContent) {
+                    // Empty cell: droppable only
+                    return (
+                      <td key={slot.id} className="px-1 py-1 border-r border-border/40">
+                        <DroppableCell slotId={primarySlotId} validity={validity}>
+                          <div className="flex items-center justify-center min-h-[40px]">
+                            <span className="text-[10px] text-muted-foreground/40">--</span>
                           </div>
-                        )}
-                      </div>
+                        </DroppableCell>
+                      </td>
+                    );
+                  }
+
+                  if (isDoubleBooked) {
+                    // Double-booked: each assignment is separately draggable
+                    return (
+                      <td key={slot.id} className="px-1 py-1 border-r border-border/40">
+                        <div className="space-y-0.5">
+                          {assignments.map((a, i) => {
+                            const aSlotId = period?.slotIds?.[i] || primarySlotId;
+                            const aValidity = validityMap.get(aSlotId);
+                            return (
+                              <DraggableCell key={a.id} slotId={aSlotId}>
+                                <DroppableCell slotId={aSlotId} validity={aValidity}>
+                                  <div className={i > 0 ? 'ring-1 ring-red-500/60 rounded-lg relative' : ''}>
+                                    <CellContent assignment={a} isElective={false} />
+                                    {i > 0 && <AlertTriangle className="size-2.5 text-red-500 absolute top-0.5 right-0.5" />}
+                                  </div>
+                                </DroppableCell>
+                              </DraggableCell>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    );
+                  }
+
+                  // Regular or elective cell: draggable + droppable
+                  return (
+                    <td key={slot.id} className={cn('px-1 py-1 border-r border-border/40', isDragSource && 'opacity-30')}>
+                      <DraggableCell slotId={primarySlotId}>
+                        <DroppableCell slotId={primarySlotId} validity={validity}>
+                          <CellContent assignment={assignments[0]} isElective={isElective} />
+                        </DroppableCell>
+                      </DraggableCell>
                     </td>
                   );
                 })}

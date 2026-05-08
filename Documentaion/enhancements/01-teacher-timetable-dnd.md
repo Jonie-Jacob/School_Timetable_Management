@@ -407,7 +407,7 @@ Extract the resolution table into a shared sub-component (`ConflictResolutionTab
 
 ---
 
-### Phase 6: Frontend -- TeacherTimetableGrid DnD
+### Phase 6: Frontend -- TeacherTimetableGrid DnD -- IMPLEMENTED
 
 **Goal:** Make the teacher timetable grid interactive with drag-and-drop.
 
