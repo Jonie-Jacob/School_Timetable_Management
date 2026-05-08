@@ -29,8 +29,8 @@ provider:
             - dynamodb:DeleteItem
             - dynamodb:Query
           Resource:
-            - arn:aws:dynamodb:ap-south-1:648485682362:table/timetable-prod-ws-connections
-            - arn:aws:dynamodb:ap-south-1:648485682362:table/timetable-prod-ws-connections/index/*
+            - arn:aws:dynamodb:ap-south-1:648485682362:table/timetable-${self:provider.stage}-ws-connections
+            - arn:aws:dynamodb:ap-south-1:648485682362:table/timetable-${self:provider.stage}-ws-connections/index/*
         - Effect: Allow
           Action:
             - execute-api:ManageConnections
@@ -49,7 +49,7 @@ functions:
     handler: src/handler.handler
     timeout: 30
     layers:
-      - arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:13
+      - ${env:SHARED_LAYER_ARN, 'arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:15'}
     environment:
       API_GATEWAY_ENDPOINT:
         !Sub "https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${sls:stage}"
@@ -75,7 +75,7 @@ functions:
     handler: src/wsHandler.handler
     timeout: 30
     layers:
-      - arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:13
+      - ${env:SHARED_LAYER_ARN, 'arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:15'}
     environment:
       API_GATEWAY_ENDPOINT:
         !Sub "https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${sls:stage}"

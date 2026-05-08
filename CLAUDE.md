@@ -187,6 +187,39 @@ cd services\teacher; npx serverless deploy --stage prod
 **Full deployment guide:** See `Documentaion/AWS_Deployment_Guide.md`
 **Operations & updates:** See `Documentaion/Deployment_Operations.md`
 
+## Deployment (Development)
+
+- **CloudFront URL**: `https://dhx488d27udyg.cloudfront.net`
+- **CloudFront Distribution ID**: `EHYD0FQL3TM93`
+- **Cognito User Pool**: `ap-south-1_mWBuXlrB7`
+- **Cognito Client ID**: `24fdegijgjj58bo24c1mujs20l`
+- **Database**: `timetable_dev` (same RDS instance as prod)
+- **Frontend S3 Bucket**: `timetable-dev-frontend`
+- **DynamoDB Table**: `timetable-dev-ws-connections`
+- **Lambda Role**: `timetable-dev-lambda-role`
+- **Terraform State**: `s3://zyphr-timetable-terraform-state` key: `dev/terraform.tfstate`
+- **Terraform Config**: `infra/terraform-dev/` (references prod state for shared VPC/RDS)
+- **WebSocket URL**: `wss://rgqbuabhu1.execute-api.ap-south-1.amazonaws.com/dev`
+
+### Branch Strategy
+
+- `production` branch → deploys to `--stage prod` (production)
+- `develop` branch → deploys to `--stage dev` (development)
+- Feature branches → merge into `develop` → test on dev → merge into `production` for release
+
+### Quick Deploy Commands
+
+```bash
+# Deploy all services to dev
+npm run deploy:all:dev
+
+# Deploy frontend to dev
+npm run deploy:frontend:dev
+
+# Health check dev
+npm run health:check:dev
+```
+
 ## Important Notes
 
 - Do NOT add a `period_structure_classes` table — it was removed. Use `divisions.period_structure_id` instead.
@@ -195,6 +228,8 @@ cd services\teacher; npx serverless deploy --stage prod
 - Frontend uses `sonner` for toasts, `@dnd-kit` for drag-and-drop, `shadcn/ui` primitives.
 - The FAB and setup wizard have been removed (Enhancement 3). Timetable status is now shown via computed status badges throughout the UI. The notification bell and notifications page have also been removed — status information is derived from `status_json`.
 - Vite proxy uses `rewrite` to strip `/api` prefix before forwarding to localhost services.
+- Local dev uses `--stage local` (not `dev`). The `dev` stage is now a real AWS deployment. All service `package.json` scripts use `serverless offline start --stage local`.
+- Frontend has three env modes: `.env` (local mock auth), `.env.staging` (dev AWS Cognito), `.env.production` (prod AWS Cognito). Build with `npx vite build --mode staging` for dev.
 - Cross-div elective divisions may have **different subject subsets** (asymmetric). For subjects shared across divisions, teacher sets must be identical. The output writer writes timetable_slots using only each division's own assignments.
 - `parallel_sections` in `elective_group_subjects` determines parallel vs split mode. Ensure this matches the actual number of simultaneous classes intended.
 
@@ -222,15 +257,17 @@ cd services\teacher; npx serverless deploy --stage prod
 
 ## Lambda Layer
 
-- Layer name: `timetable-shared`
-- Current version: **15** (ARN: `arn:aws:lambda:ap-south-1:648485682362:layer:timetable-shared:15`)
+- Prod layer name: `timetable-prod-shared-deps`, Dev: `timetable-dev-shared-deps`
+- Published via S3 upload (too large for direct upload): `s3://zyphr-timetable-terraform-state/layers/{stage}/shared-layer.zip`
 - Contains: `@timetable/shared` compiled code + Prisma client + Linux engine binary + AWS SDK deps (@aws-sdk/client-lambda, client-dynamodb, lib-dynamodb, client-ses, @smithy/*)
 - Must include only the Linux engine (remove Windows DLL, WASM engines to stay under 250MB unzipped limit)
-- Published via S3 upload (too large for direct upload): `s3://zyphr-timetable-terraform-state/layers/shared-layer.zip`
+- Build script: `scripts/build-layer.sh` — uses PowerShell `Compress-Archive` fallback on Windows (no `zip` command)
 
 ## CloudFront API Routing
 
-All API calls go through CloudFront with `/api/` prefix behaviors:
+API behaviors are **NOT managed by Terraform** — they were added manually via AWS CLI/Console. Running `terraform apply` on the CloudFront module will **remove** these behaviors (Terraform treats them as drift). If that happens, re-add them using the Node.js script approach from the dev environment setup.
+
+**Production** (CloudFront `EUWIXJK2BNYEF`):
 ```
 /api/auth*              → API GW (7qzi5sjy57)
 /api/academic-years*    → API GW (ktyoe2hub0)
@@ -247,3 +284,31 @@ All API calls go through CloudFront with `/api/` prefix behaviors:
 /api/notifications*     → API GW (hymkzmxboc)
 Default (*)             → S3 (timetable-prod-frontend) — SPA with 403/404 → index.html
 ```
+
+**Development** (CloudFront `EHYD0FQL3TM93`):
+```
+/api/auth*              → API GW (vxr50r3xyb)
+/api/academic-years*    → API GW (3k8m24snx2)
+/api/config*            → API GW (kbyufnofyb)
+/api/subjects*          → API GW (ldf7qfc8e9)
+/api/teachers*          → API GW (nqlsm39mia)
+/api/classes*           → API GW (jfjsrl74lj)
+/api/assignments*       → API GW (bdkc3cak4c)
+/api/divisions*         → API GW (bdkc3cak4c)
+/api/elective-groups*   → API GW (bdkc3cak4c)
+/api/timetables*        → API GW (e138tmyci8)
+/api/dashboard*         → API GW (z7m27shfq5)
+/api/export*            → API GW (jovoris00a)
+/api/ws*                → API GW (x1qfc9co14)
+Default (*)             → S3 (timetable-dev-frontend)
+```
+
+## Multi-Environment Notes
+
+- **Serverless stages**: `prod` for production, `dev` for development, `local` for local offline dev. The `serverless-prod-config` plugin skips VPC/IAM/Layer only when `stage === 'local'`.
+- **RDS access from Lambda**: The Lambda security group (`sg-023ec7ce6f103470a`) has a **self-referencing inbound rule** on port 5432. This allows Lambdas in that SG to reach the RDS instance (also in that SG). Do NOT remove this rule.
+- **RDS is in a private subnet** with NAT gateway only — cannot be reached from the internet even when marked "publicly accessible". To run ad-hoc SQL, use a Lambda function inside the VPC (with the `pg` npm package bundled, not Prisma).
+- **Creating a new database on RDS**: Use a temporary Lambda with bundled `pg` package (not the shared layer — Prisma from the layer has engine path issues for ad-hoc scripts). See Phase 3 of `Documentaion/enhancements/dev-environment-setup.md`.
+- **Git Bash on Windows (MSYS)**: Paths starting with `/` get converted to `C:/Program Files/Git/...`. Use `export MSYS_NO_PATHCONV=1` in bash scripts that pass paths to AWS CLI (SSM parameter names, S3 keys, etc.). Already set in `scripts/deploy.sh`.
+- **Lambda layer upload**: Layer zip (~60MB) is too large for direct `PublishLayerVersion` upload. Must upload to S3 first, then use `--content S3Bucket=...,S3Key=...`. Already handled in `scripts/deploy.sh`.
+- **Terraform and CloudFront**: Do NOT run `terraform apply` on the CloudFront module without checking the plan — it will remove manually-added API Gateway behaviors. If needed, re-add them via AWS CLI `update-distribution` with a JSON config.

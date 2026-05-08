@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "src/handler.ts",
   "scripts": {
-    "dev": "serverless offline start --noAuth",
+    "dev": "serverless offline start --stage local --noAuth",
     "build": "tsc"
   },
   "dependencies": {

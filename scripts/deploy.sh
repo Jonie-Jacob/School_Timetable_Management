@@ -13,6 +13,9 @@
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
+# Prevent MSYS/Git Bash from converting /path to C:/Program Files/Git/path
+export MSYS_NO_PATHCONV=1
+
 STAGE="${1:-prod}"
 REGION="ap-south-1"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,9 +33,13 @@ echo ""
 echo "==> Step 2/5: Build and publish Lambda Layer"
 bash scripts/build-layer.sh
 
+# Upload layer zip to S3 (too large for direct upload)
+LAYER_S3_KEY="layers/${STAGE}/shared-layer.zip"
+aws s3 cp layers/shared/shared-layer.zip "s3://zyphr-timetable-terraform-state/${LAYER_S3_KEY}" --region "$REGION"
+
 LAYER_ARN=$(aws lambda publish-layer-version \
   --layer-name "timetable-${STAGE}-shared-deps" \
-  --zip-file "fileb://layers/shared/shared-layer.zip" \
+  --content "S3Bucket=zyphr-timetable-terraform-state,S3Key=${LAYER_S3_KEY}" \
   --compatible-runtimes nodejs22.x \
   --region "$REGION" \
   --query 'LayerVersionArn' \

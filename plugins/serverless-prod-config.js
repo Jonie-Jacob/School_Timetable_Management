@@ -26,8 +26,8 @@ class ServerlessProdConfig {
 
   applyProdConfig() {
     const stage = this.serverless.service.provider.stage;
-    if (stage === 'dev') {
-      this.serverless.cli.log('[prod-config] Stage is dev — skipping VPC/IAM/Layer config');
+    if (stage === 'local') {
+      this.serverless.cli.log('[prod-config] Stage is local — skipping VPC/IAM/Layer config');
       return;
     }
 

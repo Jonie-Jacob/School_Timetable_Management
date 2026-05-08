@@ -51,7 +51,13 @@ fi
 
 echo "==> Creating zip..."
 cd "$BUILD_DIR"
-zip -r "$LAYER_DIR/shared-layer.zip" nodejs/ -q
+if command -v zip &>/dev/null; then
+  zip -r "$LAYER_DIR/shared-layer.zip" nodejs/ -q
+else
+  # Windows fallback using PowerShell
+  rm -f "$LAYER_DIR/shared-layer.zip"
+  powershell.exe -Command "Compress-Archive -Path 'nodejs' -DestinationPath '$(cygpath -w "$LAYER_DIR/shared-layer.zip")' -Force"
+fi
 
 LAYER_SIZE=$(du -sh "$LAYER_DIR/shared-layer.zip" | cut -f1)
 echo "==> Layer built: layers/shared/shared-layer.zip ($LAYER_SIZE)"

@@ -55,3 +55,25 @@ output "ecs_cluster_name" {
 output "dynamodb_table_name" {
   value = module.dynamodb.table_name
 }
+
+# ── VPC Security Groups (needed by dev environment) ─────────────────────────
+
+output "lambda_sg_id" {
+  value = module.vpc.lambda_sg_id
+}
+
+output "fargate_sg_id" {
+  value = module.vpc.fargate_sg_id
+}
+
+# ── CloudFront Distribution ID ──────────────────────────────────────────────
+
+output "cloudfront_distribution_id" {
+  value = module.cloudfront.distribution_id
+}
+
+# ── RDS ──────────────────────────────────────────────────────────────────────
+
+output "rds_instance_arn" {
+  value = module.rds.db_instance_arn
+}
