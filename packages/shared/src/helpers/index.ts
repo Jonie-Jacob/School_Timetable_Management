@@ -56,6 +56,10 @@ export {
   type TimetableStatusJson,
 } from './timetableStatusHelper';
 export {
+  annotateSlotViolations,
+  type SlotViolation,
+} from './slotViolationHelper';
+export {
   assessAssignmentImpact,
   type AssignmentImpact,
   type ResolutionStep,

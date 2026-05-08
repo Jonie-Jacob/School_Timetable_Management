@@ -55,6 +55,8 @@ export {
   findAffectedTimetableIds,
   type TimetableStatusTagType,
   type TimetableStatusJson,
+  annotateSlotViolations,
+  type SlotViolation,
   assessAssignmentImpact,
   type AssignmentImpact,
   type ResolutionStep,

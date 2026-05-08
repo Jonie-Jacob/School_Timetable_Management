@@ -203,7 +203,7 @@ export interface TimetableStatusJson {
 
 ---
 
-### Phase 2: Status Recomputation Engine -- HELPER ALREADY BUILT (Enhancement 14, Phase 7)
+### Phase 2: Status Recomputation Engine -- IMPLEMENTED
 
 > The recomputation helper was pre-built in Enhancement 14, Phase 7.
 > File: `packages/shared/src/helpers/timetableStatusHelper.ts`
@@ -228,7 +228,7 @@ export interface TimetableStatusJson {
 > 2. Implement scheduling preference violation checks (hard + soft)
 > 3. Wire `recomputeTimetableStatus()` into all 6+ services after data changes
 
-#### 2.1 Complete preference violation checks in `recomputeTimetableStatus()`
+#### 2.1 Complete preference violation checks in `recomputeTimetableStatus()` -- DONE
 
 This is the core function that evaluates a timetable and returns its status. Called after every change.
 
@@ -278,11 +278,11 @@ This is the core function that evaluates a timetable and returns its status. Cal
 12. Update timetable record with new statusJson and statusComputedAt
 ```
 
-#### 2.2 Create `recomputeMultipleTimetableStatuses()` helper
+#### 2.2 Create `recomputeMultipleTimetableStatuses()` helper -- DONE (pre-built)
 
 Batch version that recomputes status for multiple timetable IDs. Used when a change affects many timetables (e.g., teacher delete).
 
-#### 2.3 Create per-slot violation annotator
+#### 2.3 Create per-slot violation annotator -- DONE
 
 **File:** `packages/shared/src/helpers/slotViolationHelper.ts` (NEW)
 

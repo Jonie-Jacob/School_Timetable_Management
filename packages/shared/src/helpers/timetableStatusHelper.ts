@@ -249,10 +249,176 @@ export async function recomputeTimetableStatus(
     }));
   }
 
-  // ── CHECK 6: Scheduling Preference Violations ──
-  // TODO: Implement in Enhancement 3 Phase 2
-  // Requires parsing schedulingPreferences JSON from each assignment
-  // and checking against slot placement (day, period range, adjacency, etc.)
+  // ── CHECK 6: Scheduling Preference Violations (Hard + Soft) ──
+  // Group slots by assignmentId to check per-assignment constraints
+  const hardPrefViolations: NonNullable<TimetableStatusJson['details']['hardPreferenceViolations']> = [];
+  const softPrefViolations: NonNullable<TimetableStatusJson['details']['softPreferenceViolations']> = [];
+
+  // Build a map of assignmentId → all slots for that assignment (for min/max per day, adjacency)
+  const slotsByAssignment = new Map<string, typeof periodSlots>();
+  for (const s of periodSlots) {
+    if (!s.divisionAssignmentId) continue;
+    const list = slotsByAssignment.get(s.divisionAssignmentId) ?? [];
+    list.push(s);
+    slotsByAssignment.set(s.divisionAssignmentId, list);
+  }
+
+  for (const [assignmentId, assignmentSlots] of slotsByAssignment) {
+    const da = assignmentSlots[0].divisionAssignment;
+    if (!da) continue;
+
+    const prefs = da.schedulingPreferences as {
+      constraintType?: 'HARD' | 'SOFT';
+      preferredDays?: number[];
+      excludedDays?: number[];
+      preferredPeriodRange?: { min: number; max: number };
+      excludedPeriodRange?: { min: number; max: number };
+      preferAdjacentPeriods?: boolean;
+      maxPeriodsPerDay?: number;
+      minPeriodsPerDay?: number;
+    } | null;
+    if (!prefs) continue;
+
+    const isHard = prefs.constraintType === 'HARD';
+    const target = isHard ? hardPrefViolations : softPrefViolations;
+    const subjectName = da.subject?.name ?? 'Unknown';
+
+    // Check excluded days
+    if (prefs.excludedDays && prefs.excludedDays.length > 0) {
+      for (const s of assignmentSlots) {
+        if (prefs.excludedDays.includes(s.workingDay.dayOfWeek)) {
+          target.push({
+            slotId: s.id,
+            assignmentId,
+            subjectName,
+            violation: `Scheduled on excluded day (${s.workingDay.label})`,
+          });
+        }
+      }
+    }
+
+    // Check excluded period range
+    if (prefs.excludedPeriodRange) {
+      const { min, max } = prefs.excludedPeriodRange;
+      for (const s of assignmentSlots) {
+        const pn = s.slot.slotNumber ?? 0;
+        if (pn >= min && pn <= max) {
+          target.push({
+            slotId: s.id,
+            assignmentId,
+            subjectName,
+            violation: `Scheduled in excluded period range (P${min}-P${max})`,
+          });
+        }
+      }
+    }
+
+    // Check preferred days (violation if NOT on a preferred day)
+    if (prefs.preferredDays && prefs.preferredDays.length > 0) {
+      for (const s of assignmentSlots) {
+        if (!prefs.preferredDays.includes(s.workingDay.dayOfWeek)) {
+          target.push({
+            slotId: s.id,
+            assignmentId,
+            subjectName,
+            violation: `Not on a preferred day (${s.workingDay.label})`,
+          });
+        }
+      }
+    }
+
+    // Check preferred period range (violation if NOT in range)
+    if (prefs.preferredPeriodRange) {
+      const { min, max } = prefs.preferredPeriodRange;
+      for (const s of assignmentSlots) {
+        const pn = s.slot.slotNumber ?? 0;
+        if (pn < min || pn > max) {
+          target.push({
+            slotId: s.id,
+            assignmentId,
+            subjectName,
+            violation: `Not in preferred period range (P${min}-P${max})`,
+          });
+        }
+      }
+    }
+
+    // Check max periods per day
+    if (prefs.maxPeriodsPerDay) {
+      const dayGroups = new Map<number, typeof assignmentSlots>();
+      for (const s of assignmentSlots) {
+        const list = dayGroups.get(s.workingDay.dayOfWeek) ?? [];
+        list.push(s);
+        dayGroups.set(s.workingDay.dayOfWeek, list);
+      }
+      for (const [, daySlots] of dayGroups) {
+        if (daySlots.length > prefs.maxPeriodsPerDay) {
+          // Report on the excess slots
+          for (const s of daySlots.slice(prefs.maxPeriodsPerDay)) {
+            target.push({
+              slotId: s.id,
+              assignmentId,
+              subjectName,
+              violation: `Exceeds max ${prefs.maxPeriodsPerDay} periods/day (has ${daySlots.length} on ${s.workingDay.label})`,
+            });
+          }
+        }
+      }
+    }
+
+    // Check min periods per day (only on days where the subject appears)
+    if (prefs.minPeriodsPerDay) {
+      const dayGroups = new Map<number, typeof assignmentSlots>();
+      for (const s of assignmentSlots) {
+        const list = dayGroups.get(s.workingDay.dayOfWeek) ?? [];
+        list.push(s);
+        dayGroups.set(s.workingDay.dayOfWeek, list);
+      }
+      for (const [, daySlots] of dayGroups) {
+        if (daySlots.length < prefs.minPeriodsPerDay) {
+          target.push({
+            slotId: daySlots[0].id,
+            assignmentId,
+            subjectName,
+            violation: `Below min ${prefs.minPeriodsPerDay} periods/day (has ${daySlots.length} on ${daySlots[0].workingDay.label})`,
+          });
+        }
+      }
+    }
+
+    // Check adjacency preference
+    if (prefs.preferAdjacentPeriods) {
+      const dayGroups = new Map<number, typeof assignmentSlots>();
+      for (const s of assignmentSlots) {
+        const list = dayGroups.get(s.workingDay.dayOfWeek) ?? [];
+        list.push(s);
+        dayGroups.set(s.workingDay.dayOfWeek, list);
+      }
+      for (const [, daySlots] of dayGroups) {
+        if (daySlots.length < 2) continue;
+        const sorted = [...daySlots].sort((a, b) => a.slot.sortOrder - b.slot.sortOrder);
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i].slot.sortOrder - sorted[i - 1].slot.sortOrder > 1) {
+            target.push({
+              slotId: sorted[i].id,
+              assignmentId,
+              subjectName,
+              violation: `Non-adjacent periods on ${sorted[i].workingDay.label} (P${sorted[i - 1].slot.slotNumber} and P${sorted[i].slot.slotNumber})`,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  if (hardPrefViolations.length > 0) {
+    statuses.push('PREFERENCE_VIOLATION_HARD');
+    details.hardPreferenceViolations = hardPrefViolations;
+  }
+  if (softPrefViolations.length > 0) {
+    statuses.push('PREFERENCE_VIOLATION_SOFT');
+    details.softPreferenceViolations = softPrefViolations;
+  }
 
   // ── Final: If no issues found, mark as VALID ──
   if (statuses.length === 0) {
@@ -265,17 +431,14 @@ export async function recomputeTimetableStatus(
     computedAt: new Date().toISOString(),
   };
 
-  // Update timetable record with raw query (statusJson column added in Enhancement 3 migration)
-  try {
-    await prisma.$executeRawUnsafe(
-      `UPDATE timetables SET status_json = $1::jsonb WHERE id = $2`,
-      JSON.stringify(result),
-      timetableId,
-    );
-  } catch {
-    // statusJson column may not exist yet (pre-Enhancement 3 migration)
-    console.warn(`[timetable-status] Could not update status_json for ${timetableId} -- column may not exist yet`);
-  }
+  // Update timetable record
+  await prisma.timetable.update({
+    where: { id: timetableId },
+    data: {
+      statusJson: result as any,
+      statusComputedAt: new Date(),
+    },
+  });
 
   return result;
 }
