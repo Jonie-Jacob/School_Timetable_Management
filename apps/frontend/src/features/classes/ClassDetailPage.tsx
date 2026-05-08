@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { TimetableStatusBadge } from '@/components/shared/TimetableStatusBadge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -263,14 +264,7 @@ export function Component() {
                 {/* Stats row */}
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <span>{assignmentCount} {t('detail.subjects')}</span>
-                  {ttStatus && (
-                    <Badge variant={ttStatus === 'GENERATED' ? 'success' : 'warning'} className="text-[10px]">
-                      {ttStatus === 'GENERATED' ? t('detail.generated') : t('detail.outdated')}
-                    </Badge>
-                  )}
-                  {!ttStatus && (
-                    <Badge variant="outline" className="text-[10px]">{t('detail.pending')}</Badge>
-                  )}
+                  <TimetableStatusBadge statusJson={div.timetable?.statusJson as any} legacyStatus={ttStatus} size="sm" />
                 </div>
 
                 {/* Action buttons */}
@@ -285,7 +279,7 @@ export function Component() {
                     <CalendarDays className="size-3 mr-1" />
                     {t('detail.generate')}
                   </Button>
-                  {ttStatus === 'GENERATED' && (
+                  {div.timetable && (
                     <Button variant="outline" size="xs" className="text-[11px]"
                       onClick={(e) => { e.stopPropagation(); navigate(`/classes/${id}/divisions/${div.id}/timetable`); }}>
                       <Eye className="size-3 mr-1" />

@@ -51,6 +51,7 @@ import {
 import { DraggableCell, DroppableCell, CellContent, ElectiveCellContent } from './TimetableCells';
 import { ElectiveSwapConfirmDialog } from './ElectiveSwapConfirmDialog';
 import { SwapConflictResolutionDialog } from './SwapConflictResolutionDialog';
+import { TimetableStatusBadge } from '@/components/shared/TimetableStatusBadge';
 
 import { DAY_LABELS_FULL as DAY_LABELS } from '@/lib/days';
 
@@ -339,7 +340,7 @@ export function Component() {
       <PageHeader title={t('editor.title')} description={divisionLabel}
         actions={
           <div className="flex items-center gap-2">
-            <Badge variant={grid.timetable.status === 'GENERATED' ? 'success' : 'warning'}>{grid.timetable.status}</Badge>
+            <TimetableStatusBadge statusJson={grid.timetable.statusJson as any} legacyStatus={grid.timetable.status} />
             <Button variant="outline" size="sm" onClick={() => navigate(-1)}><ArrowLeft className="size-3.5" />Back</Button>
           </div>
         }
@@ -534,8 +535,15 @@ export function Component() {
 
                     const isCellSwapping = swappingSlotIds.has(period.timetableSlotId);
 
+                    const hasViolations = (period.violations?.length ?? 0) > 0;
+
                     return (
                       <td key={slot.id} className="px-1 py-1 border-r border-border/40 relative" onClick={openEditor} style={{ cursor: 'pointer' }}>
+                        {hasViolations && (
+                          <div className="absolute top-0.5 right-0.5 z-20" title={period.violations!.map(v => v.reason).join('\n')}>
+                            <AlertTriangle className="size-3 text-red-500" />
+                          </div>
+                        )}
                         {isCellSwapping && (
                           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[2px] rounded-lg">
                             <Loader2 className="size-5 animate-spin text-amber-500" />

@@ -277,8 +277,14 @@ export function TeacherTimetableGrid({
                         </td>
                       );
                     }
+                    const nonDndViolations = period?.violations ?? [];
                     return (
-                      <td key={slot.id} className="px-1 py-1 border-r border-border/40">
+                      <td key={slot.id} className="px-1 py-1 border-r border-border/40 relative">
+                        {nonDndViolations.length > 0 && (
+                          <div className="absolute top-0.5 right-0.5 z-20" title={nonDndViolations.map(v => v.reason).join('\n')}>
+                            <AlertTriangle className="size-2.5 text-red-500" />
+                          </div>
+                        )}
                         {isDoubleBooked ? (
                           <div className="space-y-0.5">
                             {assignments.map((a, i) => (
@@ -342,8 +348,14 @@ export function TeacherTimetableGrid({
                   }
 
                   // Regular or elective cell: draggable + droppable
+                  const cellViolations = period?.violations ?? [];
                   return (
-                    <td key={slot.id} className={cn('px-1 py-1 border-r border-border/40', isDragSource && 'opacity-30')}>
+                    <td key={slot.id} className={cn('px-1 py-1 border-r border-border/40 relative', isDragSource && 'opacity-30')}>
+                      {cellViolations.length > 0 && (
+                        <div className="absolute top-0.5 right-0.5 z-20" title={cellViolations.map(v => v.reason).join('\n')}>
+                          <AlertTriangle className="size-2.5 text-red-500" />
+                        </div>
+                      )}
                       <DraggableCell slotId={primarySlotId}>
                         <DroppableCell slotId={primarySlotId} validity={validity}>
                           <CellContent assignment={assignments[0]} isElective={isElective} />

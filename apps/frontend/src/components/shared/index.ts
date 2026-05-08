@@ -3,6 +3,7 @@ export { EmptyState } from './EmptyState';
 export { PageHeader } from './PageHeader';
 export { SearchInput } from './SearchInput';
 export { StatusBadge } from './StatusBadge';
+export { TimetableStatusBadge, getMostSevereStatus } from './TimetableStatusBadge';
 export { PageSkeleton } from './PageSkeleton';
 export { DataTable } from './DataTable';
 export { DataTableCardView } from './DataTableCardView';

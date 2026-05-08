@@ -372,38 +372,38 @@ Add `violations` array to `TimetablePeriod` type. Add `statusJson` to timetable 
 
 ---
 
-### Phase 5: Frontend -- Status Badges & Filtering
+### Phase 5: Frontend -- Status Badges & Filtering -- IMPLEMENTED
 
-#### 5.1 Create `TimetableStatusBadge` component
+#### 5.1 Create `TimetableStatusBadge` component -- DONE
 
 **File:** `apps/frontend/src/components/shared/TimetableStatusBadge.tsx` (NEW)
 
 Renders the most severe status as a colored badge with "+N more" indicator. Tooltip shows all statuses.
 
-#### 5.2 Update TimetablesOverviewPage
+#### 5.2 Update TimetablesOverviewPage -- DONE
 
 - Replace GENERATED/OUTDATED filter buttons with status tag filter (multi-select)
 - Show status badges per division
 - Replace "Regenerate Outdated" with "Regenerate" button that shows warning: "You can resolve issues manually via drag-and-drop instead of regenerating"
 - Filter by any status tag
 
-#### 5.3 Update ClassesPage
+#### 5.3 Update ClassesPage -- DONE
 
 Replace GENERATED/OUTDATED counts with status-based counts.
 
-#### 5.4 Update ClassDetailPage
+#### 5.4 Update ClassDetailPage -- DONE
 
 Replace status badge rendering.
 
-#### 5.5 Update GeneratorPage
+#### 5.5 Update GeneratorPage -- DONE
 
 Replace status badge and conditional logic.
 
-#### 5.6 Update TimetableViewPage
+#### 5.6 Update TimetableViewPage -- DONE
 
 Replace status badge. Show per-slot violation indicators (exclamation marks). Click to see violation details.
 
-#### 5.7 Update TeacherTimetableGrid
+#### 5.7 Update TeacherTimetableGrid -- DONE
 
 Show per-slot violation indicators for the viewed teacher.
 

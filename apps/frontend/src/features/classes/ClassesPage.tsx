@@ -121,8 +121,8 @@ export function Component() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {classes.map((cls) => {
             const divCount = cls.divisions?.length ?? 0;
-            const generatedCount = cls.divisions?.filter((d) => d.timetable?.status === 'GENERATED').length ?? 0;
-            const outdatedCount = cls.divisions?.filter((d) => d.timetable?.status === 'OUTDATED').length ?? 0;
+            const validCount = cls.divisions?.filter((d) => d.timetable?.statusJson?.statuses?.includes('VALID')).length ?? 0;
+            const issueCount = cls.divisions?.filter((d) => d.timetable?.statusJson && !d.timetable.statusJson.statuses?.includes('VALID') && d.timetable.statusJson.statuses?.length > 0).length ?? 0;
 
             return (
               <div
@@ -156,14 +156,14 @@ export function Component() {
 
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <span>{divCount} {divCount === 1 ? 'division' : 'divisions'}</span>
-                  {generatedCount > 0 && (
+                  {validCount > 0 && (
                     <Badge variant="success" className="text-[10px]">
-                      {generatedCount}/{divCount} Generated
+                      {validCount}/{divCount} Valid
                     </Badge>
                   )}
-                  {outdatedCount > 0 && (
+                  {issueCount > 0 && (
                     <Badge variant="warning" className="text-[10px]">
-                      {outdatedCount} Outdated
+                      {issueCount} Issues
                     </Badge>
                   )}
                 </div>

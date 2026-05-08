@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useAppDispatch } from '@/app/hooks';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { TimetableStatusBadge } from '@/components/shared/TimetableStatusBadge';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
@@ -292,9 +293,12 @@ export function Component() {
     })),
   );
 
+  const valid = allDivisions.filter((d) => d.timetable?.statusJson?.statuses?.includes('VALID')).length;
+  const withIssues = allDivisions.filter((d) => d.timetable?.statusJson && !d.timetable.statusJson.statuses?.includes('VALID') && d.timetable.statusJson.statuses?.length > 0).length;
+  const pending = allDivisions.filter((d) => !d.timetable).length;
+  // Legacy compat
   const generated = allDivisions.filter((d) => d.timetable?.status === 'GENERATED').length;
   const outdated = allDivisions.filter((d) => d.timetable?.status === 'OUTDATED').length;
-  const pending = allDivisions.filter((d) => !d.timetable).length;
 
   const getDivisionIdsForScope = (scope: GenerateScope) => {
     switch (scope) {
@@ -395,13 +399,13 @@ export function Component() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-card/60 backdrop-blur-sm px-4 py-2">
             <CheckCircle2 className="size-4 text-emerald-500" />
-            <span className="text-sm font-medium">{generated}</span>
-            <span className="text-xs text-muted-foreground">Generated</span>
+            <span className="text-sm font-medium">{valid}</span>
+            <span className="text-xs text-muted-foreground">Valid</span>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-card/60 backdrop-blur-sm px-4 py-2">
             <AlertTriangle className="size-4 text-amber-500" />
-            <span className="text-sm font-medium">{outdated}</span>
-            <span className="text-xs text-muted-foreground">Outdated</span>
+            <span className="text-sm font-medium">{withIssues}</span>
+            <span className="text-xs text-muted-foreground">Issues</span>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-card/60 backdrop-blur-sm px-4 py-2">
             <Clock className="size-4 text-muted-foreground" />
@@ -442,7 +446,6 @@ export function Component() {
       {!isLoading && allDivisions.length > 0 && !isDesktop && (
         <div className="space-y-2">
           {allDivisions.map((div) => {
-            const status = div.timetable?.status;
             return (
               <div key={div.id} className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-3.5 space-y-2.5 shadow-sm">
                 <div className="flex items-center justify-between">
@@ -451,12 +454,7 @@ export function Component() {
                     <span className="text-sm text-muted-foreground"> -- Div {div.label}</span>
                     {div.streamName && <span className="text-xs text-muted-foreground"> ({div.streamName})</span>}
                   </div>
-                  <Badge
-                    variant={status === 'GENERATED' ? 'success' : status === 'OUTDATED' ? 'warning' : 'outline'}
-                    className="text-[10px] shrink-0"
-                  >
-                    {status === 'GENERATED' ? 'Generated' : status === 'OUTDATED' ? 'Outdated' : 'Pending'}
-                  </Badge>
+                  <TimetableStatusBadge statusJson={div.timetable?.statusJson as any} legacyStatus={div.timetable?.status} size="sm" />
                 </div>
                 <div className="text-[11px] text-muted-foreground">{div.periodStructure?.name ?? '--'}</div>
                 <div className="flex items-center gap-1.5">
@@ -524,12 +522,7 @@ export function Component() {
                       {div.periodStructure?.name ?? '--'}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <Badge
-                        variant={status === 'GENERATED' ? 'success' : status === 'OUTDATED' ? 'warning' : 'outline'}
-                        className="text-[10px]"
-                      >
-                        {status === 'GENERATED' ? 'Generated' : status === 'OUTDATED' ? 'Outdated' : 'Pending'}
-                      </Badge>
+                      <TimetableStatusBadge statusJson={div.timetable?.statusJson as any} legacyStatus={div.timetable?.status} size="sm" />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
@@ -582,7 +575,7 @@ export function Component() {
             <tfoot>
               <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white">
                 <td colSpan={5} className="px-4 py-2.5 text-xs text-white/60">
-                  {allDivisions.length} division(s) -- {generated} generated, {outdated} outdated, {pending} pending
+                  {allDivisions.length} division(s) -- {valid} valid, {withIssues} with issues, {pending} pending
                 </td>
               </tr>
             </tfoot>
@@ -606,7 +599,7 @@ export function Component() {
               <div className="grid grid-cols-3 gap-2">
                 {([
                   { value: 'all' as const, label: 'All', count: allDivisions.length, icon: Zap, color: 'text-amber-500' },
-                  { value: 'outdated' as const, label: 'Outdated', count: outdated, icon: AlertTriangle, color: 'text-amber-500' },
+                  { value: 'outdated' as const, label: 'With Issues', count: withIssues + outdated, icon: AlertTriangle, color: 'text-amber-500' },
                   { value: 'pending' as const, label: 'Pending', count: pending, icon: Clock, color: 'text-muted-foreground' },
                 ]).map((opt) => (
                   <button

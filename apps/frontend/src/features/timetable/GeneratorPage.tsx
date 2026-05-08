@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { TimetableStatusBadge } from '@/components/shared/TimetableStatusBadge';
 import { PageHeader, ConfirmDialog } from '@/components/shared';
 import { useGetClassQuery } from '@/features/classes/classApi';
 import {
@@ -105,15 +105,15 @@ export function Component() {
       <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-6 space-y-5">
         <div className="flex items-center gap-4">
           <div className={`flex size-12 shrink-0 items-center justify-center rounded-xl ${
-            timetable?.status === 'GENERATED'
+            timetable?.statusJson?.statuses?.includes('VALID')
               ? 'bg-emerald-500/10 text-emerald-600'
-              : timetable?.status === 'OUTDATED'
+              : timetable
                 ? 'bg-amber-500/10 text-amber-600'
                 : 'bg-muted text-muted-foreground'
           }`}>
-            {timetable?.status === 'GENERATED' ? (
+            {timetable?.statusJson?.statuses?.includes('VALID') ? (
               <CheckCircle2 className="size-6" />
-            ) : timetable?.status === 'OUTDATED' ? (
+            ) : timetable ? (
               <AlertTriangle className="size-6" />
             ) : (
               <Clock className="size-6" />
@@ -122,19 +122,7 @@ export function Component() {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-semibold">{t('generator.status')}</span>
-              <Badge
-                variant={
-                  timetable?.status === 'GENERATED' ? 'success'
-                    : timetable?.status === 'OUTDATED' ? 'warning'
-                      : 'outline'
-                }
-              >
-                {timetable?.status === 'GENERATED'
-                  ? t('generator.generated')
-                  : timetable?.status === 'OUTDATED'
-                    ? t('generator.outdated')
-                    : t('generator.notGenerated')}
-              </Badge>
+              <TimetableStatusBadge statusJson={timetable?.statusJson as any} legacyStatus={timetable?.status} />
             </div>
             {timetable?.generatedAt && (
               <p className="text-sm text-muted-foreground mt-0.5">
