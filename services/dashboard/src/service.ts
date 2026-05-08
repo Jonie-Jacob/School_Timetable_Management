@@ -1,12 +1,5 @@
 import { prisma } from '@timetable/shared';
 
-interface SetupStep {
-  step: number;
-  name: string;
-  complete: boolean;
-  detail?: string;
-}
-
 export class DashboardService {
 
   async getStats(schoolId: string, academicYearId: string) {
@@ -86,81 +79,6 @@ export class DashboardService {
         ...statusCounts,
       },
     };
-  }
-
-  async getSetupWizard(schoolId: string, academicYearId: string) {
-    const scope = { schoolId, academicYearId, deletedAt: null };
-
-    // Check dismissal state
-    const wizardState = await prisma.setupWizardState.findUnique({
-      where: { schoolId_academicYearId: { schoolId, academicYearId } },
-    });
-
-    // Auto-detect step completion from existing data
-    const [
-      hasActiveYear,
-      classWithDivision,
-      totalDivisions,
-      divisionsWithStructure,
-      hasSubject,
-      hasTeacherWithSubject,
-      hasAssignment,
-      hasGeneratedTimetable,
-    ] = await Promise.all([
-      // Step 1: Active academic year
-      prisma.academicYear.count({ where: { schoolId, id: academicYearId, status: 'ACTIVE' } }),
-      // Step 2: At least one class with at least one division
-      prisma.class.findFirst({
-        where: { ...scope, divisions: { some: { deletedAt: null } } },
-        select: { id: true },
-      }),
-      // Step 3a: Total divisions count
-      prisma.division.count({ where: scope }),
-      // Step 3b: Divisions with period structure assigned
-      prisma.division.count({ where: { ...scope, periodStructureId: { not: null } } }),
-      // Step 4: At least one subject
-      prisma.subject.count({ where: scope }),
-      // Step 5: At least one teacher with qualified subjects
-      prisma.teacher.findFirst({
-        where: { ...scope, teacherSubjects: { some: {} } },
-        select: { id: true },
-      }),
-      // Step 6: At least one assignment
-      prisma.divisionAssignment.count({ where: scope }),
-      // Step 7: At least one timetable
-      prisma.timetable.count({ where: { schoolId, academicYearId } }),
-    ]);
-
-    const step3Complete = totalDivisions > 0 && divisionsWithStructure === totalDivisions;
-
-    const steps: SetupStep[] = [
-      { step: 1, name: 'Academic Year', complete: hasActiveYear > 0 },
-      { step: 2, name: 'Classes & Divisions', complete: classWithDivision !== null },
-      { step: 3, name: 'Period Structures', complete: step3Complete, detail: `${divisionsWithStructure}/${totalDivisions} divisions assigned` },
-      { step: 4, name: 'Subjects & Electives', complete: hasSubject > 0 },
-      { step: 5, name: 'Teachers', complete: hasTeacherWithSubject !== null },
-      { step: 6, name: 'Assignments', complete: hasAssignment > 0 },
-      { step: 7, name: 'Generate Timetable', complete: hasGeneratedTimetable > 0 },
-    ];
-
-    const totalComplete = steps.filter(s => s.complete).length;
-
-    return {
-      steps,
-      totalComplete,
-      totalSteps: 7,
-      dismissed: wizardState?.dismissed ?? false,
-      dismissedAt: wizardState?.dismissedAt ?? null,
-    };
-  }
-
-  async dismissSetupWizard(schoolId: string, academicYearId: string) {
-    await prisma.setupWizardState.upsert({
-      where: { schoolId_academicYearId: { schoolId, academicYearId } },
-      create: { schoolId, academicYearId, dismissed: true, dismissedAt: new Date() },
-      update: { dismissed: true, dismissedAt: new Date() },
-    });
-    return { dismissed: true };
   }
 
   async getRecentActivity(schoolId: string, academicYearId: string) {

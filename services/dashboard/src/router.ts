@@ -21,13 +21,5 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.getRecentActivity(event);
   }
 
-  if (method === 'GET' && path === '/api/dashboard/setup-wizard') {
-    return controller.getSetupWizard(event);
-  }
-
-  if (method === 'PUT' && path === '/api/dashboard/setup-wizard/dismiss') {
-    return controller.dismissSetupWizard(event);
-  }
-
   throw new AppError(`Route not found: ${method} ${path}`, 404, 'ROUTE_NOT_FOUND');
 }

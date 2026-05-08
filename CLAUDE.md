@@ -96,7 +96,7 @@ All services use `@timetable/shared` for: Prisma client, error classes (`AppErro
 - **20 tables**, all with `school_id` for multi-tenancy
 - **Soft deletes** via `deleted_at` column on most entities
 - **Period structures** assigned at the **division level** (not class level) — `divisions.period_structure_id`
-- **Timetable statuses**: Multi-status JSON model (`status_json JSONB` column) with tags: VALID, EMPTY_SLOTS, EXCESS_ASSIGNMENTS, TEACHER_CONFLICT, AVAILABILITY_VIOLATION, PREFERENCE_VIOLATION_HARD, PREFERENCE_VIOLATION_SOFT, ORPHANED_SLOTS. Old `status` enum column (GENERATED/OUTDATED) kept temporarily for backward compatibility. Status recomputed via `recomputeTimetableStatus()` after every data change. Per-slot violation annotations returned in timetable grid API responses.
+- **Timetable statuses**: Multi-status JSON model (`status_json JSONB` column) with tags: VALID, EMPTY_SLOTS, EXCESS_ASSIGNMENTS, TEACHER_CONFLICT, AVAILABILITY_VIOLATION, PREFERENCE_VIOLATION_HARD, PREFERENCE_VIOLATION_SOFT, ORPHANED_SLOTS. Old `status` enum column and `TimetableStatus` enum have been dropped. Status recomputed via `recomputeTimetableStatus()` after every data change. Per-slot violation annotations returned in timetable grid API responses. Dashboard shows per-status-tag counts.
 - **Prisma binaryTargets**: `["native", "rhel-openssl-3.0.x"]` — native for Windows dev, rhel for Lambda
 
 Run migrations: `npx prisma migrate dev --schema packages/shared/prisma/schema.prisma`
@@ -190,10 +190,10 @@ cd services\teacher; npx serverless deploy --stage prod
 ## Important Notes
 
 - Do NOT add a `period_structure_classes` table — it was removed. Use `divisions.period_structure_id` instead.
-- Do NOT add a `PUBLISHED` timetable status — only `GENERATED` and `OUTDATED` exist.
+- Timetable status is computed, not imperative. Do NOT add a `status` enum column — use `status_json` JSONB with `recomputeTimetableStatus()`. Do NOT use `flagTimetables()` — it has been removed.
 - The `Documentaion/` directory name has a typo. Do not rename it — existing references depend on this path.
 - Frontend uses `sonner` for toasts, `@dnd-kit` for drag-and-drop, `shadcn/ui` primitives.
-- The guided setup wizard uses a **Floating Action Button (FAB)** — not sidebar-based. The FAB doubles as a conflict notification hub after setup is complete.
+- The FAB and setup wizard have been removed (Enhancement 3). Timetable status is now shown via computed status badges throughout the UI. The notification bell and notifications page have also been removed — status information is derived from `status_json`.
 - Vite proxy uses `rewrite` to strip `/api` prefix before forwarding to localhost services.
 - Cross-div elective divisions may have **different subject subsets** (asymmetric). For subjects shared across divisions, teacher sets must be identical. The output writer writes timetable_slots using only each division's own assignments.
 - `parallel_sections` in `elective_group_subjects` determines parallel vs split mode. Ensure this matches the actual number of simultaneous classes intended.
