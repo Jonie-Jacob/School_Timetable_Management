@@ -91,14 +91,31 @@ export function Component() {
     if (!over || active.id === over.id) return;
 
     const sourceSlotId = active.id as string;
-    const targetSlotId = over.id as string;
+    const rawTargetId = over.id as string;
 
-    // Check if target is in valid list
-    const validTarget = validTargets.find((t) => t.slotId === targetSlotId);
+    // Resolve the target: might be a real UUID or an empty cell ID (empty:dayOfWeek:sortOrder)
+    let validTarget = validTargets.find((t) => t.slotId === rawTargetId);
+    let targetSlotId = rawTargetId;
+
+    if (!validTarget) {
+      const emptyMatch = rawTargetId.match(/^empty:(\d+):(.+)$/);
+      if (emptyMatch) {
+        const dow = parseInt(emptyMatch[1]);
+        const so = parseFloat(emptyMatch[2]);
+        validTarget = validTargets.find((t) => t.dayOfWeek === dow && t.sortOrder === so && t.isEmpty);
+        if (!validTarget) {
+          // Also check non-empty targets at same coordinates (occupied by another teacher)
+          validTarget = validTargets.find((t) => t.dayOfWeek === dow && t.sortOrder === so);
+        }
+      }
+      if (validTarget) {
+        targetSlotId = validTarget.slotId;
+      }
+    }
 
     if (!validTarget) {
       // Target is invalid — check reason
-      const inv = invalidTargets.find((t) => t.slotId === targetSlotId);
+      const inv = invalidTargets.find((t) => t.slotId === rawTargetId);
       if (inv) {
         toast.error(inv.reason === 'Period structure mismatch'
           ? 'Cannot swap: period structures are different'

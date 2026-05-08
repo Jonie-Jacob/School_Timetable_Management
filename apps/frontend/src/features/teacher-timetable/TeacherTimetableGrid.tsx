@@ -172,6 +172,24 @@ export function TeacherTimetableGrid({
     return map;
   }, [activeDragSlotId, validTargets, invalidTargets]);
 
+  // Build coordinate → validity lookup for empty cells (by dayOfWeek:sortOrder)
+  // Empty cells use stable composite IDs — the real UUID resolution happens in handleDragEnd.
+  const emptyValidityMap = useMemo(() => {
+    const map = new Map<string, 'valid' | 'valid-cross' | 'invalid'>();
+    for (const t of validTargets) {
+      if (t.isEmpty) {
+        map.set(`${t.dayOfWeek}:${t.sortOrder}`, t.isSameDivision ? 'valid' : 'valid-cross');
+      }
+    }
+    for (const t of invalidTargets) {
+      const key = `${t.dayOfWeek}:${t.sortOrder}`;
+      if (!map.has(key)) {
+        map.set(key, 'invalid');
+      }
+    }
+    return map;
+  }, [validTargets, invalidTargets]);
+
   if (isLoading) return <Skeleton className="h-64 rounded-xl" />;
 
   if (!grid || sortedDays.length === 0) {
@@ -250,8 +268,8 @@ export function TeacherTimetableGrid({
                   const isDoubleBooked = assignments.length > 1 && !isElective;
                   const primarySlotId = period?.timetableSlotId || period?.slotIds?.[0] || '';
 
-                  // Non-DnD mode or no slot ID
-                  if (!isDndEnabled || !primarySlotId) {
+                  // Non-DnD mode
+                  if (!isDndEnabled) {
                     if (!hasContent) {
                       return (
                         <td key={slot.id} className="px-1 py-2 text-center border-r border-border/40">
@@ -278,14 +296,16 @@ export function TeacherTimetableGrid({
                   }
 
                   // DnD mode
-                  const validity = validityMap.get(primarySlotId);
-                  const isDragSource = activeDragSlotId === primarySlotId;
+                  const dayOfWeek = day.workingDay.dayOfWeek;
 
                   if (!hasContent) {
-                    // Empty cell: droppable only
+                    // Empty cell: always render as droppable with a STABLE composite ID.
+                    // The real timetable_slot UUID is resolved in handleDragEnd.
+                    const emptyDropId = `empty:${dayOfWeek}:${slot.sortOrder}`;
+                    const emptyValidity = emptyValidityMap.get(`${dayOfWeek}:${slot.sortOrder}`);
                     return (
                       <td key={slot.id} className="px-1 py-1 border-r border-border/40">
-                        <DroppableCell slotId={primarySlotId} validity={validity}>
+                        <DroppableCell slotId={emptyDropId} validity={emptyValidity}>
                           <div className="flex items-center justify-center min-h-[40px]">
                             <span className="text-[10px] text-muted-foreground/40">--</span>
                           </div>
@@ -293,6 +313,9 @@ export function TeacherTimetableGrid({
                       </td>
                     );
                   }
+
+                  const validity = validityMap.get(primarySlotId);
+                  const isDragSource = activeDragSlotId === primarySlotId;
 
                   if (isDoubleBooked) {
                     // Double-booked: each assignment is separately draggable
