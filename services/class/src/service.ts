@@ -1,6 +1,7 @@
 import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
   flagTimetables,
+  findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
   checkDuplicateName,
   type CreateClassDto, type UpdateClassDto,
   type CreateDivisionDto, type UpdateDivisionDto,
@@ -332,6 +333,8 @@ export class ClassService {
       conflictType: 'ASSIGNMENT_CHANGED',
       changeDescription: 'Teacher assignment swapped due to class teacher assignment.',
     });
+    const classSwapTtIds = await findAffectedTimetableIds({ schoolId, divisionIds: affectedDivisionIds, entityType: 'DIVISION', entityId: '' });
+    await recomputeMultipleTimetableStatuses(classSwapTtIds);
 
     if (result.affectedCount > 0) {
       warnings.push(`${result.affectedCount} timetable(s) flagged as outdated.`);

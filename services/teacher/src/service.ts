@@ -4,6 +4,7 @@ import {
   NotFoundError,
   AppError,
   flagTimetables,
+  findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
   findTeachersAtTime,
   computeTeacherLoads,
   identifyCrossDivElectiveGroups,
@@ -353,6 +354,8 @@ export class TeacherService {
         conflictType: 'TEACHER_CHANGED',
         changeDescription: `Teacher ${changes.join(', ')}`,
       });
+      const tchUpdIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'TEACHER', entityId: id });
+      await recomputeMultipleTimetableStatuses(tchUpdIds);
     }
 
     return updated;
@@ -439,6 +442,7 @@ export class TeacherService {
           },
         });
       }
+      await recomputeMultipleTimetableStatuses(affectedTimetables.map(t => t.id));
     }
 
     await softDelete('teacher', id, schoolId);
@@ -484,6 +488,8 @@ export class TeacherService {
       conflictType: 'TEACHER_CHANGED',
       changeDescription: `Teacher qualifications updated (${input.subjectIds.length} subject(s))`,
     });
+    const tchSubIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'TEACHER', entityId: teacherId });
+    await recomputeMultipleTimetableStatuses(tchSubIds);
 
     return this.getById(schoolId, academicYearId, teacherId);
   }
@@ -536,6 +542,8 @@ export class TeacherService {
       conflictType: 'AVAILABILITY_CHANGED',
       changeDescription: `Teacher availability updated (${input.unavailableSlots.length} unavailable slot(s))`,
     });
+    const tchAvailIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'AVAILABILITY', entityId: teacherId });
+    await recomputeMultipleTimetableStatuses(tchAvailIds);
 
     return this.getById(schoolId, academicYearId, teacherId);
   }

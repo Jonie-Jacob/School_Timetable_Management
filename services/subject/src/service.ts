@@ -4,6 +4,7 @@ import {
   NotFoundError,
   AppError,
   flagTimetables,
+  findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
   checkDuplicateName,
   type CreateSubjectDto,
   type UpdateSubjectDto,
@@ -90,6 +91,8 @@ export class SubjectService {
         conflictType: 'SUBJECT_CHANGED',
         changeDescription: `Subject name changed to '${input.name}'`,
       });
+      const subjIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'SUBJECT', entityId: id });
+      await recomputeMultipleTimetableStatuses(subjIds);
     }
 
     return updated;
@@ -160,6 +163,7 @@ export class SubjectService {
           },
         });
       }
+      await recomputeMultipleTimetableStatuses(affectedTimetables.map(t => t.id));
 
       // Soft-delete the assignments
       await prisma.divisionAssignment.updateMany({

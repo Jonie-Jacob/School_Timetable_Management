@@ -290,9 +290,9 @@ Function that takes timetable slots + teacher availability + preferences and ret
 
 ---
 
-### Phase 3: Replace `flagAffectedTimetables()` with Recomputation
+### Phase 3: Replace `flagAffectedTimetables()` with Recomputation -- IMPLEMENTED
 
-#### 3.1 Replace all `flagAffectedTimetables()` calls
+#### 3.1 Replace all `flagAffectedTimetables()` calls -- DONE
 
 Replace the current pattern:
 ```typescript
@@ -314,13 +314,13 @@ Each call site already knows which timetables are affected. Instead of setting O
 - `services/school-config/src/service.ts` (1 direct OUTDATED set)
 - `services/notification/src/service.ts` (1 method -- may be removed/refactored)
 
-#### 3.2 Update timetable generation endpoint
+#### 3.2 Update timetable generation endpoint -- DONE
 
 **File:** `services/timetable/src/service.ts`
 
 After generation completes, call `recomputeTimetableStatus()` instead of setting `GENERATED`.
 
-#### 3.3 Update Python engine output writer
+#### 3.3 Update Python engine output writer -- DONE
 
 **File:** `engine/timetable-generator/src/output_writer.py`
 
@@ -330,11 +330,11 @@ Change `status = 'GENERATED'` to either:
 
 Simpler approach: engine sets `status_json = '{"statuses":["VALID"],"details":{}}'` since freshly generated timetables should be valid. The Node.js callback can recompute to verify.
 
-#### 3.4 Update swap endpoints
+#### 3.4 Update swap endpoints -- DONE
 
 All swap endpoints (`swapSlots`, `swapElectiveSlots`, `swapTeacherSlots`) should recompute status for affected timetables after executing the swap.
 
-#### 3.5 Update override endpoint
+#### 3.5 Update override endpoint -- DONE
 
 `overrideSlot()` should recompute status after the override.
 

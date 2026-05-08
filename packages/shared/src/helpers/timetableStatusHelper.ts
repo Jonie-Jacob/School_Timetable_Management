@@ -461,13 +461,42 @@ export async function recomputeMultipleTimetableStatuses(
  */
 export async function findAffectedTimetableIds(params: {
   schoolId: string;
-  academicYearId: string;
-  entityType: 'TEACHER' | 'SUBJECT' | 'ASSIGNMENT' | 'PERIOD_STRUCTURE' | 'DIVISION';
+  academicYearId?: string;
+  entityType: 'TEACHER' | 'SUBJECT' | 'ASSIGNMENT' | 'PERIOD_STRUCTURE' | 'DIVISION' | 'ELECTIVE_GROUP' | 'AVAILABILITY';
   entityId: string;
+  /** Direct timetable IDs (bypass entity resolution) */
+  timetableIds?: string[];
+  /** Direct division IDs (bypass entity resolution) */
+  divisionIds?: string[];
+  /** Period structure ID (bypass entity resolution) */
+  periodStructureId?: string;
 }): Promise<string[]> {
   const { schoolId, academicYearId, entityType, entityId } = params;
 
-  if (entityType === 'TEACHER') {
+  // Direct resolution strategies
+  if (params.timetableIds?.length) return params.timetableIds;
+
+  if (params.divisionIds?.length) {
+    const timetables = await prisma.timetable.findMany({
+      where: { schoolId, divisionId: { in: params.divisionIds }, ...(academicYearId ? { academicYearId } : {}) },
+      select: { id: true },
+    });
+    return timetables.map(t => t.id);
+  }
+
+  if (params.periodStructureId) {
+    const divisions = await prisma.division.findMany({
+      where: { periodStructureId: params.periodStructureId, deletedAt: null },
+      select: { id: true },
+    });
+    const timetables = await prisma.timetable.findMany({
+      where: { schoolId, divisionId: { in: divisions.map(d => d.id) }, ...(academicYearId ? { academicYearId } : {}) },
+      select: { id: true },
+    });
+    return timetables.map(t => t.id);
+  }
+
+  if (entityType === 'TEACHER' || entityType === 'AVAILABILITY') {
     const slots = await prisma.timetableSlot.findMany({
       where: {
         schoolId,
@@ -500,13 +529,22 @@ export async function findAffectedTimetableIds(params: {
     return slots.map(s => s.timetableId);
   }
 
+  if (entityType === 'ELECTIVE_GROUP') {
+    const slots = await prisma.timetableSlot.findMany({
+      where: { schoolId, divisionAssignment: { electiveGroupId: entityId, deletedAt: null } },
+      select: { timetableId: true },
+      distinct: ['timetableId'],
+    });
+    return slots.map(s => s.timetableId);
+  }
+
   if (entityType === 'PERIOD_STRUCTURE') {
     const divisions = await prisma.division.findMany({
       where: { periodStructureId: entityId, deletedAt: null },
       select: { id: true },
     });
     const timetables = await prisma.timetable.findMany({
-      where: { divisionId: { in: divisions.map(d => d.id) }, academicYearId },
+      where: { divisionId: { in: divisions.map(d => d.id) }, ...(academicYearId ? { academicYearId } : {}) },
       select: { id: true },
     });
     return timetables.map(t => t.id);
@@ -514,7 +552,7 @@ export async function findAffectedTimetableIds(params: {
 
   if (entityType === 'DIVISION') {
     const timetables = await prisma.timetable.findMany({
-      where: { divisionId: entityId, academicYearId },
+      where: { divisionId: entityId, ...(academicYearId ? { academicYearId } : {}) },
       select: { id: true },
     });
     return timetables.map(t => t.id);

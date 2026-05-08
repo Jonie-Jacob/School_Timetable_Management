@@ -1,6 +1,7 @@
 import {
   prisma, AppError, NotFoundError,
   isTeacherBusyAt,
+  recomputeTimetableStatus, recomputeMultipleTimetableStatuses,
   TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto, CreateEmptySlotDto,
   SwapElectiveSlotsDto, PreviewElectiveSwapDto, PreviewTeacherSwapDto,
 } from '@timetable/shared';
@@ -293,6 +294,9 @@ export class TimetableService {
     if (slotData.length > 0) {
       await prisma.timetableSlot.createMany({ data: slotData });
     }
+
+    // Recompute status after generation
+    await recomputeTimetableStatus(timetable.id);
 
     return timetable;
   }
@@ -777,6 +781,9 @@ export class TimetableService {
       },
     });
 
+    // Recompute status after override
+    await recomputeTimetableStatus(timetableSlot.timetableId);
+
     return updated;
   }
 
@@ -978,6 +985,10 @@ export class TimetableService {
       });
     }
 
+    // Recompute status for affected timetables
+    const swapTtIds = new Set([sourceSlot.timetableId, targetSlot.timetableId]);
+    await recomputeMultipleTimetableStatuses([...swapTtIds]);
+
     return {
       source: updatedSource,
       target: updatedTarget,
@@ -1113,6 +1124,9 @@ export class TimetableService {
     const teacherName = conflictedSlot.divisionAssignment!.teacher!.name;
     const subjectName = conflictedSlot.divisionAssignment!.subject?.name ?? 'Unknown';
     const movedTo = best.workingDay?.label ?? 'Unknown day';
+
+    // Recompute status after auto-resolve
+    await recomputeTimetableStatus(timetableId);
 
     return {
       resolved: true,
@@ -1988,6 +2002,13 @@ export class TimetableService {
       await prisma.timetableNotification.createMany({ data: notificationData }).catch(() => {});
     }
 
+    // Recompute status for all affected timetables
+    const electiveSwapTtIds = [...new Set([
+      ...groups.map(g => g.timetableId),
+      ...targetElectiveExtraGroups.map(g => g.timetableId),
+    ])];
+    await recomputeMultipleTimetableStatuses(electiveSwapTtIds);
+
     return {
       electiveGroupId: block.electiveGroupId,
       electiveGroupName: block.electiveGroupName,
@@ -2509,6 +2530,9 @@ export class TimetableService {
         // Gracefully handle if SWAP_CONFLICT enum doesn't exist yet
       });
     }
+
+    // Recompute status for both timetables
+    await recomputeMultipleTimetableStatuses([sourceSlot.timetableId, targetSlot.timetableId]);
 
     return {
       swapType: 'cross_division',

@@ -13,6 +13,7 @@ import {
   type SlotEntry,
   DayOfWeek,
   flagTimetables,
+  findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
   checkDuplicateName,
 } from '@timetable/shared';
 
@@ -497,6 +498,8 @@ export class SchoolConfigService {
         changeDescription: `Period P${slotNumber} added to structure`,
         backfillSlotIds: [slot.id],
       });
+      const addSlotTtIds = await findAffectedTimetableIds({ schoolId, periodStructureId, entityType: 'PERIOD_STRUCTURE', entityId: periodStructureId });
+      await recomputeMultipleTimetableStatuses(addSlotTtIds);
     }
 
     return slot;
@@ -537,6 +540,8 @@ export class SchoolConfigService {
         changeDescription: 'Slot type changed in period structure',
         backfillSlotIds: input.slotType === 'PERIOD' ? [slotId] : undefined,
       });
+      const updSlotTtIds = await findAffectedTimetableIds({ schoolId, periodStructureId, entityType: 'PERIOD_STRUCTURE', entityId: periodStructureId });
+      await recomputeMultipleTimetableStatuses(updSlotTtIds);
     }
 
     return updated;
@@ -592,6 +597,8 @@ export class SchoolConfigService {
         conflictType: 'STRUCTURE_CHANGED',
         changeDescription: 'Period removed from structure',
       });
+      const delSlotTtIds = await findAffectedTimetableIds({ schoolId, periodStructureId, entityType: 'PERIOD_STRUCTURE', entityId: periodStructureId });
+      await recomputeMultipleTimetableStatuses(delSlotTtIds);
     }
   }
 
@@ -792,6 +799,8 @@ export class SchoolConfigService {
       changeDescription: 'Period structure updated',
       backfillSlotIds: newPeriodSlots.map(s => s.id),
     });
+    const regenTtIds = await findAffectedTimetableIds({ schoolId, periodStructureId, entityType: 'PERIOD_STRUCTURE', entityId: periodStructureId });
+    await recomputeMultipleTimetableStatuses(regenTtIds);
   }
 
   /**
