@@ -255,6 +255,31 @@ interface PreviewTeacherSwapRequest {
   targetSlotId: string;
 }
 
+export interface ValidTeacherSwapTarget {
+  slotId: string;
+  dayOfWeek: number;
+  sortOrder: number;
+  className: string;
+  divisionLabel: string;
+  subjectName: string | null;
+  teacherName: string | null;
+  isEmpty: boolean;
+  isSameDivision: boolean;
+  isElective: boolean;
+}
+
+export interface InvalidTeacherSwapTarget {
+  slotId: string;
+  dayOfWeek: number;
+  sortOrder: number;
+  reason: string;
+}
+
+interface ValidTeacherSwapTargetsResponse {
+  validTargets: ValidTeacherSwapTarget[];
+  invalidTargets: InvalidTeacherSwapTarget[];
+}
+
 export interface PreviewElectiveSwapResponse {
   sourceElectiveGroup: { id: string; name: string };
   sourceCoordinates: { dayLabel: string; slotSortOrder: number };
@@ -370,6 +395,11 @@ export const timetableApi = createApi({
       invalidatesTags: ['Timetable'],
     }),
 
+    getValidTeacherSwapTargets: builder.query<ValidTeacherSwapTargetsResponse, string>({
+      query: (slotId) => `timetables/teacher-slots/${slotId}/valid-swaps`,
+      transformResponse: (response: { data: ValidTeacherSwapTargetsResponse }) => response.data,
+    }),
+
     previewTeacherSwap: builder.mutation<PreviewTeacherSwapResponse, PreviewTeacherSwapRequest>({
       query: (body) => ({
         url: 'timetables/slots/preview-teacher-swap',
@@ -416,5 +446,6 @@ export const {
   usePreviewElectiveSwapMutation,
   usePreviewTeacherSwapMutation,
   useSwapTeacherSlotsMutation,
+  useLazyGetValidTeacherSwapTargetsQuery,
   useLazyGetResolutionCandidatesQuery,
 } = timetableApi;

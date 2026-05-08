@@ -308,7 +308,7 @@ New method: `swapTeacherSlots(schoolId, dto)`
 
 ---
 
-### Phase 4: Backend -- `getValidTeacherSwapTargets()` Endpoint
+### Phase 4: Backend -- `getValidTeacherSwapTargets()` Endpoint -- IMPLEMENTED
 
 **Goal:** Return valid swap targets across ALL divisions the teacher teaches in.
 

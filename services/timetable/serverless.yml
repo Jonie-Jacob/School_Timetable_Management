@@ -78,6 +78,11 @@ functions:
           authorizer:
             name: cognitoAuthorizer
       - httpApi:
+          method: GET
+          path: /api/timetables/teacher-slots/{slotId}/valid-swaps
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
           method: POST
           path: /api/timetables/slots/swap-teacher
           authorizer:

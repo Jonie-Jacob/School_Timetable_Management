@@ -2517,6 +2517,210 @@ export class TimetableService {
     };
   }
 
+  // ── Valid Teacher Swap Targets (cross-division) ──
+
+  async getValidTeacherSwapTargets(schoolId: string, sourceSlotId: string) {
+    const source = await prisma.timetableSlot.findFirst({
+      where: { id: sourceSlotId, schoolId },
+      include: {
+        timetable: { include: { division: { include: { class: true } } } },
+        workingDay: true,
+        slot: true,
+        divisionAssignment: {
+          include: {
+            teacher: { select: { id: true, name: true } },
+            assistantTeacher: { select: { id: true, name: true } },
+            electiveGroup: { select: { id: true, name: true } },
+            subject: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!source) throw new NotFoundError('TimetableSlot', sourceSlotId);
+
+    // Source teacher IDs
+    const sourceTeacherIds: string[] = [];
+    if (source.divisionAssignment?.teacher?.id) sourceTeacherIds.push(source.divisionAssignment.teacher.id);
+    if (source.divisionAssignment?.assistantTeacher?.id) sourceTeacherIds.push(source.divisionAssignment.assistantTeacher.id);
+
+    const sourceIsElective = !!source.divisionAssignment?.electiveGroup;
+
+    // ── Gather candidate slots ──
+
+    // 1. All slots in the source division's timetable (same-division targets including empty)
+    const sameDivSlots = await prisma.timetableSlot.findMany({
+      where: {
+        timetableId: source.timetableId,
+        id: { not: sourceSlotId },
+        slot: { slotType: 'PERIOD' },
+      },
+      include: {
+        timetable: { include: { division: { include: { class: true } } } },
+        workingDay: true,
+        slot: true,
+        divisionAssignment: {
+          include: {
+            teacher: { select: { id: true, name: true } },
+            assistantTeacher: { select: { id: true, name: true } },
+            electiveGroup: { select: { id: true, name: true } },
+            subject: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    // 2. All slots where source teacher teaches across OTHER divisions
+    const crossDivSlots = sourceTeacherIds.length > 0
+      ? await prisma.timetableSlot.findMany({
+          where: {
+            schoolId,
+            timetableId: { not: source.timetableId },
+            slot: { slotType: 'PERIOD' },
+            divisionAssignment: {
+              OR: [
+                { teacherId: { in: sourceTeacherIds } },
+                { assistantTeacherId: { in: sourceTeacherIds } },
+              ],
+            },
+          },
+          include: {
+            timetable: { include: { division: { include: { class: true } } } },
+            workingDay: true,
+            slot: true,
+            divisionAssignment: {
+              include: {
+                teacher: { select: { id: true, name: true } },
+                assistantTeacher: { select: { id: true, name: true } },
+                electiveGroup: { select: { id: true, name: true } },
+                subject: { select: { id: true, name: true } },
+              },
+            },
+          },
+        })
+      : [];
+
+    // Combine and deduplicate by (timetableId, workingDayId, slotId)
+    const allCandidates = [...sameDivSlots, ...crossDivSlots];
+    const seenCells = new Set<string>();
+    const uniqueCandidates: typeof allCandidates = [];
+    for (const c of allCandidates) {
+      const key = `${c.timetableId}:${c.workingDayId}:${c.slotId}`;
+      if (seenCells.has(key)) continue;
+      seenCells.add(key);
+      uniqueCandidates.push(c);
+    }
+
+    // ── Evaluate each candidate ──
+
+    type ValidTarget = {
+      slotId: string;
+      dayOfWeek: number;
+      sortOrder: number;
+      className: string;
+      divisionLabel: string;
+      subjectName: string | null;
+      teacherName: string | null;
+      isEmpty: boolean;
+      isSameDivision: boolean;
+      isElective: boolean;
+    };
+    type InvalidTarget = {
+      slotId: string;
+      dayOfWeek: number;
+      sortOrder: number;
+      reason: string;
+    };
+
+    const validTargets: ValidTarget[] = [];
+    const invalidTargets: InvalidTarget[] = [];
+
+    for (const target of uniqueCandidates) {
+      const dayOfWeek = target.workingDay.dayOfWeek;
+      const sortOrder = target.slot.sortOrder;
+      const isSameDivision = target.timetableId === source.timetableId;
+      const isTargetElective = !!target.divisionAssignment?.electiveGroup;
+      const isEmpty = !target.divisionAssignmentId;
+
+      const meta = {
+        slotId: target.id,
+        dayOfWeek,
+        sortOrder,
+        className: target.timetable.division?.class?.name ?? '',
+        divisionLabel: target.timetable.division?.label ?? '',
+        subjectName: target.divisionAssignment?.subject?.name ?? null,
+        teacherName: target.divisionAssignment?.teacher?.name ?? null,
+        isEmpty,
+        isSameDivision,
+        isElective: isTargetElective,
+      };
+
+      // For cross-division: check period structure compatibility
+      if (!isSameDivision) {
+        // Does source timetable have a slot at target's coordinates?
+        const cellB = await prisma.timetableSlot.findFirst({
+          where: {
+            timetableId: source.timetableId,
+            workingDay: { dayOfWeek },
+            slot: { sortOrder },
+            schoolId,
+          },
+          select: { id: true },
+        });
+        // Does target timetable have a slot at source's coordinates?
+        const cellD = await prisma.timetableSlot.findFirst({
+          where: {
+            timetableId: target.timetableId,
+            workingDay: { dayOfWeek: source.workingDay.dayOfWeek },
+            slot: { sortOrder: source.slot.sortOrder },
+            schoolId,
+          },
+          select: { id: true },
+        });
+
+        if (!cellB || !cellD) {
+          invalidTargets.push({ ...meta, reason: 'Period structure mismatch' });
+          continue;
+        }
+      }
+
+      // Collect target teacher IDs
+      const targetTeacherIds: string[] = [];
+      if (target.divisionAssignment?.teacher?.id) targetTeacherIds.push(target.divisionAssignment.teacher.id);
+      if (target.divisionAssignment?.assistantTeacher?.id) targetTeacherIds.push(target.divisionAssignment.assistantTeacher.id);
+
+      const excludeIds = [sourceSlotId, target.id];
+
+      // Check source teachers at target time
+      let hasConflict = false;
+      for (const tid of sourceTeacherIds) {
+        const conflict = await this.findTeacherTimeConflict(
+          schoolId, excludeIds, dayOfWeek,
+          target.slot.startTime, target.slot.endTime, tid,
+        );
+        if (conflict) { hasConflict = true; break; }
+      }
+
+      // Check target teachers at source time
+      if (!hasConflict) {
+        for (const tid of targetTeacherIds) {
+          const conflict = await this.findTeacherTimeConflict(
+            schoolId, excludeIds, source.workingDay.dayOfWeek,
+            source.slot.startTime, source.slot.endTime, tid,
+          );
+          if (conflict) { hasConflict = true; break; }
+        }
+      }
+
+      if (hasConflict) {
+        invalidTargets.push({ ...meta, reason: 'Teacher conflict' });
+      } else {
+        validTargets.push(meta);
+      }
+    }
+
+    return { validTargets, invalidTargets };
+  }
+
   // ── Preview Elective Swap ──
 
   async previewElectiveSwap(schoolId: string, dto: PreviewElectiveSwapDto) {
