@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Search, FileText, FileSpreadsheet } from 'lucide-react';
+import { Eye, Search, FileText, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,7 @@ export function Component() {
         name: t.name,
         assignedPeriods: load?.assignedPeriods ?? 0,
         timetablePeriods: load?.timetablePeriods ?? null,
+        conflictCount: load?.conflictCount ?? 0,
         maxPeriodsPerWeek: t.maxPeriodsPerWeek ?? load?.maxPeriodsPerWeek ?? null,
       };
     });
@@ -235,6 +236,12 @@ export function Component() {
                     ) : (
                       <Badge variant="outline" className="text-[10px] text-muted-foreground">No TT</Badge>
                     )}
+                    {row.conflictCount > 0 && (
+                      <Badge variant="destructive" className="text-[10px] gap-0.5">
+                        <AlertTriangle className="size-2.5" />
+                        {row.conflictCount} conflict{row.conflictCount !== 1 ? 's' : ''}
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Button variant="outline" size="xs" onClick={() => navigate(`/teacher-timetable/${row.id}`)}>
@@ -258,9 +265,10 @@ export function Component() {
               <thead>
                 <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white/90">
                   <th className="text-left text-[11px] uppercase tracking-wider font-semibold px-4 py-3">Teacher</th>
-                  <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-36">Assigned</th>
-                  <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-36">Timetable</th>
-                  <th className="text-right text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-72">Actions</th>
+                  <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-28">Assigned</th>
+                  <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-28">Timetable</th>
+                  <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-28">Status</th>
+                  <th className="text-right text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-56">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -294,6 +302,18 @@ export function Component() {
                           >
                             {row.timetablePeriods}
                           </Badge>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">--</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {row.conflictCount > 0 ? (
+                          <Badge variant="destructive" className="text-[10px] gap-0.5">
+                            <AlertTriangle className="size-2.5" />
+                            {row.conflictCount}
+                          </Badge>
+                        ) : row.timetablePeriods != null ? (
+                          <Badge variant="success" className="text-[10px]">OK</Badge>
                         ) : (
                           <span className="text-[10px] text-muted-foreground">--</span>
                         )}

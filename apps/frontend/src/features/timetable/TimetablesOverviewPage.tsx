@@ -597,7 +597,7 @@ export function Component() {
               <div className="grid grid-cols-3 gap-2">
                 {([
                   { value: 'all' as const, label: 'All', count: allDivisions.length, icon: Zap, color: 'text-amber-500' },
-                  { value: 'outdated' as const, label: 'With Issues', count: withIssues + outdated, icon: AlertTriangle, color: 'text-amber-500' },
+                  { value: 'outdated' as const, label: 'With Issues', count: withIssues, icon: AlertTriangle, color: 'text-amber-500' },
                   { value: 'pending' as const, label: 'Pending', count: pending, icon: Clock, color: 'text-muted-foreground' },
                 ]).map((opt) => (
                   <button

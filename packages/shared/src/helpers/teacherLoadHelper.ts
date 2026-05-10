@@ -15,6 +15,7 @@ export interface TeacherLoadResult {
   assignedPeriods: number;
   maxPeriodsPerWeek: number | null;
   timetablePeriods: number | null;
+  conflictCount: number;
   qualifiedSubjectIds: string[];
 }
 
@@ -102,8 +103,9 @@ export async function computeTeacherLoads(params: {
     if (a.assistantTeacherId) addLoad(a.assistantTeacherId, a.weightage, a.electiveGroupId);
   }
 
-  // Count timetable periods per teacher (optional)
+  // Count timetable periods + conflicts per teacher (optional)
   let timetableByTeacher: Map<string, number> | null = null;
+  const conflictsByTeacher = new Map<string, number>();
 
   if (includeTimetablePeriods) {
     const timetableSlots = await prisma.timetableSlot.findMany({
@@ -118,6 +120,7 @@ export async function computeTeacherLoads(params: {
       select: {
         workingDayId: true,
         slotId: true,
+        timetable: { select: { divisionId: true } },
         divisionAssignment: {
           select: { teacherId: true, assistantTeacherId: true, electiveGroupId: true, id: true },
         },
@@ -126,23 +129,43 @@ export async function computeTeacherLoads(params: {
 
     // Dedup key: elective group slots share one key, regular assignments use assignmentId
     const slotsPerTeacher = new Map<string, Set<string>>();
+    // Track time coordinates per teacher for conflict detection: teacherId → Map<timeKey, Set<divisionId>>
+    const timeCoordsByTeacher = new Map<string, Map<string, Set<string>>>();
+
     for (const ts of timetableSlots) {
       const da = ts.divisionAssignment;
       if (!da) continue;
       const slotKey = da.electiveGroupId
         ? `${ts.workingDayId}:${ts.slotId}:eg:${da.electiveGroupId}`
         : `${ts.workingDayId}:${ts.slotId}:da:${da.id}`;
+      const timeKey = `${ts.workingDayId}:${ts.slotId}`;
+      const divisionId = ts.timetable.divisionId;
 
       for (const tid of [da.teacherId, da.assistantTeacherId]) {
         if (!tid) continue;
         if (!slotsPerTeacher.has(tid)) slotsPerTeacher.set(tid, new Set());
         slotsPerTeacher.get(tid)!.add(slotKey);
+
+        // Track which divisions this teacher is in at this time coordinate
+        if (!timeCoordsByTeacher.has(tid)) timeCoordsByTeacher.set(tid, new Map());
+        const timeMap = timeCoordsByTeacher.get(tid)!;
+        if (!timeMap.has(timeKey)) timeMap.set(timeKey, new Set());
+        timeMap.get(timeKey)!.add(divisionId);
       }
     }
 
     timetableByTeacher = new Map<string, number>();
     for (const [tid, keys] of slotsPerTeacher) {
       timetableByTeacher.set(tid, keys.size);
+    }
+
+    // Count conflicts: time coordinates where teacher appears in 2+ different divisions
+    for (const [tid, timeMap] of timeCoordsByTeacher) {
+      let conflicts = 0;
+      for (const divs of timeMap.values()) {
+        if (divs.size > 1) conflicts++;
+      }
+      if (conflicts > 0) conflictsByTeacher.set(tid, conflicts);
     }
   }
 
@@ -152,6 +175,7 @@ export async function computeTeacherLoads(params: {
     assignedPeriods: loadByTeacher.get(t.id) ?? 0,
     maxPeriodsPerWeek: t.maxPeriodsPerWeek,
     timetablePeriods: timetableByTeacher?.get(t.id) ?? null,
+    conflictCount: conflictsByTeacher.get(t.id) ?? 0,
     qualifiedSubjectIds: includeQualifiedSubjects
       ? (t.teacherSubjects ?? []).map((ts: any) => ts.subjectId)
       : [],

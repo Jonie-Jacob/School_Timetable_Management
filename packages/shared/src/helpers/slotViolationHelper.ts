@@ -34,6 +34,7 @@ export async function annotateSlotViolations(
           teacher: { select: { id: true, name: true } },
           assistantTeacher: { select: { id: true, name: true } },
           subject: { select: { id: true, name: true } },
+          electiveGroup: { select: { id: true } },
         },
       },
     },
@@ -71,6 +72,14 @@ export async function annotateSlotViolations(
       });
 
       if (conflict) {
+        // Skip if this is a cross-division elective — the teacher is intentionally
+        // scheduled in multiple divisions at the same time for the same elective group
+        const sourceEgId = da.electiveGroup?.id;
+        const conflictEgId = conflict.divisionAssignment?.electiveGroupId;
+        if (sourceEgId && conflictEgId && sourceEgId === conflictEgId) {
+          continue; // Same elective group across divisions — expected, not a conflict
+        }
+
         const tName = teacherId === da.teacher.id ? da.teacher.name : (da.assistantTeacher?.name ?? '');
         addViolation(s.id, {
           type: 'TEACHER_CONFLICT',

@@ -154,11 +154,27 @@ export async function recomputeTimetableStatus(
   }
 
   // ── CHECK 2: Excess Assignments ──
+  // For elective groups, count periodsPerWeek once per group (not per assignment).
+  // Each elective group is a single time block regardless of how many subjects/teachers.
   const assignments = await prisma.divisionAssignment.findMany({
     where: { divisionId: timetable.divisionId, deletedAt: null },
-    select: { weightage: true },
+    select: { weightage: true, electiveGroupId: true, electiveGroup: { select: { periodsPerWeek: true } } },
   });
-  const totalPw = assignments.reduce((sum, a) => sum + a.weightage, 0);
+  let nonElectiveSum = 0;
+  const electiveGroupPeriods = new Map<string, number>();
+  for (const a of assignments) {
+    if (a.electiveGroupId) {
+      if (!electiveGroupPeriods.has(a.electiveGroupId)) {
+        electiveGroupPeriods.set(a.electiveGroupId, a.electiveGroup?.periodsPerWeek ?? a.weightage);
+      }
+    } else {
+      nonElectiveSum += a.weightage;
+    }
+  }
+  let electiveSum = 0;
+  for (const v of electiveGroupPeriods.values()) electiveSum += v;
+  const totalPw = nonElectiveSum + electiveSum;
+
   if (totalPw > expectedPeriodSlots) {
     statuses.push('EXCESS_ASSIGNMENTS');
     details.excessAssignments = totalPw - expectedPeriodSlots;

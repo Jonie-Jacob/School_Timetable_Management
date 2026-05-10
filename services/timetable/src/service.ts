@@ -841,62 +841,20 @@ export class TimetableService {
     if (!sourceSlot) throw new NotFoundError('TimetableSlot', sourceSlotId);
     if (!targetSlot) throw new NotFoundError('TimetableSlot', targetSlotId);
 
-    // ── Elective detection: delegate to swapElectiveSlots if either slot is elective ──
+    // ── Elective detection: delegate to swapElectiveSlots ONLY if the dragged
+    // assignment itself (or the target) is an elective. Do NOT delegate when
+    // a non-elective assignment merely shares a time coordinate with an elective
+    // sibling — that's a teacher-conflict scenario, not an elective swap. ──
     const sourceIsElective = !!sourceSlot.divisionAssignment?.electiveGroup;
     const targetIsElective = !!targetSlot.divisionAssignment?.electiveGroup;
 
-    // Also check for elective siblings at the same (day, slot) coordinates
-    // (a regular assignment row may share a cell with elective rows)
-    let sourceHasElectiveSiblings = false;
-    let targetHasElectiveSiblings = false;
-    if (!sourceIsElective) {
-      const sibling = await prisma.timetableSlot.findFirst({
-        where: {
-          timetableId: sourceSlot.timetableId,
-          workingDayId: sourceSlot.workingDayId,
-          slotId: sourceSlot.slotId,
-          divisionAssignment: { electiveGroupId: { not: null } },
-        },
-        select: { id: true },
-      });
-      sourceHasElectiveSiblings = !!sibling;
-    }
-    if (!targetIsElective) {
-      const sibling = await prisma.timetableSlot.findFirst({
-        where: {
-          timetableId: targetSlot.timetableId,
-          workingDayId: targetSlot.workingDayId,
-          slotId: targetSlot.slotId,
-          divisionAssignment: { electiveGroupId: { not: null } },
-        },
-        select: { id: true },
-      });
-      targetHasElectiveSiblings = !!sibling;
-    }
-
-    if (sourceIsElective || sourceHasElectiveSiblings || targetIsElective || targetHasElectiveSiblings) {
+    if (sourceIsElective || targetIsElective) {
       // Determine which is the elective side and which provides the target coordinates
-      const electiveSlot = (sourceIsElective || sourceHasElectiveSiblings) ? sourceSlot : targetSlot;
+      const electiveSlot = sourceIsElective ? sourceSlot : targetSlot;
       const otherSlot = electiveSlot === sourceSlot ? targetSlot : sourceSlot;
 
-      // Find the actual elective slot ID (may be a sibling, not the row we loaded)
-      let electiveSlotId = electiveSlot.id;
-      if (!electiveSlot.divisionAssignment?.electiveGroup) {
-        // The row itself is not elective, but it has elective siblings -- find one
-        const electiveSibling = await prisma.timetableSlot.findFirst({
-          where: {
-            timetableId: electiveSlot.timetableId,
-            workingDayId: electiveSlot.workingDayId,
-            slotId: electiveSlot.slotId,
-            divisionAssignment: { electiveGroupId: { not: null } },
-          },
-          select: { id: true },
-        });
-        if (electiveSibling) electiveSlotId = electiveSibling.id;
-      }
-
       return this.swapElectiveSlots(schoolId, {
-        sourceSlotId: electiveSlotId,
+        sourceSlotId: electiveSlot.id,
         targetDayOfWeek: otherSlot.workingDay.dayOfWeek,
         targetSlotSortOrder: otherSlot.slot.sortOrder,
         force,
@@ -1499,13 +1457,15 @@ export class TimetableService {
       const da = s.divisionAssignment;
       if (!da) continue;
       const period = dayBucket.periods[idx];
-      // Replace the empty placeholder with the real slot id + division info
-      period.timetableSlotId = s.id;
-      period.slotIds = [s.id];
-      period.timetableId = s.timetableId;
-      period.divisionId = s.timetable.division.id;
-      period.className = className;
-      period.divisionLabel = s.timetable.division.label;
+      // First real slot sets the primary info; subsequent slots just append
+      if (period.slotIds.length === 0) {
+        period.timetableSlotId = s.id;
+        period.timetableId = s.timetableId;
+        period.divisionId = s.timetable.division.id;
+        period.className = className;
+        period.divisionLabel = s.timetable.division.label;
+      }
+      period.slotIds.push(s.id);
       const role = da.assistantTeacherId === teacherId ? 'assistant' as const : 'primary' as const;
       // For teacher timetable: show who the OTHER teacher is.
       // If current teacher is primary → show assistant teacher name.
@@ -1527,19 +1487,169 @@ export class TimetableService {
       if (da.electiveGroupId) period.isElective = true;
     }
 
-    // Annotate per-slot violations for each timetable the teacher appears in
-    const teacherTimetableIds = [...new Set(slots.map(s => s.timetableId))];
-    const allViolations = new Map<string, SlotViolation[]>();
-    for (const ttId of teacherTimetableIds) {
-      const vm = await annotateSlotViolations(ttId, schoolId);
-      for (const [slotId, v] of vm) allViolations.set(slotId, v);
-    }
-    // Merge violations into grid periods
+    // ── Merge cross-division elective assignments into single entries ──
+    // Cross-div electives have the same electiveGroupId + same subject at the
+    // same time coordinate but from different divisions. They should display as
+    // one block (e.g., "Malayalam — Class X: A, B, C") not 3 separate blocks.
+    // Track ALL original slot IDs from merged electives to filter false-positive violations later.
+    const mergedElectiveSlotIds = new Set<string>();
     for (const day of Object.values(grid)) {
       for (const period of day.periods) {
+        if (period.assignments.length <= 1) continue;
+
+        // Group assignments by electiveGroupId + subjectId
+        const electiveGroups = new Map<string, typeof period.assignments>();
+        const nonElective: typeof period.assignments = [];
+
+        for (const a of period.assignments) {
+          if (a.electiveGroup) {
+            const key = `${a.electiveGroup.id}:${a.subject.id}`;
+            if (!electiveGroups.has(key)) electiveGroups.set(key, []);
+            electiveGroups.get(key)!.push(a);
+          } else {
+            nonElective.push(a);
+          }
+        }
+
+        // Merge elective groups that span multiple divisions into one assignment
+        const merged: typeof period.assignments = [...nonElective];
+        const mergedSlotIds: string[] = [];
+
+        for (const [, group] of electiveGroups) {
+          if (group.length === 1) {
+            // Per-division elective or single division — keep as-is
+            merged.push(group[0]);
+          } else {
+            // Cross-div: merge division labels into one entry
+            // Mark all slot IDs in this group as merged (for violation filtering)
+            const periodSlotIds = period.slotIds;
+            // Find which slotIds correspond to this group's assignments
+            const originalAssignments = period.assignments;
+            for (let ai = 0; ai < originalAssignments.length; ai++) {
+              const oa = originalAssignments[ai];
+              if (oa.electiveGroup && group.some(g => g.id === oa.id)) {
+                if (ai < periodSlotIds.length) mergedElectiveSlotIds.add(periodSlotIds[ai]);
+              }
+            }
+
+            // teacher.name carries the divLabel (e.g., "Class X-A")
+            // Merge into "Class X: A, B, C" format
+            const divLabels = group.map(a => a.teacher?.name ?? '').sort();
+
+            // Extract class name and division letters for compact display
+            const classGroups = new Map<string, string[]>();
+            for (const a of group) {
+              const divId = a.teacher?.id ?? '';
+              const fullLabel = a.teacher?.name ?? '';
+              // fullLabel is like "Class X-A" → extract "Class X" and "A"
+              const dashIdx = fullLabel.lastIndexOf('-');
+              if (dashIdx > 0) {
+                const cls = fullLabel.substring(0, dashIdx);
+                const div = fullLabel.substring(dashIdx + 1);
+                if (!classGroups.has(cls)) classGroups.set(cls, []);
+                classGroups.get(cls)!.push(div);
+              } else {
+                if (!classGroups.has(fullLabel)) classGroups.set(fullLabel, []);
+              }
+            }
+
+            const compactLabel = Array.from(classGroups.entries())
+              .map(([cls, divs]) => divs.length > 0 ? `${cls}: ${divs.join(', ')}` : cls)
+              .join(' — ');
+
+            // Use the first assignment as the base, override the label
+            const base = { ...group[0] };
+            base.teacher = { id: group[0].teacher?.id ?? '', name: compactLabel };
+
+            merged.push(base);
+
+            // Keep only the first slotId for this merged group (all share same time)
+            // The rest are tracked but not individually draggable
+          }
+        }
+
+        // Rebuild slotIds: non-elective slots first, then one per merged elective group
+        const newSlotIds: string[] = [];
+        let slotIdx = 0;
+        for (const a of period.assignments) {
+          if (!a.electiveGroup) {
+            // Non-elective: keep its slotId at its position
+            if (slotIdx < period.slotIds.length) newSlotIds.push(period.slotIds[slotIdx]);
+          }
+          slotIdx++;
+        }
+        // For merged electives, add just the first slotId from each group
+        slotIdx = 0;
+        const seenGroups = new Set<string>();
+        for (const a of period.assignments) {
+          if (a.electiveGroup) {
+            const key = `${a.electiveGroup.id}:${a.subject.id}`;
+            if (!seenGroups.has(key)) {
+              seenGroups.add(key);
+              if (slotIdx < period.slotIds.length) newSlotIds.push(period.slotIds[slotIdx]);
+            }
+          }
+          slotIdx++;
+        }
+
+        period.assignments = merged;
+        period.slotIds = newSlotIds.length > 0 ? newSlotIds : period.slotIds;
+      }
+    }
+
+    // Annotate per-slot violations — only for the teacher's own slots (not full timetables).
+    // This avoids O(timetables × slots × teachers) query explosion for teachers in many divisions.
+    const teacherSlotIds = slots.map(s => s.id);
+    const teacherAvailSlots = await prisma.teacherAvailability.findMany({
+      where: { teacherId, academicYearId },
+      select: { slotId: true, workingDayId: true },
+    });
+    const unavailableSet = new Set(teacherAvailSlots.map(a => `${a.workingDayId}:${a.slotId}`));
+
+    for (const day of Object.values(grid)) {
+      for (const period of day.periods) {
+        if (period.assignments.length === 0) continue;
+
         for (const slotId of period.slotIds) {
-          const v = allViolations.get(slotId);
-          if (v) period.violations.push(...v);
+          // Skip cross-div elective slots (expected co-scheduling)
+          if (mergedElectiveSlotIds.has(slotId)) continue;
+
+          const slotData = slots.find(s => s.id === slotId);
+          if (!slotData) continue;
+          const da = slotData.divisionAssignment;
+          if (!da) continue;
+
+          // Teacher conflict: check if THIS teacher is busy at this time in another division
+          const conflict = await isTeacherBusyAt({
+            schoolId,
+            teacherId,
+            dayOfWeek: slotData.workingDay.dayOfWeek,
+            startTime: slotData.slot.startTime,
+            endTime: slotData.slot.endTime,
+            excludeSlotIds: teacherSlotIds, // Exclude all of this teacher's own slots
+          });
+          if (conflict) {
+            // Check if the conflict is with a same-elective-group slot (expected)
+            const conflictEgId = conflict.divisionAssignment?.electiveGroupId;
+            const sourceEgId = da.electiveGroup?.id;
+            if (!(sourceEgId && conflictEgId && sourceEgId === conflictEgId)) {
+              period.violations.push({
+                type: 'TEACHER_CONFLICT',
+                teacherName: teacher.name,
+                reason: `${teacher.name} also teaching ${conflict.timetable.division?.class?.name ?? ''} ${conflict.timetable.division?.label ?? ''} at this time`,
+              });
+            }
+          }
+
+          // Availability violation
+          const unavailKey = `${slotData.workingDayId}:${slotData.slotId}`;
+          if (unavailableSet.has(unavailKey)) {
+            period.violations.push({
+              type: 'AVAILABILITY_VIOLATION',
+              teacherName: teacher.name,
+              reason: `${teacher.name} is unavailable at this time`,
+            });
+          }
         }
       }
     }
@@ -2767,9 +2877,12 @@ export class TimetableService {
         }
       }
 
-      if (hasConflict) {
+      if (hasConflict && !isSameDivision) {
+        // Cross-division with conflict → truly invalid
         invalidTargets.push({ ...meta, reason: 'Teacher conflict' });
       } else {
+        // Same-division targets are always valid (conflicts handled via swap dialog)
+        // Cross-division without conflict → valid
         validTargets.push(meta);
       }
     }

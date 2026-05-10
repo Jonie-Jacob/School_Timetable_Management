@@ -94,6 +94,8 @@ export interface TeacherLoad {
   assignedPeriods: number;
   /** Distinct time slots in the generated timetable. null if no timetable exists. */
   timetablePeriods: number | null;
+  /** Number of time slots where teacher is double-booked across divisions */
+  conflictCount: number;
   qualifiedSubjectIds: string[];
 }
 

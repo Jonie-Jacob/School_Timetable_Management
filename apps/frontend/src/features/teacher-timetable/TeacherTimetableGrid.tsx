@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { CalendarDays, Coffee, UtensilsCrossed, AlertTriangle } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
+import { Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
 import { useGetTeacherTimetableQuery } from '@/features/timetable/timetableApi';
@@ -112,6 +113,8 @@ interface Props {
   validTargets?: ValidTeacherSwapTarget[];
   invalidTargets?: InvalidTeacherSwapTarget[];
   activeDragSlotId?: string | null;
+  swappingSlotIds?: Set<string>;
+  onSwapComplete?: () => void;
 }
 
 export function TeacherTimetableGrid({
@@ -122,8 +125,19 @@ export function TeacherTimetableGrid({
   validTargets = [],
   invalidTargets = [],
   activeDragSlotId,
+  swappingSlotIds = new Set(),
+  onSwapComplete,
 }: Props) {
-  const { data: grid, isLoading } = useGetTeacherTimetableQuery(teacherId, { skip: !teacherId });
+  const { data: grid, isLoading, isFetching } = useGetTeacherTimetableQuery(teacherId, { skip: !teacherId });
+
+  // Clear swap loading indicators when refetch completes
+  const wasFetching = useRef(false);
+  useEffect(() => {
+    if (wasFetching.current && !isFetching && swappingSlotIds.size > 0) {
+      onSwapComplete?.();
+    }
+    wasFetching.current = isFetching;
+  }, [isFetching, swappingSlotIds.size, onSwapComplete]);
 
   const headerSlots = useMemo(() => {
     const ttSlots = [...(grid?.days?.[0]?.periods ?? [])].map((p) => p.slot).sort((a, b) => a.sortOrder - b.sortOrder);
@@ -265,7 +279,10 @@ export function TeacherTimetableGrid({
                   const assignments = period?.assignments ?? [];
                   const isElective = period?.isElective ?? false;
                   const hasContent = assignments.length > 0;
-                  const isDoubleBooked = assignments.length > 1 && !isElective;
+                  // Double-booked = multiple assignments from DIFFERENT divisions (real conflict)
+                  // vs elective = multiple assignments in the SAME division (co-scheduled, not conflict)
+                  const uniqueDivisions = new Set(assignments.map(a => a.teacher?.id));
+                  const isDoubleBooked = assignments.length > 1 && uniqueDivisions.size > 1;
                   const primarySlotId = period?.timetableSlotId || period?.slotIds?.[0] || '';
 
                   // Non-DnD mode
@@ -287,10 +304,10 @@ export function TeacherTimetableGrid({
                         )}
                         {isDoubleBooked ? (
                           <div className="space-y-0.5">
-                            {assignments.map((a, i) => (
-                              <div key={a.id} className={i > 0 ? 'ring-1 ring-red-500/60 rounded-lg' : ''}>
+                            {assignments.map((a) => (
+                              <div key={a.id} className="ring-1 ring-red-500/60 rounded-lg relative">
                                 <CellContent assignment={a} isElective={false} />
-                                {i > 0 && <AlertTriangle className="size-2.5 text-red-500 mx-auto -mt-0.5" />}
+                                <AlertTriangle className="size-2.5 text-red-500 absolute top-0.5 right-0.5" />
                               </div>
                             ))}
                           </div>
@@ -305,12 +322,15 @@ export function TeacherTimetableGrid({
                   const dayOfWeek = day.workingDay.dayOfWeek;
 
                   if (!hasContent) {
-                    // Empty cell: always render as droppable with a STABLE composite ID.
+                    // Empty cell: render as droppable with a STABLE composite ID.
                     // The real timetable_slot UUID is resolved in handleDragEnd.
                     const emptyDropId = `empty:${dayOfWeek}:${slot.sortOrder}`;
                     const emptyValidity = emptyValidityMap.get(`${dayOfWeek}:${slot.sortOrder}`);
+                    // During drag, dim empty cells that aren't valid targets
+                    const isDragging = !!activeDragSlotId;
+                    const isUnreachable = isDragging && !emptyValidity;
                     return (
-                      <td key={slot.id} className="px-1 py-1 border-r border-border/40">
+                      <td key={slot.id} className={cn('px-1 py-1 border-r border-border/40', isUnreachable && 'opacity-30')}>
                         <DroppableCell slotId={emptyDropId} validity={emptyValidity}>
                           <div className="flex items-center justify-center min-h-[40px]">
                             <span className="text-[10px] text-muted-foreground/40">--</span>
@@ -322,6 +342,19 @@ export function TeacherTimetableGrid({
 
                   const validity = validityMap.get(primarySlotId);
                   const isDragSource = activeDragSlotId === primarySlotId;
+                  // Show loading spinner on swapped cells until refetch completes
+                  const isCellSwapping = swappingSlotIds.size > 0
+                    && (period?.slotIds?.some(sid => swappingSlotIds.has(sid)) ?? false);
+
+                  if (isCellSwapping) {
+                    return (
+                      <td key={slot.id} className="px-1 py-1 border-r border-border/40">
+                        <div className="flex items-center justify-center min-h-[40px]">
+                          <Loader2 className="size-5 animate-spin text-amber-500" />
+                        </div>
+                      </td>
+                    );
+                  }
 
                   if (isDoubleBooked) {
                     // Double-booked: each assignment is separately draggable
@@ -331,15 +364,18 @@ export function TeacherTimetableGrid({
                           {assignments.map((a, i) => {
                             const aSlotId = period?.slotIds?.[i] || primarySlotId;
                             const aValidity = validityMap.get(aSlotId);
+                            const isThisDragging = activeDragSlotId === aSlotId;
                             return (
-                              <DraggableCell key={a.id} slotId={aSlotId}>
-                                <DroppableCell slotId={aSlotId} validity={aValidity}>
-                                  <div className={i > 0 ? 'ring-1 ring-red-500/60 rounded-lg relative' : ''}>
-                                    <CellContent assignment={a} isElective={false} />
-                                    {i > 0 && <AlertTriangle className="size-2.5 text-red-500 absolute top-0.5 right-0.5" />}
-                                  </div>
-                                </DroppableCell>
-                              </DraggableCell>
+                              <div key={a.id} className={cn(isThisDragging && 'opacity-30')}>
+                                <DraggableCell slotId={aSlotId}>
+                                  <DroppableCell slotId={aSlotId} validity={aValidity}>
+                                    <div className={cn('rounded-lg relative', i > 0 && 'ring-1 ring-red-500/60')}>
+                                      <CellContent assignment={a} isElective={false} />
+                                      <AlertTriangle className="size-2.5 text-red-500 absolute top-0.5 right-0.5" />
+                                    </div>
+                                  </DroppableCell>
+                                </DraggableCell>
+                              </div>
                             );
                           })}
                         </div>

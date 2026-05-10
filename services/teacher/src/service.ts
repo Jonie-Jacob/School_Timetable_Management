@@ -75,12 +75,64 @@ export class TeacherService {
    */
   async listLoad(schoolId: string, academicYearId: string) {
     const loads = await computeTeacherLoads({ schoolId, academicYearId });
+
+    // Compute conflict counts per teacher (teacher scheduled in 2+ divisions at same time)
+    // Exclude cross-div electives where multi-division co-scheduling is expected.
+    const timetableSlots = await prisma.timetableSlot.findMany({
+      where: {
+        schoolId,
+        timetable: { academicYearId },
+        divisionAssignmentId: { not: null },
+        divisionAssignment: { deletedAt: null },
+      },
+      select: {
+        workingDayId: true,
+        slotId: true,
+        timetable: { select: { divisionId: true } },
+        divisionAssignment: { select: { teacherId: true, assistantTeacherId: true, electiveGroupId: true } },
+      },
+    });
+
+    // teacherId → Map<timeKey, { divisions: Set, electiveGroupIds: Set, totalSlots: number }>
+    const timeCoords = new Map<string, Map<string, { divisions: Set<string>; electiveGroupIds: Set<string>; electiveSlotCount: number }>>();
+    for (const ts of timetableSlots) {
+      const da = ts.divisionAssignment;
+      if (!da) continue;
+      const timeKey = `${ts.workingDayId}:${ts.slotId}`;
+      for (const tid of [da.teacherId, da.assistantTeacherId]) {
+        if (!tid) continue;
+        if (!timeCoords.has(tid)) timeCoords.set(tid, new Map());
+        const tm = timeCoords.get(tid)!;
+        if (!tm.has(timeKey)) tm.set(timeKey, { divisions: new Set(), electiveGroupIds: new Set(), electiveSlotCount: 0 });
+        const entry = tm.get(timeKey)!;
+        entry.divisions.add(ts.timetable.divisionId);
+        if (da.electiveGroupId) {
+          entry.electiveGroupIds.add(da.electiveGroupId);
+          entry.electiveSlotCount++;
+        }
+      }
+    }
+
+    const conflictsByTeacher = new Map<string, number>();
+    for (const [tid, tm] of timeCoords) {
+      let c = 0;
+      for (const entry of tm.values()) {
+        if (entry.divisions.size <= 1) continue;
+        // Cross-div elective: all divisions at this time belong to the same elective group
+        // AND every slot has an elective assignment (no mix of elective + non-elective)
+        if (entry.electiveGroupIds.size === 1 && entry.electiveSlotCount === entry.divisions.size) continue;
+        c++;
+      }
+      if (c > 0) conflictsByTeacher.set(tid, c);
+    }
+
     return loads.map((l) => ({
       id: l.teacherId,
       name: l.teacherName,
       maxPeriodsPerWeek: l.maxPeriodsPerWeek,
       assignedPeriods: l.assignedPeriods,
       timetablePeriods: l.timetablePeriods,
+      conflictCount: conflictsByTeacher.get(l.teacherId) ?? 0,
       qualifiedSubjectIds: l.qualifiedSubjectIds,
     }));
   }

@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import {
   DndContext,
   type DragStartEvent,
@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/shared';
 import { ExportButton } from '@/components/shared/ExportButton';
+import { useAppDispatch } from '@/app/hooks';
 import { useGetTeachersQuery, useGetTeachersLoadQuery } from '@/features/teachers/teacherApi';
 import {
   useExportTeacherPdfMutation,
@@ -22,6 +23,7 @@ import {
   downloadExcel,
 } from '@/features/export/exportApi';
 import {
+  timetableApi,
   useLazyGetValidTeacherSwapTargetsQuery,
   usePreviewTeacherSwapMutation,
   useSwapTeacherSlotsMutation,
@@ -39,6 +41,7 @@ import { TeacherBreakdown } from './TeacherBreakdown';
 export function Component() {
   const { teacherId } = useParams<{ teacherId: string }>();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
 
   const { data: teachersData } = useGetTeachersQuery({ pageSize: 200 });
   const { data: teacherLoads } = useGetTeachersLoadQuery();
@@ -58,11 +61,19 @@ export function Component() {
     preview: PreviewTeacherSwapResponse;
   } | null>(null);
   const [isSwapping, setIsSwapping] = useState(false);
+  const [swappingSlotIds, setSwappingSlotIds] = useState<Set<string>>(new Set());
 
   const [fetchValidTargets] = useLazyGetValidTeacherSwapTargetsQuery();
   const [previewSwap] = usePreviewTeacherSwapMutation();
   const [swapTeacherSlots] = useSwapTeacherSlotsMutation();
   const [swapSlots] = useSwapSlotsMutation();
+
+  const markSwapping = (ids: string[]) => setSwappingSlotIds(new Set(ids));
+  const clearSwapping = () => setSwappingSlotIds(new Set());
+
+  const invalidateCache = useCallback(() => {
+    dispatch(timetableApi.util.invalidateTags(['Timetable']));
+  }, [dispatch]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -120,27 +131,32 @@ export function Component() {
         toast.error(inv.reason === 'Period structure mismatch'
           ? 'Cannot swap: period structures are different'
           : `Cannot swap: ${inv.reason}`);
+      } else {
+        toast.info('Cannot drop here — no matching slot in this division\'s timetable. Use the class timetable view for cross-division moves.');
       }
       return;
     }
 
-    // Same-division, no conflicts expected → swap directly
+    markSwapping([sourceSlotId, targetSlotId]);
+
+    // Same-division → swap directly (conflict triggers preview dialog)
     if (validTarget.isSameDivision) {
       setIsSwapping(true);
       try {
         await swapSlots({ sourceSlotId, targetSlotId }).unwrap();
         toast.success('Slot swapped.');
+        invalidateCache();
       } catch (err: unknown) {
         const error = err as { status?: number; data?: { error?: { code?: string; message?: string } } };
         if (error?.status === 409 && error?.data?.error?.code === 'TEACHER_CONFLICT') {
-          // Show preview dialog with conflicts
           try {
             const preview = await previewSwap({ sourceSlotId, targetSlotId }).unwrap();
             setSwapDialog({ sourceSlotId, targetSlotId, preview });
-            return;
+            return; // Keep swapping indicators until dialog resolves
           } catch { /* fall through */ }
         }
         toast.error(error?.data?.error?.message ?? 'Swap failed.');
+        clearSwapping();
       } finally {
         setIsSwapping(false);
       }
@@ -153,22 +169,25 @@ export function Component() {
 
       if (preview.swapType === 'elective' && preview.delegateToElective) {
         toast.info('Elective swaps should be done from the class timetable view.');
+        clearSwapping();
         return;
       }
 
-      // Show confirmation dialog (with or without conflicts)
       setSwapDialog({ sourceSlotId, targetSlotId, preview });
+      return; // Keep swapping indicators until dialog resolves
     } catch (err: unknown) {
       const error = err as { data?: { error?: { message?: string } } };
       toast.error(error?.data?.error?.message ?? 'Preview failed.');
     }
-  }, [validTargets, invalidTargets, swapSlots, previewSwap]);
+    clearSwapping();
+  }, [validTargets, invalidTargets, swapSlots, previewSwap, invalidateCache]);
 
   const handleSwapConfirm = useCallback(async (force: boolean) => {
     if (!swapDialog) return;
     const { sourceSlotId, targetSlotId, preview } = swapDialog;
     setSwapDialog(null);
     setIsSwapping(true);
+    markSwapping([sourceSlotId, targetSlotId]);
     try {
       if (preview.swapType === 'cross_division') {
         await swapTeacherSlots({ sourceSlotId, targetSlotId, force }).unwrap();
@@ -176,13 +195,20 @@ export function Component() {
         await swapSlots({ sourceSlotId, targetSlotId, force }).unwrap();
       }
       toast.success(force ? 'Swap forced — conflicts created.' : 'Swap completed.');
+      invalidateCache();
     } catch (err: unknown) {
       const error = err as { data?: { error?: { message?: string } } };
       toast.error(error?.data?.error?.message ?? 'Swap failed.');
+      clearSwapping();
     } finally {
       setIsSwapping(false);
     }
-  }, [swapDialog, swapTeacherSlots, swapSlots]);
+  }, [swapDialog, swapTeacherSlots, swapSlots, invalidateCache]);
+
+  const handleSwapCancel = useCallback(() => {
+    setSwapDialog(null);
+    clearSwapping();
+  }, []);
 
   if (!teacherId) return null;
 
@@ -230,6 +256,8 @@ export function Component() {
           validTargets={validTargets}
           invalidTargets={invalidTargets}
           activeDragSlotId={activeDragSlotId}
+          swappingSlotIds={swappingSlotIds}
+          onSwapComplete={clearSwapping}
         />
 
         <DragOverlay>
@@ -247,7 +275,7 @@ export function Component() {
         preview={swapDialog?.preview ?? null}
         isSwapping={isSwapping}
         onConfirm={handleSwapConfirm}
-        onCancel={() => setSwapDialog(null)}
+        onCancel={handleSwapCancel}
       />
 
       <TeacherBreakdown teacherId={teacherId} />
