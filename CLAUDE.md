@@ -77,6 +77,21 @@ npm run prisma:studio
 3. **Deploy to dev** (AWS staging) — verify end-to-end before touching prod
 4. **Deploy to prod** — only after dev verification passes
 
+### Enhancement Implementation Workflow
+
+When working on an enhancement from `Documentaion/enhancements/`, follow this loop. **Do NOT shortcut it** — the user wants explicit checkpoints.
+
+1. **One phase (or sub-phase) at a time.** Do not pre-implement future phases. Confirm the plan with the user before writing code if the phase is non-trivial.
+2. **Update the enhancement doc as you go.** After each sub-phase/phase, edit the corresponding `Documentaion/enhancements/NN-*.md` file to mark items completed (e.g., `- [x] Sub-phase X.Y` or status table updates). The doc is the source of truth for progress.
+3. **Commit at the end of each phase.** Use `feat(scope): description` style. Stage only files belonging to that phase — review `git status` and `git diff --stat` before staging. Never commit local scratch (`tmp/`), build output, or unrelated WIP.
+4. **Do NOT deploy mid-enhancement.** Hold deploys until the user signals the enhancement (or a logical chunk) is ready to test.
+5. **When the user says we're ready to test:** deploy to **dev only** (frontend: `--mode staging` → `s3://timetable-dev-frontend` → CloudFront `EHYD0FQL3TM93`; backend: esbuild → `timetable-dev-<service>`).
+6. **Wait for user confirmation after dev testing.** Do not merge to `production` or deploy to prod on your own. The user will explicitly say "merge to prod" / "deploy to prod" once they've verified on `dev.sms.zyphr.co.in`.
+7. **On user confirmation:** fast-forward merge `develop` → `production`, push, then deploy to prod (frontend: default mode → `s3://timetable-prod-frontend` → CloudFront `EUWIXJK2BNYEF`; backend: esbuild → `timetable-prod-<service>`). Return to `develop` afterwards.
+8. **Update `project_enhancement_progress_*.md` memory** when an enhancement is fully complete, so future sessions know it's shipped.
+
+This is the default workflow — do not ask the user to repeat it each enhancement.
+
 ### Deploying a Backend Service (Standard)
 
 ```bash
