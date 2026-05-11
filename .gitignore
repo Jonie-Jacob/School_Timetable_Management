@@ -12,6 +12,9 @@ dist/
 .serverless/
 *.js.map
 
+# Local deploy/scratch artifacts
+tmp/
+
 # IDE
 .vscode/
 .idea/

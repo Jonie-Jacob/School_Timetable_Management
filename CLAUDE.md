@@ -68,6 +68,80 @@ npm run dev:school-config
 npm run prisma:studio
 ```
 
+## Development Workflow
+
+### Day-to-Day Loop
+
+1. **Develop locally** — `npm run dev:all` runs all 12 services + frontend with hot reload
+2. **Test locally** via browser at `http://localhost:5173` or Postman
+3. **Deploy to dev** (AWS staging) — verify end-to-end before touching prod
+4. **Deploy to prod** — only after dev verification passes
+
+### Deploying a Backend Service (Standard)
+
+```bash
+# Bundle the service with esbuild (DO NOT use `npx serverless deploy` — requires paid subscription)
+cd d:/Zyphr/School_Timetable_Management
+npx esbuild services/<name>/src/handler.ts --bundle --platform=node --target=node22 \
+  --external:@timetable/shared --external:@prisma/client --external:@aws-sdk/* \
+  --outfile=dist/handler.js
+
+# Zip and deploy (set MSYS_NO_PATHCONV for Git Bash)
+export MSYS_NO_PATHCONV=1
+zip dist/handler.zip dist/handler.js
+aws lambda update-function-code \
+  --function-name timetable-<dev|prod>-<service-name> \
+  --zip-file fileb://dist/handler.zip
+```
+
+Service name mapping (Lambda function name = `timetable-<stage>-<name>`):
+- `auth`, `academic-year`, `school-config`, `subject`, `teacher`, `class`
+- `division-assignment`, `timetable`, `dashboard`, `export`, `websocket`, `notification`
+
+### Deploying the Frontend
+
+```bash
+# To dev
+cd apps/frontend
+npx vite build --mode staging
+export MSYS_NO_PATHCONV=1
+aws s3 sync dist/ s3://timetable-dev-frontend --delete
+aws cloudfront create-invalidation --distribution-id EHYD0FQL3TM93 --paths "/*"
+
+# To prod
+npx vite build  # uses .env.production automatically
+aws s3 sync dist/ s3://timetable-prod-frontend --delete
+aws cloudfront create-invalidation --distribution-id EUWIXJK2BNYEF --paths "/*"
+```
+
+### Deploying After a Prisma Schema Change
+
+**Critical**: Both the layer AND all service bundles must be updated together. If only one is updated, services will use a mismatched Prisma client and return 500s.
+
+```bash
+# Step 1: Rebuild and publish the Lambda layer
+bash scripts/build-layer.sh <dev|prod>
+
+# Step 2: Redeploy ALL services via esbuild (repeat for each service)
+# The layer update alone is not enough — each service bundle has Prisma baked in
+npx esbuild services/<name>/src/handler.ts --bundle ... --outfile=dist/handler.js
+zip dist/handler.zip dist/handler.js
+aws lambda update-function-code --function-name timetable-<stage>-<name> --zip-file fileb://dist/handler.zip
+```
+
+### Running Ad-Hoc SQL Against Production/Dev RDS
+
+RDS is in a private subnet — cannot be reached directly. Use a temporary Lambda with `pg` bundled:
+
+```bash
+# 1. Write a handler (index.mjs) that uses `pg` directly (NOT Prisma from layer)
+# 2. Bundle it: zip it with node_modules/pg included
+# 3. Deploy as a temporary Lambda in the VPC with the lambda SG (sg-023ec7ce6f103470a)
+# 4. Invoke, read results, then delete the Lambda
+```
+
+See `C:\Users\jonie\AppData\Local\Temp\check-slots\index.mjs` as a reference pattern.
+
 ## Environment
 
 Required in `.env` (root):
@@ -169,19 +243,23 @@ All design docs are in `Documentaion/` (note the typo — keep as-is):
 - **Terraform State**: `s3://zyphr-timetable-terraform-state`
 - **Auth**: AWS Cognito (`VITE_AUTH_MODE=cognito` in production, mock auth in local dev)
 
-### Quick Deploy Commands (PowerShell)
+### Quick Deploy Commands
 
-**Frontend only:**
-```powershell
-cd apps\frontend; npm run build
+**Frontend to prod:**
+```bash
+cd apps/frontend && npx vite build
+export MSYS_NO_PATHCONV=1
 aws s3 sync dist/ s3://timetable-prod-frontend --delete
 aws cloudfront create-invalidation --distribution-id EUWIXJK2BNYEF --paths "/*"
 ```
 
-**Backend service (e.g. teacher):**
-```powershell
-# Set env vars first (see Documentaion/Deployment_Operations.md)
-cd services\teacher; npx serverless deploy --stage prod
+**Single backend service to prod (e.g. teacher):**
+```bash
+export MSYS_NO_PATHCONV=1
+npx esbuild services/teacher/src/handler.ts --bundle --platform=node --target=node22 \
+  --external:@timetable/shared --external:@prisma/client --external:@aws-sdk/* \
+  --outfile=dist/handler.js && zip dist/handler.zip dist/handler.js
+aws lambda update-function-code --function-name timetable-prod-teacher --zip-file fileb://dist/handler.zip
 ```
 
 **Full deployment guide:** See `Documentaion/AWS_Deployment_Guide.md`
@@ -210,11 +288,18 @@ cd services\teacher; npx serverless deploy --stage prod
 ### Quick Deploy Commands
 
 ```bash
-# Deploy all services to dev
-npm run deploy:all:dev
+# Frontend to dev
+cd apps/frontend && npx vite build --mode staging
+export MSYS_NO_PATHCONV=1
+aws s3 sync dist/ s3://timetable-dev-frontend --delete
+aws cloudfront create-invalidation --distribution-id EHYD0FQL3TM93 --paths "/*"
 
-# Deploy frontend to dev
-npm run deploy:frontend:dev
+# Single backend service to dev (e.g. teacher)
+export MSYS_NO_PATHCONV=1
+npx esbuild services/teacher/src/handler.ts --bundle --platform=node --target=node22 \
+  --external:@timetable/shared --external:@prisma/client --external:@aws-sdk/* \
+  --outfile=dist/handler.js && zip dist/handler.zip dist/handler.js
+aws lambda update-function-code --function-name timetable-dev-teacher --zip-file fileb://dist/handler.zip
 
 # Health check dev
 npm run health:check:dev
@@ -245,6 +330,12 @@ npm run health:check:dev
 
 **XII Maths/IP/Psy parallel_sections** (FIXED April 20, 2026): Mathematics `parallel_sections` was 1 (split mode) but should be 2 (parallel mode — both Amrutha and Julie teach simultaneously).
 
+**Lambda 500 on /api/classes after migration** (FIXED May 2026): Lambda layer contained old Prisma client referencing dropped `status` enum column. Fixed by rebuilding layer (via `scripts/build-layer.sh`) AND redeploying all services via esbuild (service bundles had the old Prisma baked in). Both must be updated together when Prisma schema changes.
+
+**Cross-division electives falsely flagged as TEACHER_CONFLICT** (FIXED May 2026): Same teacher legitimately teaches multiple divisions in the same elective group at the same time — this is correct, not a conflict. Fix: added `electiveGroupId: string | null` to `TimeConflictResult` in `conflictDetectionHelper.ts`; `timetableStatusHelper.ts` now skips conflicts where both slots share the same `electiveGroupId`. Also fixed conflict time key: was using `workingDayId:slotId` (breaks across different period structures) — changed to `dayOfWeek:startTime`.
+
+**Teacher overload indicator** (ADDED May 2026): Teachers with < 2 free PERIOD slots (not breaks/lunch) in any day are flagged as overloaded. `services/teacher/src/service.ts` computes `overloadedDays` count per teacher in the `/load` endpoint. UI shows a flame badge in `TeacherTimetablePage.tsx` (table column) and `TeacherTimetableGrid.tsx` (day label cell). Only `slotType === 'PERIOD'` slots count — break/lunch/activity slots are excluded.
+
 ## Auth Architecture (Production)
 
 - **Frontend**: Uses `amazon-cognito-identity-js` SDK for signup/signin/session
@@ -258,10 +349,11 @@ npm run health:check:dev
 ## Lambda Layer
 
 - Prod layer name: `timetable-prod-shared-deps`, Dev: `timetable-dev-shared-deps`
-- Published via S3 upload (too large for direct upload): `s3://zyphr-timetable-terraform-state/layers/{stage}/shared-layer.zip`
+- Published via S3 upload: `s3://zyphr-timetable-terraform-state/layers/{stage}/shared-layer.zip`
 - Contains: `@timetable/shared` compiled code + Prisma client + Linux engine binary + AWS SDK deps (@aws-sdk/client-lambda, client-dynamodb, lib-dynamodb, client-ses, @smithy/*)
 - Must include only the Linux engine (remove Windows DLL, WASM engines to stay under 250MB unzipped limit)
-- Build script: `scripts/build-layer.sh` — uses PowerShell `Compress-Archive` fallback on Windows (no `zip` command)
+- Build script: `scripts/build-layer.sh` — removes nested heavy packages after install (`prisma` CLI, `typescript`, `effect`, `@prisma`, `.prisma`, `@effect` from nested `node_modules`) to keep layer ~27MB unzipped
+- Uses PowerShell `Compress-Archive` fallback on Windows (no `zip` command)
 
 ## CloudFront API Routing
 
@@ -310,5 +402,56 @@ Default (*)             → S3 (timetable-dev-frontend)
 - **RDS is in a private subnet** with NAT gateway only — cannot be reached from the internet even when marked "publicly accessible". To run ad-hoc SQL, use a Lambda function inside the VPC (with the `pg` npm package bundled, not Prisma).
 - **Creating a new database on RDS**: Use a temporary Lambda with bundled `pg` package (not the shared layer — Prisma from the layer has engine path issues for ad-hoc scripts). See Phase 3 of `Documentaion/enhancements/dev-environment-setup.md`.
 - **Git Bash on Windows (MSYS)**: Paths starting with `/` get converted to `C:/Program Files/Git/...`. Use `export MSYS_NO_PATHCONV=1` in bash scripts that pass paths to AWS CLI (SSM parameter names, S3 keys, etc.). Already set in `scripts/deploy.sh`.
-- **Lambda layer upload**: Layer zip (~60MB) is too large for direct `PublishLayerVersion` upload. Must upload to S3 first, then use `--content S3Bucket=...,S3Key=...`. Already handled in `scripts/deploy.sh`.
+- **Lambda layer upload**: Layer zip is uploaded to S3 first, then published with `--content S3Bucket=...,S3Key=...`. Already handled in `scripts/deploy.sh`.
+- **Serverless Framework v4 subscription**: `npx serverless deploy` requires a paid subscription. **Workaround for deploying individual services**: bundle with esbuild, then use `aws lambda update-function-code` directly:
+  ```bash
+  npx esbuild services/<name>/src/handler.ts --bundle --platform=node --target=node22 \
+    --external:@timetable/shared --external:@prisma/client --external:@aws-sdk \
+    --outfile=dist/handler.js
+  zip dist/handler.zip dist/handler.js
+  aws lambda update-function-code --function-name timetable-<stage>-<service> \
+    --zip-file fileb://dist/handler.zip
+  ```
+  The `deploy.sh` script still handles full multi-service deploys (it uses `serverless deploy` internally via the layer publish path). Use esbuild approach for quick single-service hotfixes.
 - **Terraform and CloudFront**: Do NOT run `terraform apply` on the CloudFront module without checking the plan — it will remove manually-added API Gateway behaviors. If needed, re-add them via AWS CLI `update-distribution` with a JSON config.
+
+## Enhancement Progress
+
+Enhancement plans live in `Documentaion/enhancements/`. See `index.md` for the full list and implementation order.
+
+### Completed (as of May 2026)
+
+| # | Enhancement | Notes |
+|---|-------------|-------|
+| 2 | Assignment Breakdown cross-div fix | `break` bug + missing `deletedAt` filters |
+| 14 | Shared Service Helpers | All 10 phases — 13 helper files in `packages/shared/src/helpers/` |
+| 1 | Teacher Timetable DnD | Preview dialog, conflict resolution table, cross-division swaps |
+| 3 | Timetable Status Flags | Multi-status JSON model, per-slot violations, FAB/wizard removed, dashboard stats |
+| 5 | Elective Edit Modal (partial) | Unified elective editor modal, per-division + cross-division, scheduling preferences |
+| 8 | UI Bug Fixes (ongoing) | Gen result dismiss, view button, cell editor restyle + assistant teacher, elective modal header/footer |
+
+### In Progress / Partially Done
+
+| # | Enhancement | Status |
+|---|-------------|--------|
+| 8 | UI Bug Fixes | New items added as discovered — see `08-ui-bug-fixes-ux.md` |
+
+### Not Started (implementation order)
+
+| # | Enhancement | Depends On |
+|---|-------------|------------|
+| 4 | Timetable-Aware Assignment Editing | Enh 3 ✓ |
+| 11 | Period Structure Changes — Timetable-Aware | Enh 4 |
+| 9 | All-Class Timetable View | Enh 3 ✓ |
+| 6 | Audit Log UI | Enh 14 ✓ |
+| 7 | Role-Based Access Control | Enh 14 ✓ |
+| 12 | Dashboard Redesign | Enh 3 ✓, Enh 7 |
+| 13 | Super Admin Portal | Enh 7 |
+
+**Next enhancement**: Enhancement 4 — Timetable-Aware Assignment Editing (Resolution Wizard).
+
+### Ad-hoc Features Added Outside Enhancements
+
+- **Teacher overload indicator** (May 2026): Flame badge on teacher list + timetable grid when < 2 free PERIOD slots in a day. Computed in `/load` endpoint (`overloadedDays` count).
+- **All Timetables filters** (May 2026): Search + status filter bar on `TimetablesOverviewPage`.
+- **Dev environment** (May 2026): Separate Cognito, CloudFront, DynamoDB, database on same RDS. See `Documentaion/enhancements/dev-environment-setup.md`.

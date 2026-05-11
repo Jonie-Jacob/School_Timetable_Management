@@ -37,6 +37,24 @@ echo "==> Installing production dependencies..."
 cd "$BUILD_DIR/nodejs/node_modules/@timetable/shared"
 npm install --omit=dev --ignore-scripts 2>/dev/null
 
+# Remove packages that are not needed at Lambda runtime
+# These get pulled in as production deps but are only needed for dev/build:
+#   - prisma (CLI, ~50MB) — only needed for migrations/generate
+#   - typescript (~23MB) — build tool
+#   - effect (~31MB) — pulled by @effect/schema, not used at runtime
+#   - fast-check (~3MB) — property testing, dev only
+#   - @prisma/client nested copy (~77MB) — we copy the correct one from root below
+echo "==> Removing unnecessary packages from layer..."
+NESTED_NM="$BUILD_DIR/nodejs/node_modules/@timetable/shared/node_modules"
+rm -rf "$NESTED_NM/prisma" 2>/dev/null
+rm -rf "$NESTED_NM/typescript" 2>/dev/null
+rm -rf "$NESTED_NM/effect" 2>/dev/null
+rm -rf "$NESTED_NM/fast-check" 2>/dev/null
+rm -rf "$NESTED_NM/@prisma" 2>/dev/null
+rm -rf "$NESTED_NM/.prisma" 2>/dev/null
+rm -rf "$NESTED_NM/@effect" 2>/dev/null
+echo "  Removed: prisma CLI, typescript, effect, fast-check, nested @prisma"
+
 # Prisma client needs the engine binary
 # Check both package-level and root-level node_modules (npm hoists to root)
 PRISMA_SOURCE=""

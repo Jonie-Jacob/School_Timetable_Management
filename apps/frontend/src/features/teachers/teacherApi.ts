@@ -96,6 +96,8 @@ export interface TeacherLoad {
   timetablePeriods: number | null;
   /** Number of time slots where teacher is double-booked across divisions */
   conflictCount: number;
+  /** Number of days where teacher has fewer than 2 free periods */
+  overloadedDays: number;
   qualifiedSubjectIds: string[];
 }
 

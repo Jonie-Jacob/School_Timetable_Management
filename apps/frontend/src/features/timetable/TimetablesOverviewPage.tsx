@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays, Eye, Zap, CheckCircle2, AlertTriangle, Clock, Loader2 } from 'lucide-react';
+import { CalendarDays, Eye, Zap, CheckCircle2, AlertTriangle, Clock, Loader2, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { useAppDispatch } from '@/app/hooks';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ import { cn } from '@/lib/cn';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 
 type GenerateScope = 'all' | 'outdated' | 'pending';
+type StatusFilter = 'all' | 'valid' | 'issues' | 'pending';
 
 
 export function Component() {
@@ -59,6 +61,8 @@ export function Component() {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [adjacencyEnabled, setAdjacencyEnabled] = useState(false);
   const [generateScope, setGenerateScope] = useState<GenerateScope>('all');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   // ── WebSocket-driven generation progress ──
   // Restore last completed generation result from localStorage
@@ -293,6 +297,19 @@ export function Component() {
     })),
   );
 
+  const filteredDivisions = allDivisions.filter((div) => {
+    if (search.trim()) {
+      const term = search.trim().toLowerCase();
+      const label = `${div.className} ${div.label}`.toLowerCase();
+      const stream = (div.streamName ?? '').toLowerCase();
+      if (!label.includes(term) && !stream.includes(term)) return false;
+    }
+    if (statusFilter === 'valid') return div.timetable?.statusJson?.statuses?.includes('VALID');
+    if (statusFilter === 'issues') return div.timetable?.statusJson && !div.timetable.statusJson.statuses?.includes('VALID') && (div.timetable.statusJson.statuses?.length ?? 0) > 0;
+    if (statusFilter === 'pending') return !div.timetable;
+    return true;
+  });
+
   const valid = allDivisions.filter((d) => d.timetable?.statusJson?.statuses?.includes('VALID')).length;
   const withIssues = allDivisions.filter((d) => d.timetable?.statusJson && !d.timetable.statusJson.statuses?.includes('VALID') && d.timetable.statusJson.statuses?.length > 0).length;
   const pending = allDivisions.filter((d) => !d.timetable).length;
@@ -413,6 +430,32 @@ export function Component() {
         </div>
       )}
 
+      {/* Filter bar */}
+      {!isLoading && allDivisions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search class or division..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="text-xs rounded-md border border-border/60 bg-card px-2 py-1 text-foreground/80 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+          >
+            <option value="all">All Statuses</option>
+            <option value="valid">Valid</option>
+            <option value="issues">With Issues</option>
+            <option value="pending">Pending</option>
+          </select>
+          <span className="text-xs text-muted-foreground ml-auto">{filteredDivisions.length} division{filteredDivisions.length === 1 ? '' : 's'}</span>
+        </div>
+      )}
+
       {/* Generation progress */}
       <GenerationProgress
         state={genState}
@@ -443,7 +486,9 @@ export function Component() {
 
       {!isLoading && allDivisions.length > 0 && !isDesktop && (
         <div className="space-y-2">
-          {allDivisions.map((div) => {
+          {filteredDivisions.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-8">No divisions match the current filters.</div>
+          ) : filteredDivisions.map((div) => {
             return (
               <div key={div.id} className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-3.5 space-y-2.5 shadow-sm">
                 <div className="flex items-center justify-between">
@@ -504,7 +549,13 @@ export function Component() {
               </tr>
             </thead>
             <tbody>
-              {allDivisions.map((div, idx) => {
+              {filteredDivisions.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No divisions match the current filters.
+                  </td>
+                </tr>
+              ) : filteredDivisions.map((div, idx) => {
                 const hasTT = !!div.timetable;
                 return (
                   <tr
@@ -573,7 +624,7 @@ export function Component() {
             <tfoot>
               <tr className="bg-gradient-to-r from-stone-800 via-stone-700 to-stone-800 text-white">
                 <td colSpan={5} className="px-4 py-2.5 text-xs text-white/60">
-                  {allDivisions.length} division(s) -- {valid} valid, {withIssues} with issues, {pending} pending
+                  {filteredDivisions.length}{filteredDivisions.length !== allDivisions.length ? ` of ${allDivisions.length}` : ''} division(s) -- {valid} valid, {withIssues} with issues, {pending} pending
                 </td>
               </tr>
             </tfoot>

@@ -133,6 +133,7 @@ export async function recomputeTimetableStatus(
           teacher: { select: { id: true, name: true } },
           assistantTeacher: { select: { id: true, name: true } },
           subject: { select: { id: true, name: true } },
+          electiveGroup: { select: { id: true } },
         },
       },
     },
@@ -202,7 +203,15 @@ export async function recomputeTimetableStatus(
       excludeDivisionId: timetable.divisionId,
     });
 
-    const teacherConflict = conflicts.find(c => c.teacherId === da.teacher!.id);
+    // Skip cross-division elective co-scheduling: if this slot's assignment belongs
+    // to an elective group, and the "conflicting" slot is from the SAME elective group,
+    // that's intentional co-scheduling across divisions — not a real conflict.
+    const sourceEgId = da.electiveGroup?.id;
+    const teacherConflict = conflicts.find(c => {
+      if (c.teacherId !== da.teacher!.id) return false;
+      if (sourceEgId && c.electiveGroupId === sourceEgId) return false; // same elective group = expected
+      return true;
+    });
     if (teacherConflict) {
       teacherConflicts.push({
         slotId: s.id,

@@ -7,6 +7,7 @@ export interface TimeConflictResult {
   className: string;
   divisionLabel: string;
   divisionId: string;
+  electiveGroupId: string | null;
 }
 
 /**
@@ -55,6 +56,7 @@ export async function findTeachersAtTime(params: {
           teacher: { select: { id: true, name: true } },
           assistantTeacher: { select: { id: true, name: true } },
           subject: { select: { id: true, name: true } },
+          electiveGroup: { select: { id: true } },
         },
       },
     },
@@ -71,6 +73,7 @@ export async function findTeachersAtTime(params: {
       className: s.timetable.division.class.name,
       divisionLabel: s.timetable.division.label,
       divisionId: s.timetable.division.id,
+      electiveGroupId: da.electiveGroup?.id ?? null,
     };
 
     if (da.teacher) {

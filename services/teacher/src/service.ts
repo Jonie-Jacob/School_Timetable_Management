@@ -78,16 +78,19 @@ export class TeacherService {
 
     // Compute conflict counts per teacher (teacher scheduled in 2+ divisions at same time)
     // Exclude cross-div electives where multi-division co-scheduling is expected.
+    // Use dayOfWeek + startTime as the time key (not workingDayId:slotId) so that
+    // conflicts are detected across different period structures.
     const timetableSlots = await prisma.timetableSlot.findMany({
       where: {
         schoolId,
         timetable: { academicYearId },
         divisionAssignmentId: { not: null },
         divisionAssignment: { deletedAt: null },
+        slot: { slotType: 'PERIOD' },
       },
       select: {
-        workingDayId: true,
-        slotId: true,
+        workingDay: { select: { dayOfWeek: true } },
+        slot: { select: { startTime: true } },
         timetable: { select: { divisionId: true } },
         divisionAssignment: { select: { teacherId: true, assistantTeacherId: true, electiveGroupId: true } },
       },
@@ -98,7 +101,7 @@ export class TeacherService {
     for (const ts of timetableSlots) {
       const da = ts.divisionAssignment;
       if (!da) continue;
-      const timeKey = `${ts.workingDayId}:${ts.slotId}`;
+      const timeKey = `${ts.workingDay.dayOfWeek}:${ts.slot.startTime}`;
       for (const tid of [da.teacherId, da.assistantTeacherId]) {
         if (!tid) continue;
         if (!timeCoords.has(tid)) timeCoords.set(tid, new Map());
@@ -126,6 +129,35 @@ export class TeacherService {
       if (c > 0) conflictsByTeacher.set(tid, c);
     }
 
+    // Compute overloaded days per teacher.
+    // A teacher is overloaded on a day if they have fewer than 2 free periods.
+    // Free periods = total periods that day (across all structures) minus teacher's busy slots.
+    // First, find total unique period time slots per dayOfWeek from all timetable data.
+    const periodsPerDay = new Map<number, Set<string>>(); // dayOfWeek → Set of startTime strings
+    for (const ts of timetableSlots) {
+      const dow = ts.workingDay.dayOfWeek;
+      if (!periodsPerDay.has(dow)) periodsPerDay.set(dow, new Set());
+      periodsPerDay.get(dow)!.add(String(ts.slot.startTime));
+    }
+
+    // Count busy slots per teacher per day (deduplicated — cross-div elective = 1 slot, not N)
+    const overloadedDaysByTeacher = new Map<string, number>();
+    for (const [tid, tm] of timeCoords) {
+      // Group teacher's time keys by dayOfWeek
+      const teacherBusyPerDay = new Map<number, number>(); // dayOfWeek → count of unique time slots
+      for (const timeKey of tm.keys()) {
+        const dow = parseInt(timeKey.split(':')[0], 10);
+        teacherBusyPerDay.set(dow, (teacherBusyPerDay.get(dow) ?? 0) + 1);
+      }
+      let overloadedDays = 0;
+      for (const [dow, busyCount] of teacherBusyPerDay) {
+        const totalPeriods = periodsPerDay.get(dow)?.size ?? 0;
+        const freePeriods = totalPeriods - busyCount;
+        if (freePeriods < 2) overloadedDays++;
+      }
+      if (overloadedDays > 0) overloadedDaysByTeacher.set(tid, overloadedDays);
+    }
+
     return loads.map((l) => ({
       id: l.teacherId,
       name: l.teacherName,
@@ -133,6 +165,7 @@ export class TeacherService {
       assignedPeriods: l.assignedPeriods,
       timetablePeriods: l.timetablePeriods,
       conflictCount: conflictsByTeacher.get(l.teacherId) ?? 0,
+      overloadedDays: overloadedDaysByTeacher.get(l.teacherId) ?? 0,
       qualifiedSubjectIds: l.qualifiedSubjectIds,
     }));
   }

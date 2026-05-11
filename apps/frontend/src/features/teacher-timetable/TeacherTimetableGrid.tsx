@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useRef } from 'react';
-import { CalendarDays, Coffee, UtensilsCrossed, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Coffee, UtensilsCrossed, AlertTriangle, Flame } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -173,6 +173,18 @@ export function TeacherTimetableGrid({
   );
   const totalPeriods = assignedPeriods ?? gridPeriods;
 
+  // Compute free periods per day for overload detection (< 2 free = overloaded)
+  // Only count PERIOD slots (not breaks/lunch)
+  const freePeriodsPerDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const day of sortedDays) {
+      const periodSlots = day.periods.filter((p) => p.slot.slotType === 'PERIOD');
+      const busySlots = periodSlots.filter((p) => p.assignments.length > 0).length;
+      map.set(day.workingDay.id, periodSlots.length - busySlots);
+    }
+    return map;
+  }, [sortedDays]);
+
   // Build validity lookup: slotId → 'valid' | 'valid-cross' | 'invalid'
   const validityMap = useMemo(() => {
     if (!activeDragSlotId) return new Map<string, 'valid' | 'valid-cross' | 'invalid'>();
@@ -257,7 +269,14 @@ export function TeacherTimetableGrid({
             {sortedDays.map((day) => (
               <tr key={day.workingDay.id} className="border-b border-border/40 hover:bg-amber-500/5 transition-colors">
                 <td className="px-3 py-2 font-medium text-xs bg-muted/30 border-r border-border/40 sticky left-0 z-10">
-                  {DAY_LABELS[day.workingDay.dayOfWeek] ?? day.workingDay.label}
+                  <div className="flex items-center gap-1">
+                    {DAY_LABELS[day.workingDay.dayOfWeek] ?? day.workingDay.label}
+                    {(freePeriodsPerDay.get(day.workingDay.id) ?? 0) < 2 && (
+                      <span title={`Overloaded: ${freePeriodsPerDay.get(day.workingDay.id) ?? 0} free period(s)`}>
+                        <Flame className="size-3 text-orange-500" />
+                      </span>
+                    )}
+                  </div>
                 </td>
                 {headerSlots.map((slot) => {
                   if (slot.slotType !== 'PERIOD') {

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Search, FileText, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { Eye, Search, FileText, FileSpreadsheet, AlertTriangle, Flame } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -62,6 +62,7 @@ export function Component() {
         assignedPeriods: load?.assignedPeriods ?? 0,
         timetablePeriods: load?.timetablePeriods ?? null,
         conflictCount: load?.conflictCount ?? 0,
+        overloadedDays: load?.overloadedDays ?? 0,
         maxPeriodsPerWeek: t.maxPeriodsPerWeek ?? load?.maxPeriodsPerWeek ?? null,
       };
     });
@@ -268,6 +269,7 @@ export function Component() {
                   <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-28">Assigned</th>
                   <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-28">Timetable</th>
                   <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-28">Status</th>
+                  <th className="text-center text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-28">Overload</th>
                   <th className="text-right text-[11px] uppercase tracking-wider font-semibold px-4 py-3 w-56">Actions</th>
                 </tr>
               </thead>
@@ -314,6 +316,18 @@ export function Component() {
                           </Badge>
                         ) : row.timetablePeriods != null ? (
                           <Badge variant="success" className="text-[10px]">OK</Badge>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">--</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {row.overloadedDays > 0 ? (
+                          <Badge variant="warning" className="text-[10px] gap-0.5 bg-orange-500/15 text-orange-600 border-orange-300">
+                            <Flame className="size-2.5" />
+                            {row.overloadedDays} {row.overloadedDays === 1 ? 'day' : 'days'}
+                          </Badge>
+                        ) : row.timetablePeriods != null ? (
+                          <span className="text-[10px] text-muted-foreground">—</span>
                         ) : (
                           <span className="text-[10px] text-muted-foreground">--</span>
                         )}
