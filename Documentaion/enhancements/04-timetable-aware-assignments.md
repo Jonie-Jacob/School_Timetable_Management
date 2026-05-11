@@ -1,6 +1,6 @@
 # Enhancement 4: Timetable-Aware Assignment Editing
 
-> Status: IN PROGRESS -- Phases 1, 2, 3 complete
+> Status: IN PROGRESS -- Phases 1, 2, 3, 4 complete
 > Created: April 27, 2026
 > Last updated: May 11, 2026
 
@@ -9,7 +9,7 @@
 - [x] Phase 1 -- `timetable_generated` flag (DB, trigger, API)
 - [x] Phase 2 -- Restrict per-division generation
 - [x] Phase 3 -- Backend impact assessment + resolution endpoints
-- [ ] Phase 4 -- Backend assignment CRUD impact integration
+- [x] Phase 4 -- Backend assignment CRUD impact integration
 - [ ] Phase 5 -- Frontend Unified Resolution Modal
 - [ ] Phase 6 -- Integrate resolution into Assignment Editor
 - [ ] Phase 7 -- Integrate resolution into other surfaces
@@ -317,31 +317,54 @@ Added to `packages/shared/src/models/schemas/assignment.schema.ts` and re-export
 
 ---
 
-### Phase 4: Backend -- Update Assignment CRUD for Impact
+### Phase 4: Backend -- Update Assignment CRUD for Impact ✅ COMPLETE
 
-#### 4.1 Update `createAssignment()`
+All assignment CRUD methods now compute and return `impact?: AssignmentImpact` when the academic year's `timetableGeneratedAt` is set. A private `computeImpactIfGenerated()` helper on `AssignmentService` short-circuits to `undefined` otherwise (no timetable to be impacted yet) or when the assessed change produced no actionable steps.
 
-After creating, if `timetableGeneratedAt` is set, compute impact and return it alongside the assignment.
+#### 4.1 `createAssignment()` + `createElectiveAssignment()` ✅
 
-#### 4.2 Update `updateAssignment()`
+After the row is created, call `computeImpactIfGenerated({ changeType: 'CREATE', assignmentId })`. Response shape changes from `Assignment` to `{ assignment: Assignment; impact?: AssignmentImpact }`.
 
-After updating, compute impact. If teacher changed, check conflicts at existing slot times. If weightage changed, check P/W balance.
+#### 4.2 `updateAssignment()` ✅
 
-#### 4.3 Update `deleteAssignment()`
+Captures `oldValues = { teacherId, weightage }` from the pre-update row before applying the update, then calls `computeImpactIfGenerated({ changeType: 'UPDATE', assignmentId, oldValues })`. The helper detects which fields changed and surfaces appropriate steps (TEACHER_CONFLICT when teacher changed, SLOT_REMOVAL when weightage decreased, PW_BALANCE when totals exceed).
 
-Remove the current block on deleting assignments with slots. Instead:
-- Soft-delete the assignment
-- Hard-delete its timetable slots
-- Compute impact (freed slots, P/W imbalance)
-- Return impact for resolution
+Response shape: `{ assignment: Assignment; impact?: AssignmentImpact }`.
 
-#### 4.4 Update `quickAssign()`
+#### 4.3 `deleteAssignment()` ✅
 
-After creating assignment, compute full impact (not just conflict detection). Return impact for resolution modal.
+The hard block on "cannot delete assignment with active timetable slots" is removed. The new flow:
 
-#### 4.5 Update response types
+1. Find the assignment's currently-occupied slots, capture their ids as `freedSlotIds`.
+2. Set `divisionAssignmentId = null` on those slots (becomes EMPTY_SLOTS so the wizard can fill them).
+3. Soft-delete the assignment.
+4. Recompute affected timetable statuses.
+5. `computeImpactIfGenerated({ changeType: 'DELETE', assignmentId, freedSlotIds })` → returns a SLOT_FILL step listing the freed slots + existing assignments available to fill them.
 
-All assignment CRUD responses include `impact?: AssignmentImpact` when timetable exists.
+Response shape: `{ impact?: AssignmentImpact }`. The controller now uses `success()` instead of `noContent()` (HTTP 200 with body).
+
+#### 4.4 `quickAssign()` ✅
+
+After creating the assignment, also calls `computeImpactIfGenerated({ changeType: 'CREATE', assignmentId })`. The existing `conflicts: []` array stays (used for the legacy notification toast); the new `impact?` field carries the structured wizard steps.
+
+Response shape: `{ assignment, conflicts, impact?: AssignmentImpact }`.
+
+#### 4.5 Frontend types ✅
+
+`apps/frontend/src/features/assignments/assignmentApi.ts` now mirrors the shared `assignmentImpactHelper` types (`AssignmentImpact`, `ResolutionStep`, the five step-detail interfaces) and updates the mutation return types accordingly:
+
+- `useCreateAssignmentMutation` / `useCreateElectiveAssignmentMutation` / `useUpdateAssignmentMutation` → `AssignmentMutationResult = { assignment, impact? }`
+- `useDeleteAssignmentMutation` → `DeleteAssignmentResult = { impact? }` (was `void`)
+- `useQuickAssignMutation` → `QuickAssignResponse` extended with `impact?`
+
+Also adds RTK Query bindings for the Phase 3 endpoints so the upcoming wizard can call them:
+- `useGetAssignmentImpactMutation` (POST `/api/assignments/impact`)
+- `useResolvePwBalanceMutation` (POST `/api/assignments/resolve-pw-balance`)
+- `useResolveSlotRemovalMutation` (POST `/api/assignments/resolve-slot-removal`)
+- `useResolveSlotFillMutation` (POST `/api/assignments/resolve-slot-fill`)
+- `useGetDivisionPwSummaryQuery` (GET `/api/assignments/division-pw-summary/:divisionId`)
+
+The existing consumer call sites (AssignmentEditorPage, TimetableViewPage, UnassignedSubjectsPage) only `.unwrap()` results and discard them or read `conflicts`, so the response-shape changes don't break compile. Phase 6 wires the new `impact?` field into the Resolution Wizard.
 
 ---
 

@@ -69,7 +69,7 @@ export class AssignmentService {
       await this.ensureElectiveGroupExists(schoolId, academicYearId, input.electiveGroupId);
     }
 
-    return prisma.divisionAssignment.create({
+    const assignment = await prisma.divisionAssignment.create({
       data: {
         schoolId,
         academicYearId,
@@ -88,6 +88,14 @@ export class AssignmentService {
         electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
       },
     });
+
+    const impact = await this.computeImpactIfGenerated({
+      schoolId, academicYearId, divisionId,
+      changeType: 'CREATE',
+      assignmentId: assignment.id,
+    });
+
+    return { assignment, impact };
   }
 
   async updateAssignment(schoolId: string, academicYearId: string, id: string, input: UpdateAssignmentDto) {
@@ -95,6 +103,12 @@ export class AssignmentService {
       where: { id, schoolId, academicYearId, deletedAt: null },
     });
     if (!assignment) throw new NotFoundError('Assignment', id);
+
+    // Capture for impact assessment (Enhancement 4)
+    const oldValues = {
+      teacherId: assignment.teacherId,
+      weightage: assignment.weightage,
+    };
 
     if (input.teacherId) {
       await this.validateTeacherSubject(schoolId, input.teacherId, assignment.subjectId);
@@ -143,7 +157,14 @@ export class AssignmentService {
     const affectedIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ASSIGNMENT', entityId: id });
     await recomputeMultipleTimetableStatuses(affectedIds);
 
-    return updated;
+    const impact = await this.computeImpactIfGenerated({
+      schoolId, academicYearId, divisionId: assignment.divisionId,
+      changeType: 'UPDATE',
+      assignmentId: id,
+      oldValues,
+    });
+
+    return { assignment: updated, impact };
   }
 
   async deleteAssignment(schoolId: string, academicYearId: string, id: string) {
@@ -152,18 +173,34 @@ export class AssignmentService {
     });
     if (!assignment) throw new NotFoundError('Assignment', id);
 
-    // Check for timetable slots referencing this assignment
-    const slotCount = await prisma.timetableSlot.count({
+    // Enhancement 4: deletion is no longer blocked when slots exist.
+    // Empty the slots (set divisionAssignmentId to null) and capture their ids
+    // so the wizard can surface a Slot Fill step for the freed cells.
+    const occupiedSlots = await prisma.timetableSlot.findMany({
       where: { divisionAssignmentId: id },
+      select: { id: true },
     });
-    if (slotCount > 0) {
-      throw new AppError('Cannot delete assignment with active timetable slots. Remove timetable data first.', 400, 'BAD_REQUEST');
+    const freedSlotIds = occupiedSlots.map(s => s.id);
+    if (freedSlotIds.length > 0) {
+      await prisma.timetableSlot.updateMany({
+        where: { id: { in: freedSlotIds } },
+        data: { divisionAssignmentId: null },
+      });
     }
+
+    await softDelete('divisionAssignment', id, schoolId);
 
     const delAffectedIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ASSIGNMENT', entityId: id });
     await recomputeMultipleTimetableStatuses(delAffectedIds);
 
-    await softDelete('divisionAssignment', id, schoolId);
+    const impact = await this.computeImpactIfGenerated({
+      schoolId, academicYearId, divisionId: assignment.divisionId,
+      changeType: 'DELETE',
+      assignmentId: id,
+      freedSlotIds,
+    });
+
+    return { impact };
   }
 
   async createElectiveAssignment(schoolId: string, academicYearId: string, divisionId: string, input: CreateAssignmentDto) {
@@ -337,7 +374,13 @@ export class AssignmentService {
       }
     }
 
-    return created;
+    const impact = await this.computeImpactIfGenerated({
+      schoolId, academicYearId, divisionId,
+      changeType: 'CREATE',
+      assignmentId: created.id,
+    });
+
+    return { assignment: created, impact };
   }
 
   // ── Elective Groups ──
@@ -1310,7 +1353,13 @@ export class AssignmentService {
       });
     }
 
-    return { assignment, conflicts };
+    const impact = await this.computeImpactIfGenerated({
+      schoolId, academicYearId, divisionId: input.divisionId,
+      changeType: 'CREATE',
+      assignmentId: assignment.id,
+    });
+
+    return { assignment, conflicts, impact };
   }
 
   // ── Enhancement 4: Timetable-Aware Assignment Editing ─────────────
@@ -1571,6 +1620,38 @@ export class AssignmentService {
   }
 
   // ── Helpers ──
+
+  /**
+   * Run impact assessment ONLY if the academic year has had its first
+   * "Generate All" run. Returns undefined otherwise (no timetable to be
+   * impacted yet) or when the assessed change produced no actionable steps.
+   */
+  private async computeImpactIfGenerated(params: {
+    schoolId: string;
+    academicYearId: string;
+    divisionId: string;
+    changeType: 'CREATE' | 'UPDATE' | 'DELETE';
+    assignmentId?: string;
+    oldValues?: { teacherId?: string | null; weightage?: number };
+    freedSlotIds?: string[];
+  }): Promise<AssignmentImpact | undefined> {
+    const ay = await prisma.academicYear.findUnique({
+      where: { id: params.academicYearId },
+      select: { timetableGeneratedAt: true },
+    });
+    if (!ay?.timetableGeneratedAt) return undefined;
+
+    const impact = await assessAssignmentImpact({
+      schoolId: params.schoolId,
+      academicYearId: params.academicYearId,
+      divisionId: params.divisionId,
+      changeType: params.changeType,
+      assignmentId: params.assignmentId,
+      oldValues: params.oldValues,
+      freedSlotIds: params.freedSlotIds,
+    });
+    return impact.hasImpact ? impact : undefined;
+  }
 
   private async ensureDivisionExists(schoolId: string, divisionId: string) {
     const division = await prisma.division.findFirst({

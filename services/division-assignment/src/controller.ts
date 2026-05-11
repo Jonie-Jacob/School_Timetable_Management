@@ -46,8 +46,8 @@ export class AssignmentController {
   async deleteAssignment(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
     const auth = await authMiddleware(event);
     const ctx = await academicYearMiddleware(event, auth);
-    await service.deleteAssignment(ctx.schoolId, ctx.academicYearId, id);
-    return noContent();
+    const result = await service.deleteAssignment(ctx.schoolId, ctx.academicYearId, id);
+    return success(result);
   }
 
   async createElectiveAssignment(event: APIGatewayProxyEventV2, divisionId: string): Promise<APIGatewayProxyResultV2> {
