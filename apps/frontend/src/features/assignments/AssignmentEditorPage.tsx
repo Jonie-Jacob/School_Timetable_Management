@@ -126,7 +126,7 @@ export function Component() {
 
   const [createAssignment, { isLoading: isCreating }] = useCreateAssignmentMutation();
   const [createElectiveAssignment, { isLoading: isCreatingElective }] = useCreateElectiveAssignmentMutation();
-  const [updateAssignment] = useUpdateAssignmentMutation();
+  const [updateAssignment, { isLoading: isUpdating }] = useUpdateAssignmentMutation();
   const [deleteAssignment, { isLoading: isDeleting }] = useDeleteAssignmentMutation();
 
   // Unified elective editor modal
@@ -617,12 +617,16 @@ export function Component() {
                 type="button"
                 variant="outline"
                 onClick={() => { setFormOpen(false); setEditTarget(null); }}
-                disabled={isCreating || isCreatingElective}
+                disabled={isCreating || isCreatingElective || isUpdating}
               >
                 {t('form.cancel')}
               </Button>
-              <Button type="submit" disabled={isCreating || isCreatingElective}>
-                {(isCreating || isCreatingElective) ? t('form.saving') : t('form.save')}
+              <Button
+                type="submit"
+                loading={isCreating || isCreatingElective || isUpdating}
+                disabled={isCreating || isCreatingElective || isUpdating}
+              >
+                {(isCreating || isCreatingElective || isUpdating) ? t('form.saving') : t('form.save')}
               </Button>
             </DialogFooter>
           </form>

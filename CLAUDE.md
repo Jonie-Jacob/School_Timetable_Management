@@ -234,6 +234,7 @@ All design docs are in `Documentaion/` (note the typo — keep as-is):
 
 - **AWS Account**: 648485682362
 - **Region**: ap-south-1 (Mumbai)
+- **Public URL**: `https://sms.zyphr.co.in`
 - **CloudFront URL**: `https://d25i05v9hwcs8q.cloudfront.net`
 - **Cognito User Pool**: `ap-south-1_rlYNHNPRZ`
 - **Cognito Client ID**: `42r2ih2m9c3l26lb4u1mrrl5sb`
@@ -267,6 +268,7 @@ aws lambda update-function-code --function-name timetable-prod-teacher --zip-fil
 
 ## Deployment (Development)
 
+- **Public URL**: `https://dev.sms.zyphr.co.in`
 - **CloudFront URL**: `https://dhx488d27udyg.cloudfront.net`
 - **CloudFront Distribution ID**: `EHYD0FQL3TM93`
 - **Cognito User Pool**: `ap-south-1_mWBuXlrB7`

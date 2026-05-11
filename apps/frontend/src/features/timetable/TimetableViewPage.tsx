@@ -149,6 +149,7 @@ export function Component() {
   const [hideConflicts, setHideConflicts] = useState(false);
   const [teacherSort, setTeacherSort] = useState<'name' | 'load-asc' | 'load-desc'>('name');
   const [savingOverride, setSavingOverride] = useState(false);
+  const [clearingOverride, setClearingOverride] = useState(false);
 
   // Fetch conflicts for the currently-open slot
   const { data: slotConflicts } = useGetTeacherSlotConflictsQuery(
@@ -930,11 +931,11 @@ export function Component() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="text-red-400 border-red-400/40 hover:bg-red-500/20 hover:text-red-300 gap-1.5"
-                    disabled={savingOverride}
+                    className="bg-red-500/15 border-red-400/60 text-red-200 hover:bg-red-500/30 hover:text-white hover:border-red-300 gap-1.5"
+                    disabled={savingOverride || clearingOverride}
                     onClick={async () => {
                       if (!editSlot) return;
-                      setSavingOverride(true);
+                      setClearingOverride(true);
                       try {
                         await overrideSlot({ slotId: editSlot.timetableSlotId, divisionAssignmentId: null }).unwrap();
                         toast.success('Cell cleared.');
@@ -942,12 +943,16 @@ export function Component() {
                       } catch (err: any) {
                         toast.error(err?.data?.error?.message ?? 'Failed to clear cell.');
                       } finally {
-                        setSavingOverride(false);
+                        setClearingOverride(false);
                       }
                     }}
                   >
-                    <Trash2 className="size-3.5" />
-                    Clear
+                    {clearingOverride ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                    {clearingOverride ? 'Clearing...' : 'Clear'}
                   </Button>
                 )}
                 <div className="flex-1" />
@@ -957,7 +962,7 @@ export function Component() {
                   size="sm"
                   className="text-white/80 border-white/20 hover:bg-white/10 hover:text-white"
                   onClick={() => setEditSlot(null)}
-                  disabled={savingOverride}
+                  disabled={savingOverride || clearingOverride}
                 >
                   Cancel
                 </Button>
@@ -967,6 +972,7 @@ export function Component() {
                   className="bg-amber-500 hover:bg-amber-600 text-white"
                   disabled={
                     savingOverride ||
+                    clearingOverride ||
                     !sheetSubjectId ||
                     !sheetSelectedTeacherId
                   }
