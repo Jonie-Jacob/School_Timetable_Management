@@ -8,6 +8,8 @@ export interface AcademicYear {
   startDate: string;
   endDate: string;
   status: 'ACTIVE' | 'ARCHIVED';
+  /** ISO timestamp set when Generate All is first run. Gates per-division generation and timetable-aware assignment checks. Null = no full generation has been attempted. */
+  timetableGeneratedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

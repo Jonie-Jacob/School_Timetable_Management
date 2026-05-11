@@ -1,7 +1,19 @@
 # Enhancement 4: Timetable-Aware Assignment Editing
 
-> Status: PLAN COMPLETE -- ready for implementation
+> Status: IN PROGRESS -- Phase 1 complete
 > Created: April 27, 2026
+> Last updated: May 11, 2026
+
+## Progress
+
+- [x] Phase 1 -- `timetable_generated` flag (DB, trigger, API)
+- [ ] Phase 2 -- Restrict per-division generation
+- [ ] Phase 3 -- Backend impact assessment + resolution endpoints
+- [ ] Phase 4 -- Backend assignment CRUD impact integration
+- [ ] Phase 5 -- Frontend Unified Resolution Modal
+- [ ] Phase 6 -- Integrate resolution into Assignment Editor
+- [ ] Phase 7 -- Integrate resolution into other surfaces
+- [ ] Phase 8 -- Generation restriction UI
 
 ## Key Reference
 
@@ -148,29 +160,38 @@ When multiple step types are needed for a single division:
 
 ## Implementation Phases
 
-### Phase 1: Database -- `timetable_generated` Flag
+### Phase 1: Database -- `timetable_generated` Flag ✅ COMPLETE
 
-#### 1.1 Add migration
+#### 1.1 Add migration ✅
 
 **File:** `packages/shared/prisma/schema.prisma`
 
-Add to `AcademicYear` model:
+Added to `AcademicYear` model:
 ```prisma
 timetableGeneratedAt DateTime? @map("timetable_generated_at")
 ```
 
-#### 1.2 Migration SQL
+#### 1.2 Migration SQL ✅
+
+**File:** `packages/shared/prisma/migrations/20260511120000_add_timetable_generated_at_to_academic_years/migration.sql`
 
 ```sql
-ALTER TABLE academic_years ADD COLUMN timetable_generated_at TIMESTAMP;
+ALTER TABLE "academic_years" ADD COLUMN "timetable_generated_at" TIMESTAMP(3);
 ```
 
-#### 1.3 Set flag on "Generate All"
+Applied to local dev DB via `prisma db execute`, marked applied via `prisma migrate resolve --applied`.
+
+#### 1.3 Set flag on "Generate All" ✅
 
 **File:** `services/timetable/src/service.ts`
 
-In `triggerGeneration()`, when generating for all divisions (full generation), set the flag:
+In `triggerGeneration()`, after divisions validation, count total active divisions for the academic year. If `divisionIds.length === totalActiveDivisions`, this is a full generation -- set the flag. Always overwrites (latest full-gen attempt timestamp).
+
 ```typescript
+const totalActiveDivisions = await prisma.division.count({
+  where: { schoolId, academicYearId, deletedAt: null },
+});
+const isFullGeneration = divisionIds.length === totalActiveDivisions;
 if (isFullGeneration) {
   await prisma.academicYear.update({
     where: { id: academicYearId },
@@ -179,9 +200,11 @@ if (isFullGeneration) {
 }
 ```
 
-#### 1.4 Expose flag in API
+#### 1.4 Expose flag in API ✅
 
-Add `timetableGeneratedAt` to the academic year response so the frontend can check it.
+Backend: no change needed -- `services/academic-year/src/service.ts` uses default Prisma return (no explicit `select`), so the new field is auto-included in all responses (list, getById, update, activate).
+
+Frontend: `apps/frontend/src/features/academic-years/academicYearApi.ts` -- added `timetableGeneratedAt: string | null` to the `AcademicYear` interface.
 
 ---
 

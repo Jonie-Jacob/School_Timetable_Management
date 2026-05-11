@@ -107,15 +107,16 @@ model SchoolUser {
 // ──────────────────────────────────────────────
 
 model AcademicYear {
-  id        String             @id @default(uuid())
-  schoolId  String             @map("school_id")
-  label     String             @db.VarChar(50)
-  startDate DateTime           @map("start_date") @db.Date
-  endDate   DateTime           @map("end_date") @db.Date
-  status    AcademicYearStatus @default(ARCHIVED)
-  createdAt DateTime           @default(now()) @map("created_at")
-  updatedAt DateTime           @updatedAt @map("updated_at")
-  deletedAt DateTime?          @map("deleted_at")
+  id                   String             @id @default(uuid())
+  schoolId             String             @map("school_id")
+  label                String             @db.VarChar(50)
+  startDate            DateTime           @map("start_date") @db.Date
+  endDate              DateTime           @map("end_date") @db.Date
+  status               AcademicYearStatus @default(ARCHIVED)
+  timetableGeneratedAt DateTime?          @map("timetable_generated_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  deletedAt            DateTime?          @map("deleted_at")
 
   school              School               @relation(fields: [schoolId], references: [id])
   classes             Class[]
