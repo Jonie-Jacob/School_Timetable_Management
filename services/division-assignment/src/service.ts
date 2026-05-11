@@ -1,10 +1,14 @@
 import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
   findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
+  loadPeriodSlots,
+  assessAssignmentImpact, type AssignmentImpact,
   type CreateAssignmentDto, type UpdateAssignmentDto,
   type CreateElectiveGroupDto, type UpdateElectiveGroupDto,
   type AddElectiveSubjectDto, type UpdateElectiveSubjectDto,
   type BulkSaveElectiveGroupDto,
+  type GetAssignmentImpactDto, type ResolvePwBalanceDto,
+  type ResolveSlotRemovalDto, type ResolveSlotFillDto,
 } from '@timetable/shared';
 
 export class AssignmentService {
@@ -1307,6 +1311,263 @@ export class AssignmentService {
     }
 
     return { assignment, conflicts };
+  }
+
+  // ── Enhancement 4: Timetable-Aware Assignment Editing ─────────────
+
+  /**
+   * Assess the impact of a recent assignment change. The caller is expected
+   * to have already applied the change before invoking this -- the helper
+   * compares oldValues (passed in) against current DB state.
+   *
+   * For DELETE: pass `freedSlotIds` -- timetable slots that were emptied as
+   * part of the delete (so the wizard can surface a Slot Fill step).
+   */
+  async getAssignmentImpact(
+    schoolId: string,
+    academicYearId: string,
+    input: GetAssignmentImpactDto,
+  ): Promise<AssignmentImpact> {
+    await this.ensureDivisionExists(schoolId, input.divisionId);
+
+    let newTeacherId: string | null | undefined;
+    let newWeightage: number | undefined;
+    if (input.changeType !== 'DELETE') {
+      // Soft-deletes still match on id, but for non-DELETE the row must be live.
+      const current = await prisma.divisionAssignment.findFirst({
+        where: { id: input.assignmentId, schoolId, academicYearId, deletedAt: null },
+        select: { teacherId: true, weightage: true },
+      });
+      if (!current) throw new NotFoundError('Assignment', input.assignmentId);
+      newTeacherId = current.teacherId;
+      newWeightage = current.weightage;
+    }
+
+    return assessAssignmentImpact({
+      schoolId,
+      academicYearId,
+      divisionId: input.divisionId,
+      changeType: input.changeType,
+      assignmentId: input.assignmentId,
+      oldValues: input.previousValues ?? undefined,
+      newValues: input.changeType === 'DELETE' ? undefined : { teacherId: newTeacherId, weightage: newWeightage },
+      freedSlotIds: input.freedSlotIds,
+    });
+  }
+
+  /**
+   * Bulk update assignment weightages (P/W balancer wizard step).
+   * All changes happen in one transaction; affected timetable statuses recompute after.
+   */
+  async resolvePwBalance(schoolId: string, academicYearId: string, input: ResolvePwBalanceDto) {
+    const ids = input.changes.map(c => c.assignmentId);
+    const existing = await prisma.divisionAssignment.findMany({
+      where: { id: { in: ids }, schoolId, academicYearId, deletedAt: null },
+      select: { id: true },
+    });
+    if (existing.length !== ids.length) {
+      const foundIds = new Set(existing.map(e => e.id));
+      const missing = ids.filter(id => !foundIds.has(id));
+      throw new NotFoundError('Assignment', missing.join(','));
+    }
+
+    await prisma.$transaction(
+      input.changes.map(c =>
+        prisma.divisionAssignment.update({
+          where: { id: c.assignmentId },
+          data: { weightage: c.newWeightage },
+        }),
+      ),
+    );
+
+    const affectedIds = new Set<string>();
+    for (const c of input.changes) {
+      const ids = await findAffectedTimetableIds({
+        schoolId,
+        academicYearId,
+        entityType: 'ASSIGNMENT',
+        entityId: c.assignmentId,
+      });
+      for (const id of ids) affectedIds.add(id);
+    }
+    await recomputeMultipleTimetableStatuses([...affectedIds]);
+
+    return { updated: input.changes.length };
+  }
+
+  /**
+   * Clear timetable slots -- set divisionAssignmentId to null (slot becomes empty).
+   * Used by the Slot Removal wizard step after a P/W decrease.
+   */
+  async resolveSlotRemoval(schoolId: string, academicYearId: string, input: ResolveSlotRemovalDto) {
+    const slots = await prisma.timetableSlot.findMany({
+      where: { id: { in: input.slotIds }, schoolId },
+      select: { id: true, timetableId: true },
+    });
+    if (slots.length !== input.slotIds.length) {
+      const foundIds = new Set(slots.map(s => s.id));
+      const missing = input.slotIds.filter(id => !foundIds.has(id));
+      throw new NotFoundError('TimetableSlot', missing.join(','));
+    }
+
+    await prisma.timetableSlot.updateMany({
+      where: { id: { in: input.slotIds } },
+      data: { divisionAssignmentId: null },
+    });
+
+    const timetableIds = [...new Set(slots.map(s => s.timetableId))];
+    // Only recompute for timetables that match the academic year we're scoped to.
+    const scoped = await prisma.timetable.findMany({
+      where: { id: { in: timetableIds }, schoolId, academicYearId },
+      select: { id: true },
+    });
+    await recomputeMultipleTimetableStatuses(scoped.map(t => t.id));
+
+    return { cleared: input.slotIds.length };
+  }
+
+  /**
+   * Point empty timetable slots at existing division assignments.
+   * Used by the Slot Fill wizard step after a delete or removal.
+   */
+  async resolveSlotFill(schoolId: string, academicYearId: string, input: ResolveSlotFillDto) {
+    const slotIds = input.fills.map(f => f.timetableSlotId);
+    const assignmentIds = input.fills.map(f => f.divisionAssignmentId);
+
+    const [slots, assignments] = await Promise.all([
+      prisma.timetableSlot.findMany({
+        where: { id: { in: slotIds }, schoolId },
+        select: { id: true, timetableId: true, divisionAssignmentId: true },
+      }),
+      prisma.divisionAssignment.findMany({
+        where: { id: { in: assignmentIds }, schoolId, academicYearId, deletedAt: null },
+        select: { id: true },
+      }),
+    ]);
+    if (slots.length !== slotIds.length) {
+      const foundIds = new Set(slots.map(s => s.id));
+      const missing = slotIds.filter(id => !foundIds.has(id));
+      throw new NotFoundError('TimetableSlot', missing.join(','));
+    }
+    if (assignments.length !== new Set(assignmentIds).size) {
+      const foundIds = new Set(assignments.map(a => a.id));
+      const missing = [...new Set(assignmentIds)].filter(id => !foundIds.has(id));
+      throw new NotFoundError('Assignment', missing.join(','));
+    }
+
+    await prisma.$transaction(
+      input.fills.map(f =>
+        prisma.timetableSlot.update({
+          where: { id: f.timetableSlotId },
+          data: { divisionAssignmentId: f.divisionAssignmentId },
+        }),
+      ),
+    );
+
+    const timetableIds = [...new Set(slots.map(s => s.timetableId))];
+    const scoped = await prisma.timetable.findMany({
+      where: { id: { in: timetableIds }, schoolId, academicYearId },
+      select: { id: true },
+    });
+    await recomputeMultipleTimetableStatuses(scoped.map(t => t.id));
+
+    return { filled: input.fills.length };
+  }
+
+  /**
+   * Read-only summary used by the P/W balancer wizard step (and elsewhere).
+   * Lists every subject in a division with its current weightage, marks
+   * elective-group rows, and returns the total available slots from the
+   * period structure.
+   */
+  async getDivisionPwSummary(schoolId: string, academicYearId: string, divisionId: string) {
+    const division = await prisma.division.findFirst({
+      where: { id: divisionId, schoolId, deletedAt: null },
+      select: {
+        id: true,
+        label: true,
+        classId: true,
+        periodStructureId: true,
+        class: { select: { name: true } },
+      },
+    });
+    if (!division) throw new NotFoundError('Division', divisionId);
+
+    let totalSlots = 0;
+    if (division.periodStructureId) {
+      const ps = await loadPeriodSlots({ periodStructureId: division.periodStructureId });
+      totalSlots = ps.totalSlotsPerWeek;
+    }
+
+    const assignments = await prisma.divisionAssignment.findMany({
+      where: { schoolId, academicYearId, divisionId, deletedAt: null },
+      include: {
+        subject: { select: { id: true, name: true } },
+        teacher: { select: { id: true, name: true } },
+        electiveGroup: { select: { id: true, name: true, periodsPerWeek: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Cross-div lookup: find sibling divisions in the same class for each elective group.
+    const electiveGroupIds = [
+      ...new Set(assignments.filter(a => a.electiveGroupId).map(a => a.electiveGroupId!)),
+    ];
+    const crossDivByGroup = new Map<string, string[]>();
+    if (electiveGroupIds.length > 0) {
+      const sibling = await prisma.divisionAssignment.findMany({
+        where: {
+          schoolId,
+          academicYearId,
+          electiveGroupId: { in: electiveGroupIds },
+          deletedAt: null,
+          division: { classId: division.classId, deletedAt: null, id: { not: divisionId } },
+        },
+        select: {
+          electiveGroupId: true,
+          division: { select: { id: true, label: true, class: { select: { name: true } } } },
+        },
+      });
+      for (const s of sibling) {
+        if (!s.electiveGroupId) continue;
+        const list = crossDivByGroup.get(s.electiveGroupId) ?? [];
+        const tag = `${s.division.class.name}-${s.division.label}`;
+        if (!list.includes(tag)) list.push(tag);
+        crossDivByGroup.set(s.electiveGroupId, list);
+      }
+    }
+
+    // Subjects list (one row per non-elective, one row per unique elective group).
+    const seenGroups = new Set<string>();
+    const subjects = [];
+    for (const a of assignments) {
+      if (a.electiveGroupId) {
+        if (seenGroups.has(a.electiveGroupId)) continue;
+        seenGroups.add(a.electiveGroupId);
+      }
+      const sibs = a.electiveGroupId ? crossDivByGroup.get(a.electiveGroupId) ?? [] : [];
+      subjects.push({
+        assignmentId: a.id,
+        subjectName: a.subject.name,
+        teacherName: a.teacher?.name ?? null,
+        weightage: a.electiveGroupId ? (a.electiveGroup?.periodsPerWeek ?? a.weightage) : a.weightage,
+        electiveGroupId: a.electiveGroup?.id ?? null,
+        electiveGroupName: a.electiveGroup?.name ?? null,
+        isCrossDiv: sibs.length > 0,
+        crossDivDivisions: sibs,
+      });
+    }
+
+    const totalWeightage = subjects.reduce((sum, s) => sum + s.weightage, 0);
+
+    return {
+      divisionId: division.id,
+      className: division.class.name,
+      divisionLabel: division.label,
+      totalSlots,
+      totalWeightage,
+      subjects,
+    };
   }
 
   // ── Helpers ──

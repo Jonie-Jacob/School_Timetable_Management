@@ -118,6 +118,32 @@ functions:
           path: /api/assignments/quick-assign
           authorizer:
             name: cognitoAuthorizer
+      # Enhancement 4: Timetable-Aware Assignment Editing
+      - httpApi:
+          method: POST
+          path: /api/assignments/impact
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/assignments/resolve-pw-balance
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/assignments/resolve-slot-removal
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: POST
+          path: /api/assignments/resolve-slot-fill
+          authorizer:
+            name: cognitoAuthorizer
+      - httpApi:
+          method: GET
+          path: /api/assignments/division-pw-summary/{divisionId}
+          authorizer:
+            name: cognitoAuthorizer
       - httpApi:
           method: GET
           path: /api/assignments/health

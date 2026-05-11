@@ -1,6 +1,6 @@
 # Enhancement 4: Timetable-Aware Assignment Editing
 
-> Status: IN PROGRESS -- Phases 1, 2 complete
+> Status: IN PROGRESS -- Phases 1, 2, 3 complete
 > Created: April 27, 2026
 > Last updated: May 11, 2026
 
@@ -8,7 +8,7 @@
 
 - [x] Phase 1 -- `timetable_generated` flag (DB, trigger, API)
 - [x] Phase 2 -- Restrict per-division generation
-- [ ] Phase 3 -- Backend impact assessment + resolution endpoints
+- [x] Phase 3 -- Backend impact assessment + resolution endpoints
 - [ ] Phase 4 -- Backend assignment CRUD impact integration
 - [ ] Phase 5 -- Frontend Unified Resolution Modal
 - [ ] Phase 6 -- Integrate resolution into Assignment Editor
@@ -237,101 +237,83 @@ In `triggerGeneration()`, after computing `isFullGeneration`, fetch the academic
 
 ---
 
-### Phase 3: Backend -- Timetable Impact Assessment -- TYPES ALREADY BUILT (Enhancement 14, Phase 8)
+### Phase 3: Backend -- Timetable Impact Assessment ✅ COMPLETE
 
-> Types and skeleton were pre-built in Enhancement 14, Phase 8.
-> File: `packages/shared/src/helpers/assignmentImpactHelper.ts`
->
-> **Already available from `@timetable/shared`:**
-> ```typescript
-> import {
->   assessAssignmentImpact,
->   type AssignmentImpact, type ResolutionStep, type ResolutionStepType,
->   type TeacherConflictDetails, type SlotRemovalDetails,
->   type SlotFillDetails, type PwBalanceDetails, type WeightageAdjustmentDetails,
-> } from '@timetable/shared';
-> ```
->
-> - All types fully defined (5 step detail interfaces)
-> - `assessAssignmentImpact()` is a skeleton returning `{ hasImpact: false, steps: [] }`
-> - **This phase fills in the actual assessment logic**
+Types were pre-built in Enhancement 14 Phase 8 (`packages/shared/src/helpers/assignmentImpactHelper.ts`). This phase filled in the assessment logic and exposed the API surface.
 
-#### 3.1 Implement `assessAssignmentImpact()` logic
+#### 3.1 Implement `assessAssignmentImpact()` logic ✅
 
-#### 3.2 Create `getAssignmentImpact()` endpoint
+**File:** `packages/shared/src/helpers/assignmentImpactHelper.ts`
 
-**File:** `services/division-assignment/src/service.ts`
+Rewrote the skeleton into a real implementation. The function takes `oldValues`/`newValues` (the diff of the change just applied) and produces an ordered list of resolution steps:
 
-New method that returns the impact of a just-saved change. Called by frontend after saving.
+1. `TEACHER_CONFLICT` -- when `newValues.teacherId !== oldValues.teacherId`, scans every timetable slot for the assignment and uses `isTeacherBusyAt()` to detect double-bookings.
+2. `SLOT_REMOVAL` -- when `newValues.weightage < oldValues.weightage`, lists `(slots.length - newWeightage)` slots that need clearing.
+3. `SLOT_FILL` -- when the caller passes `freedSlotIds` (e.g. after DELETE), lists the freed slots plus the existing assignments available to fill them.
+4. `PW_BALANCE` -- when the division's total weightage (applying the elective convention: non-electives use `weightage`, elective groups use `periodsPerWeek` once) exceeds the period structure's `totalSlotsPerWeek`.
+
+Cross-div elective detection is included for the PW_BALANCE step (sibling divisions per group surfaced as `crossDivDivisions[]`).
+
+#### 3.2 Create `getAssignmentImpact()` endpoint ✅
 
 **Route:** `POST /api/assignments/impact`
 
-**Request:**
+**Files:** `services/division-assignment/src/{service.ts,controller.ts,router.ts,serverless.yml}`
+
+Body schema (`getAssignmentImpactSchema` in `@timetable/shared`):
 ```typescript
 {
   divisionId: string;
   changeType: 'CREATE' | 'UPDATE' | 'DELETE';
   assignmentId: string;
-  previousValues?: { teacherId?: string; weightage?: number }; // for comparison
+  previousValues?: { teacherId?: string | null; weightage?: number };
+  freedSlotIds?: string[];   // pass for DELETE flow
 }
 ```
 
-**Response:** `AssignmentImpact` with resolution steps
+For non-DELETE the service reads the assignment's current `(teacherId, weightage)` to pass as `newValues` into the helper. For DELETE, only `freedSlotIds` matters (assignment is soft-deleted, slots were already cleared by the caller).
 
-#### 3.3 Create resolution execution endpoints
+**Response:** `AssignmentImpact = { hasImpact: boolean; steps: ResolutionStep[] }`.
 
-These endpoints execute individual resolution actions:
+#### 3.3 Resolution execution endpoints ✅
 
-**`POST /api/assignments/resolve-pw-balance`**
+All three accept the same shape pattern -- a list of operations -- and trigger `recomputeMultipleTimetableStatuses` on affected timetables after.
+
+- **`POST /api/assignments/resolve-pw-balance`** -- body `{ changes: { assignmentId, newWeightage }[] }`. Updates weightages in a single `prisma.$transaction`.
+- **`POST /api/assignments/resolve-slot-removal`** -- body `{ slotIds: string[] }`. Sets `divisionAssignmentId = null` on the slots (turns them into empty cells; matches the EMPTY_SLOTS status convention).
+- **`POST /api/assignments/resolve-slot-fill`** -- body `{ fills: { timetableSlotId, divisionAssignmentId }[] }`. Points empty slots at existing assignments inside a transaction.
+
+Teacher conflict resolution continues to use the existing `swapSlots` / `getTeacherSwapCandidates` flow (no new endpoint needed -- see Enhancement 1).
+
+#### 3.4 P/W Balancer data endpoint ✅
+
+**Route:** `GET /api/assignments/division-pw-summary/:divisionId`
+
+Returns:
 ```typescript
 {
-  changes: { assignmentId: string; newWeightage: number }[];
+  divisionId, className, divisionLabel,
+  totalSlots,         // from periodStructure.totalSlotsPerWeek
+  totalWeightage,     // applying elective convention
+  subjects: Array<{
+    assignmentId, subjectName, teacherName,
+    weightage,        // electiveGroup.periodsPerWeek for elective rows
+    electiveGroupId, electiveGroupName,
+    isCrossDiv, crossDivDivisions
+  }>
 }
 ```
-Updates multiple assignment weightages atomically. Triggers status recompute for affected timetables.
 
-**`POST /api/assignments/resolve-slot-removal`**
-```typescript
-{
-  slotIds: string[]; // timetable_slot IDs to delete
-}
-```
-Deletes specified timetable slots. Triggers status recompute.
+One row per non-elective assignment + one row per unique elective group within the division.
 
-**`POST /api/assignments/resolve-slot-fill`**
-```typescript
-{
-  fills: { timetableSlotId: string; divisionAssignmentId: string }[];
-}
-```
-Assigns subjects to empty slots. Triggers status recompute.
+#### Schemas
 
-(Teacher conflict resolution already exists via `swapSlots` and `getResolutionCandidates`.)
+Added to `packages/shared/src/models/schemas/assignment.schema.ts` and re-exported via `packages/shared/src/index.ts`:
 
-#### 3.4 P/W Balancer data endpoint
-
-**`GET /api/assignments/division-pw-summary/:divisionId`**
-
-Returns all subjects in a division with their P/W, grouped properly:
-```typescript
-{
-  divisionId: string;
-  className: string;
-  divisionLabel: string;
-  totalSlots: number; // from period structure
-  subjects: {
-    assignmentId: string;
-    subjectName: string;
-    teacherName: string;
-    weightage: number;
-    electiveGroupId: string | null;
-    electiveGroupName: string | null;
-    isCrossDiv: boolean;
-    crossDivDivisions: string[]; // if cross-div, list other divisions
-  }[];
-  totalWeightage: number;
-}
-```
+- `getAssignmentImpactSchema` / `GetAssignmentImpactDto`
+- `resolvePwBalanceSchema` / `ResolvePwBalanceDto`
+- `resolveSlotRemovalSchema` / `ResolveSlotRemovalDto`
+- `resolveSlotFillSchema` / `ResolveSlotFillDto`
 
 ---
 

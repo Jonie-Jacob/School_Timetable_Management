@@ -6,6 +6,8 @@ import {
   createElectiveGroupSchema, updateElectiveGroupSchema,
   addElectiveSubjectSchema, updateElectiveSubjectSchema,
   bulkSaveElectiveGroupSchema,
+  getAssignmentImpactSchema, resolvePwBalanceSchema,
+  resolveSlotRemovalSchema, resolveSlotFillSchema,
 } from '@timetable/shared';
 import { AssignmentService } from './service';
 
@@ -158,5 +160,46 @@ export class AssignmentController {
     const ctx = await academicYearMiddleware(event, auth);
     await service.removeElectiveSubject(ctx.schoolId, ctx.academicYearId, groupId, subjectId);
     return noContent();
+  }
+
+  // ── Enhancement 4: Timetable-Aware Assignment Editing ──
+
+  async getAssignmentImpact(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const body = parseBody(event, getAssignmentImpactSchema);
+    const result = await service.getAssignmentImpact(ctx.schoolId, ctx.academicYearId, body);
+    return success(result);
+  }
+
+  async resolvePwBalance(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const body = parseBody(event, resolvePwBalanceSchema);
+    const result = await service.resolvePwBalance(ctx.schoolId, ctx.academicYearId, body);
+    return success(result);
+  }
+
+  async resolveSlotRemoval(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const body = parseBody(event, resolveSlotRemovalSchema);
+    const result = await service.resolveSlotRemoval(ctx.schoolId, ctx.academicYearId, body);
+    return success(result);
+  }
+
+  async resolveSlotFill(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const body = parseBody(event, resolveSlotFillSchema);
+    const result = await service.resolveSlotFill(ctx.schoolId, ctx.academicYearId, body);
+    return success(result);
+  }
+
+  async getDivisionPwSummary(event: APIGatewayProxyEventV2, divisionId: string): Promise<APIGatewayProxyResultV2> {
+    const auth = await authMiddleware(event);
+    const ctx = await academicYearMiddleware(event, auth);
+    const result = await service.getDivisionPwSummary(ctx.schoolId, ctx.academicYearId, divisionId);
+    return success(result);
   }
 }

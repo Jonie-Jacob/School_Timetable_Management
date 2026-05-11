@@ -25,6 +25,24 @@ export async function route(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     return controller.quickAssign(event);
   }
 
+  // ── Enhancement 4: Timetable-Aware Assignment Editing ──
+  if (method === 'POST' && path === '/api/assignments/impact') {
+    return controller.getAssignmentImpact(event);
+  }
+  if (method === 'POST' && path === '/api/assignments/resolve-pw-balance') {
+    return controller.resolvePwBalance(event);
+  }
+  if (method === 'POST' && path === '/api/assignments/resolve-slot-removal') {
+    return controller.resolveSlotRemoval(event);
+  }
+  if (method === 'POST' && path === '/api/assignments/resolve-slot-fill') {
+    return controller.resolveSlotFill(event);
+  }
+  const divisionPwSummaryMatch = path.match(/^\/api\/assignments\/division-pw-summary\/([^/]+)$/);
+  if (method === 'GET' && divisionPwSummaryMatch) {
+    return controller.getDivisionPwSummary(event, divisionPwSummaryMatch[1]);
+  }
+
   // Elective group subject routes: /api/elective-groups/:groupId/subjects/:subjectId
   const groupSubjectIdMatch = path.match(/^\/api\/elective-groups\/([^/]+)\/subjects\/([^/]+)$/);
   if (groupSubjectIdMatch) {
