@@ -75,13 +75,30 @@ export class TimetableService {
       throw new AppError(`Divisions not found: ${missing.join(', ')}`, 400, 'INVALID_DIVISIONS');
     }
 
-    // ── Generate All detection: covers ALL active divisions in this academic year.
-    // Sets `timetable_generated_at` on the academic year, which gates Phase 2's
-    // per-division generation guard and the timetable-aware assignment checks.
-    const totalActiveDivisions = await prisma.division.count({
-      where: { schoolId, academicYearId, deletedAt: null },
-    });
+    // ── Generate All detection + first-generation guard ────────────────
+    // A "full generation" covers ALL active divisions in this academic year.
+    // Per-division generation is gated behind a prior full generation:
+    // the first time anyone generates, they must run Generate All.
+    const [totalActiveDivisions, academicYear] = await Promise.all([
+      prisma.division.count({
+        where: { schoolId, academicYearId, deletedAt: null },
+      }),
+      prisma.academicYear.findUnique({
+        where: { id: academicYearId },
+        select: { timetableGeneratedAt: true },
+      }),
+    ]);
+    if (!academicYear) {
+      throw new NotFoundError('Academic year', academicYearId);
+    }
     const isFullGeneration = divisionIds.length === totalActiveDivisions;
+    if (!isFullGeneration && !academicYear.timetableGeneratedAt) {
+      throw new AppError(
+        'Generate All must be run before generating individual divisions.',
+        400,
+        'GENERATE_ALL_REQUIRED',
+      );
+    }
     if (isFullGeneration) {
       await prisma.academicYear.update({
         where: { id: academicYearId },

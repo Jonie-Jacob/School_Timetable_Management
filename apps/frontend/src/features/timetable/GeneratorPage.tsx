@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, CalendarDays, CheckCircle2, AlertTriangle, Clock, Loader2, Eye } from 'lucide-react';
+import { ArrowLeft, CalendarDays, CheckCircle2, AlertTriangle, Clock, Loader2, Eye, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { TimetableStatusBadge } from '@/components/shared/TimetableStatusBadge';
 import { PageHeader, ConfirmDialog } from '@/components/shared';
 import { useGetClassQuery } from '@/features/classes/classApi';
+import { useActiveAcademicYear } from '@/hooks/useActiveAcademicYear';
 import {
   useGenerateTimetableMutation,
   useGetGenerationStatusQuery,
@@ -22,6 +23,9 @@ export function Component() {
 
   const { data: classItem } = useGetClassQuery(classId!, { skip: !classId });
   const { data: timetableGrid, refetch: refetchTimetable } = useGetDivisionTimetableQuery(divisionId!, { skip: !divisionId });
+  const activeAcademicYear = useActiveAcademicYear();
+  // Per-division generation is gated behind a prior "Generate All" run.
+  const perDivisionGenAllowed = !!activeAcademicYear?.timetableGeneratedAt;
 
   const [generateTimetable, { isLoading: isGenerating }] = useGenerateTimetableMutation();
 
@@ -153,6 +157,26 @@ export function Component() {
             </div>
             <p className="font-semibold">{t('generator.generating')}</p>
             <p className="text-sm text-muted-foreground text-center max-w-sm">{t('generator.generatingHint')}</p>
+          </div>
+        ) : !perDivisionGenAllowed ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3">
+            <div className="flex gap-3">
+              <Info className="size-5 shrink-0 text-amber-600 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-amber-900">Generate All required first</p>
+                <p className="text-xs text-amber-800">
+                  Individual divisions can only be generated after at least one full "Generate All" run for this academic year. Use the All Timetables page to run Generate All first.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/timetables')}
+              className="gap-2"
+            >
+              Go to All Timetables
+            </Button>
           </div>
         ) : (
           <div className="flex items-center gap-3">

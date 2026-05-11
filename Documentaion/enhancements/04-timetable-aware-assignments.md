@@ -1,13 +1,13 @@
 # Enhancement 4: Timetable-Aware Assignment Editing
 
-> Status: IN PROGRESS -- Phase 1 complete
+> Status: IN PROGRESS -- Phases 1, 2 complete
 > Created: April 27, 2026
 > Last updated: May 11, 2026
 
 ## Progress
 
 - [x] Phase 1 -- `timetable_generated` flag (DB, trigger, API)
-- [ ] Phase 2 -- Restrict per-division generation
+- [x] Phase 2 -- Restrict per-division generation
 - [ ] Phase 3 -- Backend impact assessment + resolution endpoints
 - [ ] Phase 4 -- Backend assignment CRUD impact integration
 - [ ] Phase 5 -- Frontend Unified Resolution Modal
@@ -208,25 +208,32 @@ Frontend: `apps/frontend/src/features/academic-years/academicYearApi.ts` -- adde
 
 ---
 
-### Phase 2: Restrict Per-Division Generation
+### Phase 2: Restrict Per-Division Generation ✅ COMPLETE
 
-#### 2.1 Backend guard
+#### 2.1 Backend guard ✅
 
 **File:** `services/timetable/src/service.ts`
 
-In `triggerGeneration()`, check if `timetableGeneratedAt` is null:
-- If null AND request is not for ALL divisions → throw error "Generate All must be run first"
-- If null AND request is for ALL divisions → allow and set the flag
-- If not null → allow any generation (per-division or all)
+In `triggerGeneration()`, after computing `isFullGeneration`, fetch the academic year's `timetableGeneratedAt`:
+- If null AND `!isFullGeneration` → throw `AppError('Generate All must be run before generating individual divisions.', 400, 'GENERATE_ALL_REQUIRED')`
+- If `isFullGeneration` → set `timetableGeneratedAt = now()` (already in Phase 1)
+- Otherwise → proceed
 
-#### 2.2 Frontend -- hide per-division generate buttons before first generation
+#### 2.2 Frontend -- hide per-division generate buttons before first generation ✅
 
-**File:** `apps/frontend/src/features/timetable/GeneratorPage.tsx`
+**New hook:** `apps/frontend/src/hooks/useActiveAcademicYear.ts` -- returns the active `AcademicYear` object (with `timetableGeneratedAt`) by joining `auth.activeAcademicYearId` with the academic years list.
+
 **File:** `apps/frontend/src/features/timetable/TimetablesOverviewPage.tsx`
 
-Check `academicYear.timetableGeneratedAt`:
-- If null: only show "Generate All" button, hide per-division generate buttons
-- If set: show all buttons (per-division and all)
+- Uses `useActiveAcademicYear()` to read `perDivisionGenAllowed = !!activeAcademicYear?.timetableGeneratedAt`.
+- Hides per-division Generate/Regenerate buttons (mobile cards + desktop table rows) when `!perDivisionGenAllowed`. The main "Generate" dialog (which fires a full generation when scope=all) stays available.
+
+**File:** `apps/frontend/src/features/timetable/GeneratorPage.tsx`
+
+- Uses `useActiveAcademicYear()` likewise.
+- When `!perDivisionGenAllowed`, replaces the Generate/Regenerate button block with an amber info banner explaining "Generate All required first" and a "Go to All Timetables" CTA.
+
+> Note: Phase 8 will add the ClassDetailPage restriction and additional polish (prominent "Generate All" treatment).
 
 ---
 

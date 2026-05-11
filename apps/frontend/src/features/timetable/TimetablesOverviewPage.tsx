@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/cn';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
+import { useActiveAcademicYear } from '@/hooks/useActiveAcademicYear';
 
 type GenerateScope = 'all' | 'outdated' | 'pending';
 type StatusFilter = 'all' | 'valid' | 'issues' | 'pending';
@@ -51,6 +52,11 @@ export function Component() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const isDesktop = useBreakpoint('sm');
+
+  const activeAcademicYear = useActiveAcademicYear();
+  // Per-division generation is gated behind a prior "Generate All" run. Once this
+  // flag is set, per-division Generate/Regenerate buttons become available.
+  const perDivisionGenAllowed = !!activeAcademicYear?.timetableGeneratedAt;
 
   const { data: classes, isLoading } = useGetClassesQuery(undefined, { refetchOnMountOrArgChange: true });
   const [generateMutation, { isLoading: isGeneratingAll }] = useGenerateTimetableMutation();
@@ -526,9 +532,11 @@ export function Component() {
                       />
                     </>
                   )}
-                  <Button variant={status ? 'outline' : 'default'} size="xs" className="text-[11px] gap-1" onClick={() => navigate(`/classes/${div.classId}/divisions/${div.id}/generate`)}>
-                    <Zap className="size-3" /> {status ? 'Regenerate' : 'Generate'}
-                  </Button>
+                  {perDivisionGenAllowed && (
+                    <Button variant={status ? 'outline' : 'default'} size="xs" className="text-[11px] gap-1" onClick={() => navigate(`/classes/${div.classId}/divisions/${div.id}/generate`)}>
+                      <Zap className="size-3" /> {status ? 'Regenerate' : 'Generate'}
+                    </Button>
+                  )}
                 </div>
               </div>
             );
@@ -606,15 +614,17 @@ export function Component() {
                             />
                           </>
                         )}
-                        <Button
-                          variant={status ? 'outline' : 'default'}
-                          size="xs"
-                          className="text-[11px] gap-1"
-                          onClick={() => navigate(`/classes/${div.classId}/divisions/${div.id}/generate`)}
-                        >
-                          <Zap className="size-3" />
-                          {status ? 'Regenerate' : 'Generate'}
-                        </Button>
+                        {perDivisionGenAllowed && (
+                          <Button
+                            variant={status ? 'outline' : 'default'}
+                            size="xs"
+                            className="text-[11px] gap-1"
+                            onClick={() => navigate(`/classes/${div.classId}/divisions/${div.id}/generate`)}
+                          >
+                            <Zap className="size-3" />
+                            {status ? 'Regenerate' : 'Generate'}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
