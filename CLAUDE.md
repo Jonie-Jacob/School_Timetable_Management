@@ -94,24 +94,44 @@ This is the default workflow — do not ask the user to repeat it each enhanceme
 
 ### Deploying a Backend Service (Standard)
 
+The configured Lambda handler is `src/handler.handler` for every service — so the zip **must contain `src/handler.js` at the root**, not `dist/handler.js`. Building to a `pkg/src/` working directory then zipping the `src/` folder is the easiest way to get this layout right.
+
 ```bash
-# Bundle the service with esbuild (DO NOT use `npx serverless deploy` — requires paid subscription)
+# Bundle the service with esbuild into pkg/src/handler.js
+# (DO NOT use `npx serverless deploy` — requires paid subscription)
 cd d:/Zyphr/School_Timetable_Management
+rm -rf dist/pkg && mkdir -p dist/pkg/src
 npx esbuild services/<name>/src/handler.ts --bundle --platform=node --target=node22 \
   --external:@timetable/shared --external:@prisma/client --external:@aws-sdk/* \
-  --outfile=dist/handler.js
+  --outfile=dist/pkg/src/handler.js
 
-# Zip and deploy (set MSYS_NO_PATHCONV for Git Bash)
+# Zip with src/ at the root (matches the Lambda handler config "src/handler.handler")
 export MSYS_NO_PATHCONV=1
-zip dist/handler.zip dist/handler.js
+(cd dist/pkg && powershell.exe -NoProfile -Command "Compress-Archive -Path src -DestinationPath ../<name>.zip -Force")
+
 aws lambda update-function-code \
-  --function-name timetable-<dev|prod>-<service-name> \
-  --zip-file fileb://dist/handler.zip
+  --function-name <lambda-function-name> \
+  --zip-file fileb://dist/<name>.zip
 ```
 
-Service name mapping (Lambda function name = `timetable-<stage>-<name>`):
-- `auth`, `academic-year`, `school-config`, `subject`, `teacher`, `class`
-- `division-assignment`, `timetable`, `dashboard`, `export`, `websocket`, `notification`
+**Lambda function name pattern** (Serverless Framework convention `<service>-<stage>-<function>`):
+
+| Service dir | service name | function name | Lambda function name (prod) | Lambda function name (dev) |
+|---|---|---|---|---|
+| `services/auth` | `timetable-auth` | `auth` | `timetable-auth-prod-auth` | `timetable-auth-dev-auth` |
+| `services/academic-year` | `timetable-academic-year` | `academicYear` | `timetable-academic-year-prod-academicYear` | `timetable-academic-year-dev-academicYear` |
+| `services/school-config` | `timetable-school-config` | `schoolConfig` | `timetable-school-config-prod-schoolConfig` | `timetable-school-config-dev-schoolConfig` |
+| `services/subject` | `timetable-subject` | `subject` | `timetable-subject-prod-subject` | `timetable-subject-dev-subject` |
+| `services/teacher` | `timetable-teacher` | `teacher` | `timetable-teacher-prod-teacher` | `timetable-teacher-dev-teacher` |
+| `services/class` | `timetable-class` | `class` | `timetable-class-prod-class` | `timetable-class-dev-class` |
+| `services/division-assignment` | `timetable-division-assignment` | `assignment` | `timetable-division-assignment-prod-assignment` | `timetable-division-assignment-dev-assignment` |
+| `services/timetable` | `timetable-service` | `timetable` | `timetable-service-prod-timetable` | `timetable-service-dev-timetable` |
+| `services/dashboard` | `timetable-dashboard` | `dashboard` | `timetable-dashboard-prod-dashboard` | `timetable-dashboard-dev-dashboard` |
+| `services/export` | `timetable-export` | `export` | `timetable-export-prod-export` | `timetable-export-dev-export` |
+| `services/notification` | `timetable-notification` | `notification` | `timetable-notification-prod-notification` | `timetable-notification-dev-notification` |
+| `services/websocket` | `timetable-websocket` | `wsHandler` / `websocket` | `timetable-websocket-prod-{wsHandler,websocket}` | same for dev |
+
+When in doubt: `aws lambda list-functions --region ap-south-1 --query 'Functions[?contains(FunctionName, \`<keyword>\`)].FunctionName' --output text`.
 
 ### Deploying the Frontend
 
@@ -138,10 +158,19 @@ aws cloudfront create-invalidation --distribution-id EUWIXJK2BNYEF --paths "/*"
 bash scripts/build-layer.sh <dev|prod>
 
 # Step 2: Redeploy ALL services via esbuild (repeat for each service)
-# The layer update alone is not enough — each service bundle has Prisma baked in
-npx esbuild services/<name>/src/handler.ts --bundle ... --outfile=dist/handler.js
-zip dist/handler.zip dist/handler.js
-aws lambda update-function-code --function-name timetable-<stage>-<name> --zip-file fileb://dist/handler.zip
+# The layer update alone is not enough — each service bundle has Prisma baked in.
+# See "Deploying a Backend Service (Standard)" above for the canonical pkg/src/handler.js layout.
+rm -rf dist/pkg && mkdir -p dist/pkg/src
+npx esbuild services/<name>/src/handler.ts --bundle --platform=node --target=node22 \
+  --external:@timetable/shared --external:@prisma/client --external:@aws-sdk/* \
+  --outfile=dist/pkg/src/handler.js
+(cd dist/pkg && powershell.exe -NoProfile -Command "Compress-Archive -Path src -DestinationPath ../<name>.zip -Force")
+aws lambda update-function-code --function-name <lambda-function-name> --zip-file fileb://dist/<name>.zip
+
+# Step 3: Point the Lambda at the new layer version (returned by publish-layer-version above)
+aws lambda update-function-configuration --function-name <lambda-function-name> \
+  --layers arn:aws:lambda:ap-south-1:648485682362:layer:timetable-<dev|prod>-shared-deps:<version> \
+  --region ap-south-1
 ```
 
 ### Running Ad-Hoc SQL Against Production/Dev RDS
@@ -272,10 +301,12 @@ aws cloudfront create-invalidation --distribution-id EUWIXJK2BNYEF --paths "/*"
 **Single backend service to prod (e.g. teacher):**
 ```bash
 export MSYS_NO_PATHCONV=1
+rm -rf dist/pkg && mkdir -p dist/pkg/src
 npx esbuild services/teacher/src/handler.ts --bundle --platform=node --target=node22 \
   --external:@timetable/shared --external:@prisma/client --external:@aws-sdk/* \
-  --outfile=dist/handler.js && zip dist/handler.zip dist/handler.js
-aws lambda update-function-code --function-name timetable-prod-teacher --zip-file fileb://dist/handler.zip
+  --outfile=dist/pkg/src/handler.js
+(cd dist/pkg && powershell.exe -NoProfile -Command "Compress-Archive -Path src -DestinationPath ../teacher.zip -Force")
+aws lambda update-function-code --function-name timetable-teacher-prod-teacher --zip-file fileb://dist/teacher.zip
 ```
 
 **Full deployment guide:** See `Documentaion/AWS_Deployment_Guide.md`
@@ -313,10 +344,12 @@ aws cloudfront create-invalidation --distribution-id EHYD0FQL3TM93 --paths "/*"
 
 # Single backend service to dev (e.g. teacher)
 export MSYS_NO_PATHCONV=1
+rm -rf dist/pkg && mkdir -p dist/pkg/src
 npx esbuild services/teacher/src/handler.ts --bundle --platform=node --target=node22 \
   --external:@timetable/shared --external:@prisma/client --external:@aws-sdk/* \
-  --outfile=dist/handler.js && zip dist/handler.zip dist/handler.js
-aws lambda update-function-code --function-name timetable-dev-teacher --zip-file fileb://dist/handler.zip
+  --outfile=dist/pkg/src/handler.js
+(cd dist/pkg && powershell.exe -NoProfile -Command "Compress-Archive -Path src -DestinationPath ../teacher.zip -Force")
+aws lambda update-function-code --function-name timetable-teacher-dev-teacher --zip-file fileb://dist/teacher.zip
 
 # Health check dev
 npm run health:check:dev
@@ -420,16 +453,7 @@ Default (*)             → S3 (timetable-dev-frontend)
 - **Creating a new database on RDS**: Use a temporary Lambda with bundled `pg` package (not the shared layer — Prisma from the layer has engine path issues for ad-hoc scripts). See Phase 3 of `Documentaion/enhancements/dev-environment-setup.md`.
 - **Git Bash on Windows (MSYS)**: Paths starting with `/` get converted to `C:/Program Files/Git/...`. Use `export MSYS_NO_PATHCONV=1` in bash scripts that pass paths to AWS CLI (SSM parameter names, S3 keys, etc.). Already set in `scripts/deploy.sh`.
 - **Lambda layer upload**: Layer zip is uploaded to S3 first, then published with `--content S3Bucket=...,S3Key=...`. Already handled in `scripts/deploy.sh`.
-- **Serverless Framework v4 subscription**: `npx serverless deploy` requires a paid subscription. **Workaround for deploying individual services**: bundle with esbuild, then use `aws lambda update-function-code` directly:
-  ```bash
-  npx esbuild services/<name>/src/handler.ts --bundle --platform=node --target=node22 \
-    --external:@timetable/shared --external:@prisma/client --external:@aws-sdk \
-    --outfile=dist/handler.js
-  zip dist/handler.zip dist/handler.js
-  aws lambda update-function-code --function-name timetable-<stage>-<service> \
-    --zip-file fileb://dist/handler.zip
-  ```
-  The `deploy.sh` script still handles full multi-service deploys (it uses `serverless deploy` internally via the layer publish path). Use esbuild approach for quick single-service hotfixes.
+- **Serverless Framework v4 subscription**: `npx serverless deploy` requires a paid subscription. **Workaround for deploying individual services**: bundle with esbuild into `pkg/src/handler.js`, zip the `src/` directory (Lambda handler is configured as `src/handler.handler`), then use `aws lambda update-function-code` directly. See "Deploying a Backend Service (Standard)" earlier in this doc for the canonical snippet. The `deploy.sh` script still handles full multi-service deploys; use the esbuild approach for quick single-service hotfixes.
 - **Terraform and CloudFront**: Do NOT run `terraform apply` on the CloudFront module without checking the plan — it will remove manually-added API Gateway behaviors. If needed, re-add them via AWS CLI `update-distribution` with a JSON config.
 
 ## Enhancement Progress
