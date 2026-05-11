@@ -2,6 +2,7 @@ import {
   prisma, AppError, NotFoundError,
   isTeacherBusyAt,
   recomputeTimetableStatus, recomputeMultipleTimetableStatuses,
+  findTimetablesFlaggingTeachers,
   annotateSlotViolations, type SlotViolation,
   TriggerGenerationDto, OverrideSlotDto, SwapSlotsDto, AutoResolveDto, CreateEmptySlotDto,
   SwapElectiveSlotsDto, PreviewElectiveSwapDto, PreviewTeacherSwapDto,
@@ -733,10 +734,15 @@ export class TimetableService {
       where: { id: timetableSlotId, schoolId },
       include: {
         timetable: true,
-        divisionAssignment: { select: { electiveGroupId: true } },
+        divisionAssignment: { select: { electiveGroupId: true, teacherId: true, assistantTeacherId: true } },
       },
     });
     if (!timetableSlot) throw new NotFoundError('TimetableSlot', timetableSlotId);
+
+    // Capture teachers BEFORE the change for stale-conflict propagation.
+    const teachersBefore: string[] = [];
+    if (timetableSlot.divisionAssignment?.teacherId) teachersBefore.push(timetableSlot.divisionAssignment.teacherId);
+    if (timetableSlot.divisionAssignment?.assistantTeacherId) teachersBefore.push(timetableSlot.divisionAssignment.assistantTeacherId);
 
     // Refuse to mutate any cell that's currently part of an elective group
     // OR any cell on whose (day, slot) coordinates an elective is already
@@ -825,8 +831,27 @@ export class TimetableService {
       },
     });
 
-    // Recompute status after override
-    await recomputeTimetableStatus(timetableSlot.timetableId);
+    // Capture teachers AFTER the change for stale-conflict propagation.
+    const teachersAfter: string[] = [];
+    if (updated.divisionAssignment?.teacher?.id) teachersAfter.push(updated.divisionAssignment.teacher.id);
+    if (updated.divisionAssignmentId) {
+      const fullDA = await prisma.divisionAssignment.findUnique({
+        where: { id: updated.divisionAssignmentId },
+        select: { assistantTeacherId: true },
+      });
+      if (fullDA?.assistantTeacherId) teachersAfter.push(fullDA.assistantTeacherId);
+    }
+
+    // Recompute status after override -- including any neighbor timetable
+    // whose status_json previously flagged the old or new teacher.
+    const affectedTeacherIds = [...new Set([...teachersBefore, ...teachersAfter])];
+    const staleNeighbors = await findTimetablesFlaggingTeachers({
+      schoolId,
+      academicYearId: timetableSlot.timetable.academicYearId,
+      teacherIds: affectedTeacherIds,
+      excludeTimetableId: timetableSlot.timetableId,
+    });
+    await recomputeMultipleTimetableStatuses([timetableSlot.timetableId, ...staleNeighbors]);
 
     return updated;
   }
@@ -845,6 +870,7 @@ export class TimetableService {
       include: {
         subject: { select: { id: true, name: true } },
         teacher: { select: { id: true, name: true } },
+        assistantTeacher: { select: { id: true, name: true } },
         electiveGroup: { select: { id: true, name: true } },
       },
     };
@@ -987,8 +1013,20 @@ export class TimetableService {
       });
     }
 
-    // Recompute status for affected timetables
+    // Recompute status for affected timetables -- including neighbors that
+    // may have stale TEACHER_CONFLICT entries against the teachers involved.
     const swapTtIds = new Set([sourceSlot.timetableId, targetSlot.timetableId]);
+    const swapTeacherIds: string[] = [];
+    for (const da of [sourceSlot.divisionAssignment, targetSlot.divisionAssignment]) {
+      if (da?.teacher?.id) swapTeacherIds.push(da.teacher.id);
+      if (da?.assistantTeacher?.id) swapTeacherIds.push(da.assistantTeacher.id);
+    }
+    const staleNeighbors = await findTimetablesFlaggingTeachers({
+      schoolId,
+      academicYearId: sourceSlot.timetable.academicYearId,
+      teacherIds: [...new Set(swapTeacherIds)],
+    });
+    for (const id of staleNeighbors) swapTtIds.add(id);
     await recomputeMultipleTimetableStatuses([...swapTtIds]);
 
     return {
@@ -2175,12 +2213,30 @@ export class TimetableService {
       await prisma.timetableNotification.createMany({ data: notificationData }).catch(() => {});
     }
 
-    // Recompute status for all affected timetables
-    const electiveSwapTtIds = [...new Set([
+    // Recompute status for all affected timetables + neighbors that may have
+    // stale TEACHER_CONFLICT entries against any teacher involved in the swap.
+    const electiveSwapTtSet = new Set<string>([
       ...groups.map(g => g.timetableId),
       ...targetElectiveExtraGroups.map(g => g.timetableId),
-    ])];
-    await recomputeMultipleTimetableStatuses(electiveSwapTtIds);
+    ]);
+    const electiveSwapTeacherIds = [...new Set([...sourceTeacherIds, ...targetTeacherIds])];
+    if (electiveSwapTeacherIds.length > 0 && electiveSwapTtSet.size > 0) {
+      // Use any group's academicYearId (all groups share the same AY by construction).
+      const sampleTt = groups[0] ?? targetElectiveExtraGroups[0];
+      const academicYearId = (await prisma.timetable.findUnique({
+        where: { id: sampleTt.timetableId },
+        select: { academicYearId: true },
+      }))?.academicYearId;
+      if (academicYearId) {
+        const staleNeighbors = await findTimetablesFlaggingTeachers({
+          schoolId,
+          academicYearId,
+          teacherIds: electiveSwapTeacherIds,
+        });
+        for (const id of staleNeighbors) electiveSwapTtSet.add(id);
+      }
+    }
+    await recomputeMultipleTimetableStatuses([...electiveSwapTtSet]);
 
     return {
       electiveGroupId: block.electiveGroupId,
@@ -2704,8 +2760,23 @@ export class TimetableService {
       });
     }
 
-    // Recompute status for both timetables
-    await recomputeMultipleTimetableStatuses([sourceSlot.timetableId, targetSlot.timetableId]);
+    // Recompute status for both timetables + any neighbors flagging the
+    // swap's teachers (so previously-recorded stale conflicts clear).
+    const swapTtIds = new Set([sourceSlot.timetableId, targetSlot.timetableId]);
+    const swapTeacherIds: string[] = [];
+    for (const cell of [sourceSlot, targetSlot, cellB, cellD]) {
+      if (cell?.divisionAssignment?.teacher?.id) swapTeacherIds.push(cell.divisionAssignment.teacher.id);
+      if (cell?.divisionAssignment?.assistantTeacher?.id) swapTeacherIds.push(cell.divisionAssignment.assistantTeacher.id);
+    }
+    if (swapTeacherIds.length > 0) {
+      const staleNeighbors = await findTimetablesFlaggingTeachers({
+        schoolId,
+        academicYearId: sourceSlot.timetable.academicYearId,
+        teacherIds: [...new Set(swapTeacherIds)],
+      });
+      for (const id of staleNeighbors) swapTtIds.add(id);
+    }
+    await recomputeMultipleTimetableStatuses([...swapTtIds]);
 
     return {
       swapType: 'cross_division',

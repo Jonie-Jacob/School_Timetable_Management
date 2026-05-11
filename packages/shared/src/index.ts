@@ -51,6 +51,7 @@ export {
   recomputeTimetableStatus,
   recomputeMultipleTimetableStatuses,
   findAffectedTimetableIds,
+  findTimetablesFlaggingTeachers,
   type TimetableStatusTagType,
   type TimetableStatusJson,
   annotateSlotViolations,

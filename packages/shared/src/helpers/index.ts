@@ -49,6 +49,7 @@ export {
   recomputeTimetableStatus,
   recomputeMultipleTimetableStatuses,
   findAffectedTimetableIds,
+  findTimetablesFlaggingTeachers,
   type TimetableStatusTagType,
   type TimetableStatusJson,
 } from './timetableStatusHelper';

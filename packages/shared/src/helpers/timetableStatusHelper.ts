@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import { findTeachersAtTime } from './conflictDetectionHelper';
 
@@ -584,4 +585,42 @@ export async function findAffectedTimetableIds(params: {
   }
 
   return [];
+}
+
+/**
+ * Find timetables in (schoolId, academicYearId) whose recorded
+ * `status_json.details.teacherConflicts[]` flags any of the given teacher
+ * ids. Used to invalidate stale TEACHER_CONFLICT entries on neighbor
+ * timetables when a slot or assignment's effective teacher changes --
+ * e.g., when Class II-B swaps Siya Thomas out for someone else, Class II-A's
+ * previously-recorded conflict against Siya Thomas at that time needs to be
+ * cleared by recomputing its status. The own-side recompute alone doesn't
+ * cover the neighbor.
+ *
+ * Uses Postgres JSONB ?| (any-key) for `statuses` and an EXISTS on
+ * `jsonb_array_elements` for the conflict list. Cheap because the WHERE
+ * filters down to TEACHER_CONFLICT-flagged rows first.
+ */
+export async function findTimetablesFlaggingTeachers(params: {
+  schoolId: string;
+  academicYearId: string;
+  teacherIds: string[];
+  excludeTimetableId?: string;
+}): Promise<string[]> {
+  const { schoolId, academicYearId, teacherIds, excludeTimetableId } = params;
+  if (teacherIds.length === 0) return [];
+
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM timetables
+    WHERE school_id = ${schoolId}
+      AND academic_year_id = ${academicYearId}
+      AND status_json -> 'statuses' ? 'TEACHER_CONFLICT'
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(status_json -> 'details' -> 'teacherConflicts') AS conflict
+        WHERE conflict ->> 'teacherId' = ANY(${teacherIds}::text[])
+      )
+      ${excludeTimetableId ? Prisma.sql`AND id <> ${excludeTimetableId}` : Prisma.empty}
+  `;
+  return rows.map(r => r.id);
 }

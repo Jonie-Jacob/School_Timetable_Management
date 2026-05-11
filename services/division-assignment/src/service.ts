@@ -1,6 +1,7 @@
 import {
   prisma, softDelete, NotFoundError, ConflictError, AppError,
   findAffectedTimetableIds, recomputeMultipleTimetableStatuses,
+  findTimetablesFlaggingTeachers,
   loadPeriodSlots,
   assessAssignmentImpact, type AssignmentImpact,
   type CreateAssignmentDto, type UpdateAssignmentDto,
@@ -155,6 +156,31 @@ export class AssignmentService {
     }
 
     const affectedIds = await findAffectedTimetableIds({ schoolId, academicYearId, entityType: 'ASSIGNMENT', entityId: id });
+
+    // Broaden recompute when teacher/assistant changed: neighbors that
+    // previously flagged the old or new teacher in their status_json need
+    // their TEACHER_CONFLICT entries refreshed.
+    const teacherChanged =
+      (input.teacherId !== undefined && input.teacherId !== oldValues.teacherId) ||
+      (input.assistantTeacherId !== undefined && input.assistantTeacherId !== assignment.assistantTeacherId);
+    if (teacherChanged) {
+      const affectedTeacherIds = [
+        oldValues.teacherId,
+        input.teacherId ?? null,
+        assignment.assistantTeacherId,
+        input.assistantTeacherId ?? null,
+      ].filter((t): t is string => !!t);
+      if (affectedTeacherIds.length > 0) {
+        const staleNeighbors = await findTimetablesFlaggingTeachers({
+          schoolId,
+          academicYearId,
+          teacherIds: [...new Set(affectedTeacherIds)],
+        });
+        for (const id of staleNeighbors) {
+          if (!affectedIds.includes(id)) affectedIds.push(id);
+        }
+      }
+    }
     await recomputeMultipleTimetableStatuses(affectedIds);
 
     const impact = await this.computeImpactIfGenerated({
